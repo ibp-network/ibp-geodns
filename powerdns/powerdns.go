@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 var (
@@ -47,6 +48,22 @@ func Init(configs []DNS, resultsCh chan string, config *config.Config) {
 	http.HandleFunc("/dns", dnsHandler)
 	http.HandleFunc("/api", apiHandler)
 	http.HandleFunc("/status", statusOutput)
+
+	if config.Prometheus.Enabled {
+		UpdateMetrics(powerDNSConfigs)
+		// Periodically update metrics
+		log.Printf("Starting metrics updater: %v seconds", config.Prometheus.UpdateIntervalSeconds)
+		go func() {
+			for {
+					log.Println("Updating metrics")
+					UpdateMetrics(powerDNSConfigs)
+					// time.Sleep(30 * time.Second) // Update metrics every minute
+					time.Sleep(time.Duration(config.Prometheus.UpdateIntervalSeconds) * time.Second)
+			}
+		}()
+		http.Handle("/metrics", MetricsHandler())
+	}
+	
 	log.Println("Starting PowerDNS server on :8080")
 	go http.ListenAndServe(":8080", nil)
 }

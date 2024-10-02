@@ -38,5 +38,9 @@
             "CheckInterval": 3600,
             "ExtraOptions": {"ConnectTimeout": 4}
         }
+    },
+    "Prometheus": {
+      "Enabled": true,
+      "UpdateIntervalSeconds": 60
     }
 }
