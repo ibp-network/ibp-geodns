@@ -18,6 +18,7 @@ type Config struct {
 	AuthKey            map[string]string      `json:"AuthKey"`
 	Matrix             *Matrix                `json:"Matrix"`
 	Checks             map[string]CheckConfig `json:"Checks"`
+	Prometheus         *PrometheusConfig      `json:"Prometheus"`
 }
 
 type Matrix struct {
@@ -116,4 +117,9 @@ type ServiceEndpoint struct {
 	ServiceIPv4s    []string
 	ServiceIPv6s    []string
 	Domains         []string
+}
+
+type PrometheusConfig struct {
+	Enabled bool `json:"Enabled"`
+	UpdateIntervalSeconds int `json:"UpdateIntervalSeconds"`
 }
