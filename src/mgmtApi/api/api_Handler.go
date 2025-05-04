@@ -1,4 +1,4 @@
-package mgmtApi
+package api
 
 import (
 	"encoding/json"
