@@ -1,0 +1,19 @@
+[Unit]
+Description=IBP PowerDNS Backend
+After=network.target
+Before=pdns.service
+
+[Service]
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+ExecStart=/opt/ibp-geodns/bin/pdns-backend
+WorkingDirectory=/opt/ibp-geodns
+User=ibp-geodns
+Group=ibp-geodns
+Restart=always
+RestartSec=5
+Environment=PATH=/usr/bin:/usr/local/bin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin/
+Environment=GO_ENV=production
+
+[Install]
+WantedBy=multi-user.target
