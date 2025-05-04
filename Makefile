@@ -12,10 +12,10 @@ BIN_DIR := bin
 SEP     := /
 
 # Phony targets
-.PHONY: all clean deps mgmtBotMatrix mgmtBotMatrix mgmtApi pdnsBackend
+.PHONY: all clean deps mgmtBotMatrix mgmtBotMatrix mgmtApi dnsApi
 
 # Default: clean → update deps → build everything
-all: clean deps mgmtBotMatrix mgmtBotDiscord mgmtApi pdnsBackend
+all: clean deps mgmtBotMatrix mgmtBotDiscord mgmtApi dnsApi
 
 # Pull in module deps + upgrades
 deps:
@@ -37,7 +37,7 @@ mgmtApi: $(BIN_DIR)
 	go build -o $(BIN_DIR)$(SEP)$@ src/mgmtApi/mgmtApi.go
 
 pdnsBackend: $(BIN_DIR)
-	go build -o $(BIN_DIR)$(SEP)$@ src/pdnsBackend/pdnsBackend.go
+	go build -o $(BIN_DIR)$(SEP)$@ src/dnsApi/dnsApi.go
 
 # Clean workspace
 clean:
