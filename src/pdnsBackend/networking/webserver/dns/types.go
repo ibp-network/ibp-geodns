@@ -2,7 +2,7 @@ package dns
 
 import (
 	"ibp-geodns/src/common/config"
-	"ibp-geodns/src/powerdns-backend/networking/monitor"
+	"ibp-geodns/src/pdnsBackend/networking/monitor"
 	"sync"
 )
 
