@@ -23,7 +23,6 @@ func Init(cfgFile string) {
 	}
 
 	loadConfig(cfgFile, true)
-	go updateMaxMindDatabases()
 	go configUpdater(cfgFile)
 }
 

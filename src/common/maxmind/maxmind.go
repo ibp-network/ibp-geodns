@@ -1,9 +1,10 @@
-package config
+package maxmind
 
 import (
 	"archive/tar"
 	"compress/gzip"
 	"fmt"
+	cfg "ibp-geodns/src/common/config"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,8 +13,8 @@ import (
 	"strings"
 )
 
-func updateMaxMindDatabases() error {
-	c := GetConfig()
+func updateMaxmindDatabase() error {
+	c := cfg.GetConfig()
 	baseDir := filepath.Join(c.System.WorkDir, c.System.GeoliteDBPath)
 
 	var cityPattern = regexp.MustCompile(`^GeoLite2-City_(\d{8})\.tar\.gz$`)

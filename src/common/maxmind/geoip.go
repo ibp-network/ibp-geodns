@@ -1,4 +1,4 @@
-package geoip
+package maxmind
 
 import (
 	"fmt"
@@ -30,6 +30,8 @@ type URLParts struct {
 func Init() {
 	c := config.GetConfig()
 	var err error
+
+	updateMaxmindDatabase()
 
 	maxmindAsnDB := filepath.Join(c.System.GeoliteDBPath, "Asn.mmdb")
 	maxmindAsn, err = maxminddb.Open(maxmindAsnDB)

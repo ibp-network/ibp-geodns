@@ -3,8 +3,8 @@ package api
 import (
 	"ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data"
-	g "ibp-geodns/src/common/geoip"
 	l "ibp-geodns/src/common/logging"
+	"ibp-geodns/src/common/maxmind"
 	"net/http"
 	"strings"
 )
@@ -56,7 +56,7 @@ func DnsQuery_Lookup(w http.ResponseWriter, r *http.Request, req Request) Respon
 		for _, service := range c.Services {
 			for _, provider := range service.Providers {
 				for _, url := range provider.RpcUrls {
-					u := g.ParseUrl(url)
+					u := maxmind.ParseUrl(url)
 					uniqueDomains = append(uniqueDomains, u.Domain)
 				}
 			}

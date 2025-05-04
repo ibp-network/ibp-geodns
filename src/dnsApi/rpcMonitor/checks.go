@@ -3,8 +3,8 @@ package rpcMonitor
 import (
 	"ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data"
-	g "ibp-geodns/src/common/geoip"
 	l "ibp-geodns/src/common/logging"
+	g "ibp-geodns/src/common/maxmind"
 	consensus "ibp-geodns/src/common/nodeComm"
 	"sync"
 	"time"

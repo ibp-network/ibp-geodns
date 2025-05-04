@@ -1,8 +1,8 @@
 package data
 
 import (
-	g "ibp-geodns/src/common/geoip"
 	l "ibp-geodns/src/common/logging"
+	g "ibp-geodns/src/common/maxmind"
 	"time"
 )
 
