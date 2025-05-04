@@ -8,7 +8,8 @@ import (
 	"ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data"
 	l "ibp-geodns/src/common/logging"
-	"ibp-geodns/src/pdnsBackend/networking"
+	"ibp-geodns/src/pdnsBackend/dnsApi"
+	"ibp-geodns/src/pdnsBackend/rpcMonitor"
 )
 
 var version = "0.2.0"
@@ -37,8 +38,11 @@ func main() {
 	// Sleep to load the caches load
 	time.Sleep(1 * time.Second)
 
-	// Init networking and monitoring
-	networking.Init()
+	// Launch RPC Monitor
+	rpcMonitor.Init()
+
+	// Launch DNS / PDNS API
+	dnsApi.Init()
 
 	// Infinite loop to keep things operational
 	loop()

@@ -1,8 +1,8 @@
-package dns
+package api
 
 import (
 	"ibp-geodns/src/common/config"
-	"ibp-geodns/src/pdnsBackend/networking/monitor"
+	rpcMon "ibp-geodns/src/pdnsBackend/rpcMonitor"
 	"sync"
 )
 
@@ -77,8 +77,8 @@ type DomainInfo struct {
 }
 
 type OfficialResults = struct {
-	SiteResults     []monitor.SiteResult
-	DomainResults   []monitor.DomainResult
-	EndpointResults []monitor.EndpointResult
+	SiteResults     []rpcMon.SiteResult
+	DomainResults   []rpcMon.DomainResult
+	EndpointResults []rpcMon.EndpointResult
 	Mu              sync.RWMutex
 }

@@ -1,4 +1,4 @@
-package webserver
+package dnsApi
 
 // Response represents a DNS query response.
 type Response struct {

@@ -1,4 +1,4 @@
-package webserver
+package dnsApi
 
 import (
 	"net/http"

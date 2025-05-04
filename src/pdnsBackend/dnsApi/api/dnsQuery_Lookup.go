@@ -1,4 +1,4 @@
-package dns
+package api
 
 import (
 	"ibp-geodns/src/common/config"
