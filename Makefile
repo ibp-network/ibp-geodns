@@ -12,10 +12,10 @@ BIN_DIR := bin
 SEP     := /
 
 # Phony targets
-.PHONY: all clean deps mgmt-matrixbot mgmt-discordbot mgmt-api powerdns-backend
+.PHONY: all clean deps mgmtBotMatrix mgmtBotMatrix mgmtApi pdnsBackend
 
 # Default: clean → update deps → build everything
-all: clean deps mgmt-matrixbot mgmt-discordbot mgmt-api powerdns-backend
+all: clean deps mgmtBotMatrix mgmtBotDiscord mgmtApi pdnsBackend
 
 # Pull in module deps + upgrades
 deps:
@@ -27,17 +27,17 @@ $(BIN_DIR):
 	$(MKDIRBIN)
 
 # Build rules (uses forward-slashes)
-mgmt-matrixbot: $(BIN_DIR)
-	go build -o $(BIN_DIR)$(SEP)$@ src/mgmt-matrixbox/mgmt-matrixbot.go
+mgmtBotMatrix: $(BIN_DIR)
+	go build -o $(BIN_DIR)$(SEP)$@ src/mgmtBotMatrix/mgmtBotMatrix.go
 
-mgmt-discordbot: $(BIN_DIR)
-	go build -o $(BIN_DIR)$(SEP)$@ src/mgmt-discordbot/mgmt-discordbot.go
+mgmtBotDiscord: $(BIN_DIR)
+	go build -o $(BIN_DIR)$(SEP)$@ src/mgmtBotDiscord/mgmtBotDiscord.go
 
-mgmt-api: $(BIN_DIR)
-	go build -o $(BIN_DIR)$(SEP)$@ src/mgmt-api/mgmt-api.go
+mgmtApi: $(BIN_DIR)
+	go build -o $(BIN_DIR)$(SEP)$@ src/mgmtApi/mgmtApi.go
 
-powerdns-backend: $(BIN_DIR)
-	go build -o $(BIN_DIR)$(SEP)$@ src/powerdns-backend/powerdns-backend.go
+pdnsBackend: $(BIN_DIR)
+	go build -o $(BIN_DIR)$(SEP)$@ src/pdnsBackend/pdnsBackend.go
 
 # Clean workspace
 clean:
