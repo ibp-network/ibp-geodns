@@ -1,37 +1,37 @@
 package webserver
 
 import (
+	"net/http"
+
 	"ibp-geodns/src/common/config"
 	l "ibp-geodns/src/common/logging"
-	"ibp-geodns/src/powerdns-backend/networking/webserver/api"
 	"ibp-geodns/src/powerdns-backend/networking/webserver/dns"
-	"net/http"
 )
 
+// Init initializes and starts the HTTP services for the PowerDNS backend.
+// We now ONLY serve DNS queries. All management endpoints have been removed.
 func Init() {
 	l.Log(l.Debug, "API Package initializing...")
+
+	// Load configuration
 	c := config.GetConfig()
 
-	// Launch Init functions of sub-packages
-	go api.Init()
-	go dns.Init()
-
-	// Define DNS API
+	// DNS API for PowerDNS (unchanged)
 	dnsApi := http.NewServeMux()
 	dnsApi.HandleFunc("/dns", handleDnsQuery)
 
-	// Launch DNS API Thread
-	l.Log(l.Info, "Starting DNS API server on %s:%s", c.System.DnsApi.ListenAddress, c.System.DnsApi.ListenPort)
-	go http.ListenAndServe(c.System.DnsApi.ListenAddress+":"+c.System.DnsApi.ListenPort, dnsApi)
+	l.Log(l.Info, "Starting DNS API server on %s:%s",
+		c.System.DnsApi.ListenAddress,
+		c.System.DnsApi.ListenPort,
+	)
 
-	// Define Management API
-	mgmtApi := http.NewServeMux()
-	mgmtApi.HandleFunc("/api/billing", handleApiQuery)
-	mgmtApi.HandleFunc("/api/member", handleApiQuery)
-	mgmtApi.HandleFunc("/api/status", handleApiQuery)
-	mgmtApi.HandleFunc("/api/usage", handleApiQuery)
+	go http.ListenAndServe(
+		c.System.DnsApi.ListenAddress+":"+c.System.DnsApi.ListenPort,
+		dnsApi,
+	)
+}
 
-	// Launch MGMT API Thread
-	l.Log(l.Info, "Starting MGMT API server on %s:%s", c.System.MgmtApi.ListenAddress, c.System.MgmtApi.ListenPort)
-	go http.ListenAndServe(c.System.MgmtApi.ListenAddress+":"+c.System.MgmtApi.ListenPort, mgmtApi)
+// handleDnsQuery delegates incoming requests to the DNS package logic.
+func handleDnsQuery(w http.ResponseWriter, r *http.Request) {
+	dns.DnsQueryHandler(w, r)
 }

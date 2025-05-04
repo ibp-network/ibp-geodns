@@ -1,30 +1,44 @@
-# Makefile at your top-level project directory
+# Detect OS
+ifeq ($(OS),Windows_NT)
+  MKDIRBIN = if not exist $(BIN_DIR) mkdir $(BIN_DIR)
+  DELBIN    = if exist     $(BIN_DIR) rmdir /S /Q $(BIN_DIR)
+else
+  MKDIRBIN = mkdir -p $(BIN_DIR)
+  DELBIN    = rm -rf $(BIN_DIR)
+endif
 
-# Default target: build all binaries
-.PHONY: all
-all: mgmt-matrixbot mgmt-discordbot mgmt-api powerdns-backend
+# Constants
+BIN_DIR := bin
+SEP     := /
 
-# Ensure the bin/ directory exists
-bin:
-	mkdir -p bin
+# Phony targets
+.PHONY: all clean deps mgmt-matrixbot mgmt-discordbot mgmt-api powerdns-backend
 
-# mgmt-matrixbot
-mgmt-matrixbot: bin
-	go build -o bin\mgmt-matrixbot .\src\mgmt-matrixbox\mgmt-matrixbot.go
+# Default: clean → update deps → build everything
+all: clean deps mgmt-matrixbot mgmt-discordbot mgmt-api powerdns-backend
 
-# mgmt-discordbot
-mgmt-discordbot: bin
-	go build -o bin\mgmt-discordbot .\src\mgmt-discordbot\mgmt-discordbot.go
+# Pull in module deps + upgrades
+deps:
+	go mod tidy
+	go get -u ./...
 
-# mgmt-api
-mgmt-api: bin
-	go build -o bin\mgmt-api .\src\mgmt-api\mgmt-api.go
+# Ensure bin/ exists
+$(BIN_DIR):
+	$(MKDIRBIN)
 
-# powerdns-backend
-powerdns-backend: bin
-	go build -o bin\powerdns-backend .\src\powerdns-backend\powerdns-backend.go
+# Build rules (uses forward-slashes)
+mgmt-matrixbot: $(BIN_DIR)
+	go build -o $(BIN_DIR)$(SEP)$@ src/mgmt-matrixbox/mgmt-matrixbot.go
 
-# Cleanup
-.PHONY: clean
+mgmt-discordbot: $(BIN_DIR)
+	go build -o $(BIN_DIR)$(SEP)$@ src/mgmt-discordbot/mgmt-discordbot.go
+
+mgmt-api: $(BIN_DIR)
+	go build -o $(BIN_DIR)$(SEP)$@ src/mgmt-api/mgmt-api.go
+
+powerdns-backend: $(BIN_DIR)
+	go build -o $(BIN_DIR)$(SEP)$@ src/powerdns-backend/powerdns-backend.go
+
+# Clean workspace
 clean:
-	rm -rf bin
+	-$(DELBIN)
