@@ -5,11 +5,8 @@ import (
 
 	"ibp-geodns/src/common/config"
 	l "ibp-geodns/src/common/logging"
-	"ibp-geodns/src/powerdns-backend/networking/webserver/dns"
 )
 
-// Init initializes and starts the HTTP services for the PowerDNS backend.
-// We now ONLY serve DNS queries. All management endpoints have been removed.
 func Init() {
 	l.Log(l.Debug, "API Package initializing...")
 
@@ -29,9 +26,4 @@ func Init() {
 		c.System.DnsApi.ListenAddress+":"+c.System.DnsApi.ListenPort,
 		dnsApi,
 	)
-}
-
-// handleDnsQuery delegates incoming requests to the DNS package logic.
-func handleDnsQuery(w http.ResponseWriter, r *http.Request) {
-	dns.DnsQueryHandler(w, r)
 }
