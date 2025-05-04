@@ -1,10 +1,10 @@
 package webserver
 
 import (
-	"ibp-geodns/config"
-	l "ibp-geodns/logging"
-	"ibp-geodns/networking/webserver/api"
-	"ibp-geodns/networking/webserver/dns"
+	"common/config"
+	l "common/logging"
+	"common/networking/webserver/api"
+	"common/networking/webserver/dns"
 	"net/http"
 )
 

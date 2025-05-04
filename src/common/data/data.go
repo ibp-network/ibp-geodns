@@ -1,9 +1,9 @@
 package data
 
 import (
-	"ibp-geodns/config"
-	"ibp-geodns/data/mysql"
-	l "ibp-geodns/logging"
+	"common/config"
+	"common/data/mysql"
+	l "common/logging"
 )
 
 func Init() {

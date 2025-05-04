@@ -1,8 +1,8 @@
 package api
 
 import (
-	"ibp-geodns/config"
-	l "ibp-geodns/logging"
+	"common/config"
+	l "common/logging"
 )
 
 func Init() {

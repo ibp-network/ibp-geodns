@@ -1,9 +1,9 @@
 package geoip
 
 import (
+	"common/config"
+	l "common/logging"
 	"fmt"
-	"ibp-geodns/config"
-	l "ibp-geodns/logging"
 	"math"
 	"net"
 	"net/url"

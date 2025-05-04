@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"time"
 
-	l "ibp-geodns/logging"
+	l "common/logging"
 )
 
 var (

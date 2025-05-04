@@ -1,9 +1,9 @@
 package consensus
 
 import (
+	"common/data"
+	l "common/logging"
 	"encoding/json"
-	"ibp-geodns/data"
-	l "ibp-geodns/logging"
 	"time"
 
 	"github.com/nats-io/nats.go"

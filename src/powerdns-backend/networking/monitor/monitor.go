@@ -1,7 +1,7 @@
 package monitor
 
 import (
-	l "ibp-geodns/logging"
+	l "common/logging"
 )
 
 func Init() {

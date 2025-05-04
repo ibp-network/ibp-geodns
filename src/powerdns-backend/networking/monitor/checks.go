@@ -1,11 +1,11 @@
 package monitor
 
 import (
-	"ibp-geodns/config"
-	"ibp-geodns/data"
-	l "ibp-geodns/logging"
-	"ibp-geodns/networking/consensus"
-	g "ibp-geodns/networking/geoip"
+	"common/config"
+	"common/data"
+	l "common/logging"
+	"common/networking/consensus"
+	g "common/networking/geoip"
 	"sync"
 	"time"
 )

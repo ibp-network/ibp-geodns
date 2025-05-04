@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"ibp-geodns/config"
-	l "ibp-geodns/logging"
+	"common/config"
+	l "common/logging"
 )
 
 var (

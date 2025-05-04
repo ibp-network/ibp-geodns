@@ -1,8 +1,8 @@
 package consensus
 
 import (
+	"common/config"
 	"encoding/json"
-	"ibp-geodns/config"
 	"sync"
 	"time"
 

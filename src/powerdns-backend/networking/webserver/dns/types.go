@@ -1,8 +1,8 @@
 package dns
 
 import (
-	"ibp-geodns/config"
-	"ibp-geodns/networking/monitor"
+	"common/config"
+	"common/networking/monitor"
 	"sync"
 )
 

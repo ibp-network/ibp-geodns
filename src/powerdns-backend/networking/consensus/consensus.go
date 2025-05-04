@@ -5,9 +5,9 @@ import (
 	"os"
 	"time"
 
-	"ibp-geodns/config"
-	"ibp-geodns/data"
-	l "ibp-geodns/logging"
+	"common/config"
+	"common/data"
+	l "common/logging"
 
 	"github.com/google/uuid"
 )
