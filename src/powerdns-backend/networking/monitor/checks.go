@@ -4,8 +4,8 @@ import (
 	"ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data"
 	l "ibp-geodns/src/common/logging"
-	"ibp-geodns/src/common/networking/consensus"
 	g "ibp-geodns/src/common/networking/geoip"
+	"ibp-geodns/src/powerdns-backend/networking/consensus"
 	"sync"
 	"time"
 )

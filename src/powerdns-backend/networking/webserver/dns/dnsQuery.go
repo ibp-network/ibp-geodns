@@ -1,7 +1,7 @@
 package dns
 
 import (
-	"common/config"
+	"ibp-geodns/src/common/config"
 	"net/http"
 	"time"
 )
