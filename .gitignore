@@ -1,0 +1,28 @@
+# Ignore common binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.ps1
+*.txt
+
+# Ignore go working files
+go.work
+go.work.sum
+go.sum
+
+# Ignore config directory but keep structure
+/config/*
+!/config/*.gitignore
+
+# Ignore tmp directory but keep structure
+/tmp/*
+!/tmp/.gitignore
+!/tmp/maxmind/.gitignore
+
+# Ignore bin directory but keep structure
+/bin/*
+!/bin/.gitignore

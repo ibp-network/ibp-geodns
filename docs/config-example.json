@@ -1,0 +1,76 @@
+{
+    "workDir": "/opt/ibp-geodns/tmp",
+    "GeoliteDBPath": "GeoLite2-City.mmdb",
+    "StaticDNSConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/geodns-static.json",
+    "MembersConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/members_professional.json",
+    "ServicesConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/services_rpc.json",
+    "IaasPricingConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/services_rpc_iaaspricing.json",
+    "ServicesRequestsConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/services_rpc_requests.json",
+    "ConfigReloadTime": 3600,
+    "CacheSaveTime": 90,
+    "MinimumOfflineTime": 3600,
+    "Maxmind": {
+        "AccountID": "",
+        "LicenseKey": ""
+    },
+    "Nats": {
+        "NodeID": "DNS-01",
+        "Url": "nats://127.0.0.1:5222",
+        "User": "DNS01",
+        "Pass": "password123"
+    },
+    "Mysql": {
+        "Host": "localhosts",
+        "Port": "3306",
+        "User": "ibpgeodns",
+        "Pass": "password123",
+        "DB": "powerdns"
+    },
+    "DnsApi": {
+        "ListenAddress": "0.0.0.0",
+        "ListenPort": "6000"
+    },
+    "MgmtApi": {
+        "ListenAddress": "0.0.0.0",
+        "ListenPort": "6000",
+        "AuthKeys": {
+            "user1": "password123",
+            "user2": "password123",
+            "user3": "password123",
+            "user4": "password123"
+        }
+    },
+    "Matrix": {
+        "Enabled": 0,
+        "HomeServerURL": "https://matrix.org",
+        "Username": "user",
+        "Password": "password",
+        "RoomID": "roomid"
+    },
+    "Checks": [
+        {
+            "Name": "ping",
+            "Enabled": 1,
+            "CheckType": "site",
+            "Timeout": 30,
+            "CheckInterval": 120,
+            "ExtraOptions": {"PingCount": 15, "PingInterval": 100, "PingTimeout": 1600, "PingTTL": 254, "PingSize": 28, "MaxPacketLoss": 25, "MaxLatency": 800}
+        },
+        {
+            "Name": "ssl",
+            "Enabled": 1,
+            "CheckType": "domain",
+            "Timeout": 60,
+            "CheckInterval": 3600,
+            "ExtraOptions": {"ConnectTimeout": 6}
+        },
+        {
+            "Name": "wss",
+            "Enabled": 1,
+            "CheckType": "endpoint",
+            "Timeout": 60,
+            "CheckInterval": 1800,
+            "ExtraOptions": {"ConnectTimeout": 6}
+        }
+    ]
+}
