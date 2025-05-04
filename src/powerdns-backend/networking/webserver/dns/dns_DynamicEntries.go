@@ -7,7 +7,7 @@ import (
 
 	"ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data"
-	g "ibp-geodns/src/common/networking/geoip"
+	g "ibp-geodns/src/common/geoip"
 
 	"golang.org/x/net/publicsuffix"
 )

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"ibp-geodns/src/common/config"
-	g "ibp-geodns/src/common/networking/geoip"
+	g "ibp-geodns/src/common/geoip"
 
 	"github.com/gorilla/websocket"
 )

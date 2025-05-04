@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data"
+	"ibp-geodns/src/common/geoip"
 	l "ibp-geodns/src/common/logging"
-	"ibp-geodns/src/common/networking/geoip"
 	"net/http"
 )
 

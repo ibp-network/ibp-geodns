@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"ibp-geodns/src/common/config"
-	g "ibp-geodns/src/common/networking/geoip"
+	g "ibp-geodns/src/common/geoip"
 )
 
 // findMemberByName searches for a member by name.
