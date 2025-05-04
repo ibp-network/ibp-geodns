@@ -2,7 +2,7 @@ package dnsApi
 
 import (
 	"encoding/json"
-	dnsApi "ibp-geodns/src/pdnsBackend/dnsApi/api"
+	dnsApi "ibp-geodns/src/dnsApi/api/dnsHandler"
 	"net/http"
 )
 

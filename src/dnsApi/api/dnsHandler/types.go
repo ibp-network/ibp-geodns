@@ -2,7 +2,7 @@ package api
 
 import (
 	"ibp-geodns/src/common/config"
-	rpcMon "ibp-geodns/src/pdnsBackend/rpcMonitor"
+	rpcMon "ibp-geodns/src/dnsApi/rpcMonitor"
 	"sync"
 )
 
