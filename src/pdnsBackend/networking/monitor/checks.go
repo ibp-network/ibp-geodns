@@ -5,7 +5,7 @@ import (
 	"ibp-geodns/src/common/data"
 	g "ibp-geodns/src/common/geoip"
 	l "ibp-geodns/src/common/logging"
-	"ibp-geodns/src/pdnsBackend/networking/consensus"
+	consensus "ibp-geodns/src/common/nodeComm"
 	"sync"
 	"time"
 )
