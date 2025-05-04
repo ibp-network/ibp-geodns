@@ -2,7 +2,7 @@ package webserver
 
 import (
 	"encoding/json"
-	"ibp-geodns/networking/webserver/dns"
+	"ibp-geodns/src/powerdns-backend/networking/webserver/dns"
 	"net/http"
 )
 

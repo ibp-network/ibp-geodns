@@ -5,9 +5,9 @@ import (
 	"net"
 	"strings"
 
-	"ibp-geodns/config"
-	"ibp-geodns/data"
-	g "ibp-geodns/networking/geoip"
+	"common/config"
+	"common/data"
+	g "common/networking/geoip"
 
 	"golang.org/x/net/publicsuffix"
 )

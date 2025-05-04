@@ -1,8 +1,8 @@
 package api
 
 import (
-	l "common/logging"
 	"encoding/json"
+	l "ibp-geodns/src/common/logging"
 	"net/http"
 )
 

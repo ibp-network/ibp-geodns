@@ -1,8 +1,8 @@
 package monitor
 
 import (
-	"common/config"
 	"crypto/tls"
+	"ibp-geodns/src/common/config"
 	"net"
 	"time"
 )

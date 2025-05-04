@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"common/data/mysql"
-	l "common/logging"
+	"ibp-geodns/src/common/data/mysql"
+	l "ibp-geodns/src/common/logging"
 )
 
 func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, status bool, errorText string, data map[string]interface{}) {

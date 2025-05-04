@@ -1,10 +1,10 @@
 package networking
 
 import (
-	"ibp-geodns/networking/consensus"
-	"ibp-geodns/networking/geoip"
-	"ibp-geodns/networking/monitor"
-	"ibp-geodns/networking/webserver"
+	"ibp-geodns/src/common/networking/geoip"
+	"ibp-geodns/src/powerdns-backend/networking/consensus"
+	"ibp-geodns/src/powerdns-backend/networking/monitor"
+	"ibp-geodns/src/powerdns-backend/networking/webserver"
 )
 
 func Init() {

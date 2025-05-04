@@ -1,8 +1,8 @@
 package data
 
 import (
-	l "common/logging"
-	g "common/networking/geoip"
+	l "ibp-geodns/src/common/logging"
+	g "ibp-geodns/src/common/networking/geoip"
 	"time"
 )
 

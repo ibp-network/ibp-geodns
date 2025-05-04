@@ -2,8 +2,8 @@ package dns
 
 import (
 	"fmt"
-	"ibp-geodns/config"
-	l "ibp-geodns/logging"
+	"ibp-geodns/src/common/config"
+	l "ibp-geodns/src/common/logging"
 	"io"
 	"net/http"
 	"strings"

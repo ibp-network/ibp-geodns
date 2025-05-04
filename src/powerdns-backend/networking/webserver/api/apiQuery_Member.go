@@ -2,9 +2,9 @@ package api
 
 import (
 	"encoding/json"
-	"ibp-geodns/config"
-	"ibp-geodns/data"
-	l "ibp-geodns/logging"
+	"ibp-geodns/src/common/config"
+	"ibp-geodns/src/common/data"
+	l "ibp-geodns/src/common/logging"
 	"net/http"
 )
 

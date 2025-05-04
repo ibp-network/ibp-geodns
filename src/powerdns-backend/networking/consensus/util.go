@@ -3,8 +3,8 @@ package consensus
 import (
 	"strings"
 
-	"common/config"
-	g "common/networking/geoip"
+	"ibp-geodns/src/common/config"
+	g "ibp-geodns/src/common/networking/geoip"
 )
 
 // findMemberByName searches for a member by name.

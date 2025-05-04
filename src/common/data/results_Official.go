@@ -1,7 +1,7 @@
 package data
 
 import (
-	"common/config"
+	"ibp-geodns/src/common/config"
 	"sync"
 	"time"
 )

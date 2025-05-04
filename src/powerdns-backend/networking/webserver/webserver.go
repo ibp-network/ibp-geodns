@@ -1,10 +1,10 @@
 package webserver
 
 import (
-	"common/config"
-	l "common/logging"
-	"common/networking/webserver/api"
-	"common/networking/webserver/dns"
+	"ibp-geodns/src/common/config"
+	l "ibp-geodns/src/common/logging"
+	"ibp-geodns/src/powerdns-backend/networking/webserver/api"
+	"ibp-geodns/src/powerdns-backend/networking/webserver/dns"
 	"net/http"
 )
 

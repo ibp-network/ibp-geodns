@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"common/config"
-	g "common/networking/geoip"
+	"ibp-geodns/src/common/config"
+	g "ibp-geodns/src/common/networking/geoip"
 
 	"github.com/gorilla/websocket"
 )

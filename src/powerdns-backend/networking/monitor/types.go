@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"common/config"
+	"ibp-geodns/src/common/config"
 )
 
 // Results type

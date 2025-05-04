@@ -1,10 +1,10 @@
 package dns
 
 import (
-	"common/config"
-	"common/data"
-	l "common/logging"
-	g "common/networking/geoip"
+	"ibp-geodns/src/common/config"
+	"ibp-geodns/src/common/data"
+	l "ibp-geodns/src/common/logging"
+	g "ibp-geodns/src/common/networking/geoip"
 	"net/http"
 	"strings"
 )

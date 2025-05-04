@@ -1,8 +1,8 @@
 package dns
 
 import (
-	"common/config"
-	l "common/logging"
+	"ibp-geodns/src/common/config"
+	l "ibp-geodns/src/common/logging"
 	"time"
 )
 

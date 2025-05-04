@@ -5,11 +5,10 @@ import (
 	"os"
 	"time"
 
-	"common/data"
-	l "common/logging"
-	"common/networking"
-
-	"common/config"
+	"ibp-geodns/src/common/config"
+	"ibp-geodns/src/common/data"
+	l "ibp-geodns/src/common/logging"
+	"ibp-geodns/src/powerdns-backend/networking"
 )
 
 var version = "0.2.0"

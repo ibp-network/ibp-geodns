@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"common/config"
+	"ibp-geodns/src/common/config"
 
 	"github.com/go-ping/ping"
 )

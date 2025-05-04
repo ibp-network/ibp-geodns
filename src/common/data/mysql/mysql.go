@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"common/config"
+	"ibp-geodns/src/common/config"
 
 	_ "github.com/go-sql-driver/mysql"
 )
