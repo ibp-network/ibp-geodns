@@ -15,13 +15,6 @@ import (
 	l "ibp-geodns/src/common/logging"
 )
 
-// updateMaxmindDatabase checks each of CityLite, CountryLite, AsnLite.
-//
-// For each, we do:
-// 1) Build the HEAD request to see remote "Last-Modified"
-// 2) Compare with local .(CityLite|CountryLite|AsnLite) file content
-// 3) If different or local .mmdb absent => download, extract, rename, remove leftover
-// 4) Save new last-modified in .(CityLite|CountryLite|AsnLite)
 func updateMaxmindDatabase() error {
 	c := cfg.GetConfig()
 	baseDir := filepath.Join(c.System.Maxmind.MaxmindDBPath)
@@ -34,19 +27,11 @@ func updateMaxmindDatabase() error {
 		return nil
 	}
 
-	// We define 3 downloads: CityLite, CountryLite, AsnLite
-	// (You must fill in the correct edition IDs & suffix for each.)
-	// Example EditionIDs from MaxMind docs:
-	//  - "GeoLite2-City"
-	//  - "GeoLite2-Country"
-	//  - "GeoLite2-ASN"
-	// Suffix is typically "tar.gz"
-
 	downloads := []struct {
-		name         string // "CityLite" or "CountryLite" or "AsnLite"
-		editionID    string // e.g. "GeoLite2-City"
-		filenameLite string // final "CityLite.mmdb" or "CountryLite.mmdb" or "AsnLite.mmdb"
-		markerFile   string // local file storing the last remote Last-Modified
+		name         string
+		editionID    string
+		filenameLite string
+		markerFile   string
 	}{
 		{"CityLite", "GeoLite2-City", "CityLite.mmdb", ".CityLite"},
 		{"CountryLite", "GeoLite2-Country", "CountryLite.mmdb", ".CountryLite"},

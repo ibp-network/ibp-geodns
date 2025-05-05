@@ -26,7 +26,6 @@ type ConfigData struct {
 type SystemConfig struct {
 	ConfigPath             string        `json:"-"`
 	WorkDir                string        `json:"workDir"`
-	GeoliteDBPath          string        `json:"GeoliteDBPath"`
 	StaticDNSConfig        string        `json:"StaticDNSConfig"`
 	MembersConfig          string        `json:"MembersConfig"`
 	ServicesConfig         string        `json:"ServicesConfig"`

@@ -8,6 +8,7 @@ import (
 	"ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data"
 	l "ibp-geodns/src/common/logging"
+	geo "ibp-geodns/src/common/maxmind"
 	nComm "ibp-geodns/src/common/nodeComm"
 	api "ibp-geodns/src/dnsApi/api"
 	mon "ibp-geodns/src/dnsApi/rpcMonitor"
@@ -32,6 +33,9 @@ func main() {
 
 	// Initialize components
 	config.Init(*cfgFile)
+
+	// Initialize Maxmind and Geoip
+	geo.Init()
 
 	// Start data package
 	data.Init()
