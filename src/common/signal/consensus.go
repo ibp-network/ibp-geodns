@@ -103,7 +103,7 @@ func ProposeCheckStatus(checkType, checkName, memberName, domainName, endpoint s
 			prop.Endpoint == endpoint &&
 			prop.ProposedStatus == status {
 			state.Mu.RUnlock()
-			//log.Log(log.Debug, "Propose skipped: Active proposal already exists for CheckType=%s, CheckName=%s, MemberName=%s", checkType, checkName, memberName)
+			//l.Log(l.Debug, "Propose skipped: Active proposal already exists for CheckType=%s, CheckName=%s, MemberName=%s", checkType, checkName, memberName)
 			return false
 		}
 	}
