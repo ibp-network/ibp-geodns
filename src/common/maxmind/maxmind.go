@@ -24,7 +24,7 @@ import (
 // 4) Save new last-modified in .(CityLite|CountryLite|AsnLite)
 func updateMaxmindDatabase() error {
 	c := cfg.GetConfig()
-	baseDir := filepath.Join(c.System.WorkDir, "tmp", c.System.GeoliteDBPath)
+	baseDir := filepath.Join(c.System.Maxmind.MaxmindDBPath)
 
 	// The direct download method requires your account ID & license key
 	accountID := c.System.Maxmind.AccountID
