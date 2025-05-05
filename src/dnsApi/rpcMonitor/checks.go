@@ -5,7 +5,7 @@ import (
 	"ibp-geodns/src/common/data"
 	l "ibp-geodns/src/common/logging"
 	g "ibp-geodns/src/common/maxmind"
-	consensus "ibp-geodns/src/common/nodeComm"
+	nComm "ibp-geodns/src/common/nodeComm"
 	"sync"
 	"time"
 )
@@ -117,10 +117,10 @@ func UpdateSiteResultLocal(check config.Check, member config.Member, status bool
 	exists, OfficialStatus := data.GetOfficialSiteStatus(check.Name, member.Details.Name)
 
 	if !exists {
-		go consensus.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
+		go nComm.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
 	} else {
 		if OfficialStatus != status {
-			go consensus.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
+			go nComm.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
 		}
 	}
 }
@@ -236,10 +236,10 @@ func UpdateDomainResultLocal(check config.Check, domain string, service config.S
 	exists, OfficialStatus := data.GetOfficialDomainStatus(check.Name, member.Details.Name, domain)
 
 	if !exists {
-		go consensus.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
+		go nComm.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
 	} else {
 		if OfficialStatus != status {
-			go consensus.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
+			go nComm.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
 		}
 	}
 }
@@ -347,10 +347,10 @@ func UpdateEndpointResultLocal(check config.Check, member config.Member, service
 	exists, OfficialStatus := data.GetOfficialEndpointStatus(check.Name, member.Details.Name, u.Domain, endpoint)
 
 	if !exists {
-		go consensus.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
+		go nComm.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
 	} else {
 		if OfficialStatus != status {
-			go consensus.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
+			go nComm.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
 		}
 	}
 }

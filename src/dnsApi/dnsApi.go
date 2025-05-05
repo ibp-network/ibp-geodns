@@ -8,6 +8,7 @@ import (
 	"ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data"
 	l "ibp-geodns/src/common/logging"
+	nComm "ibp-geodns/src/common/nodeComm"
 	api "ibp-geodns/src/dnsApi/api"
 	mon "ibp-geodns/src/dnsApi/rpcMonitor"
 )
@@ -37,6 +38,9 @@ func main() {
 
 	// Sleep to load the caches load
 	time.Sleep(1 * time.Second)
+
+	// Launch Node Communications
+	nComm.Init()
 
 	// Launch RPC Monitor
 	mon.Init()
