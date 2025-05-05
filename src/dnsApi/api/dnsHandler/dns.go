@@ -1,8 +1,8 @@
 package api
 
 import (
-	"ibp-geodns/src/common/config"
-	l "ibp-geodns/src/common/logging"
+	cfg "ibp-geodns/src/common/config"
+	log "ibp-geodns/src/common/logging"
 	"time"
 )
 
@@ -14,7 +14,7 @@ var (
 
 // Init initializes the DNS server with the provided configuration.
 func Init() {
-	l.Log(l.Debug, "DNS Package initializing...")
+	log.Log(log.Debug, "DNS Package initializing...")
 
 	// Load staticEntries
 	StaticDNSEntries()
@@ -35,7 +35,7 @@ func configUpdater() {
 }
 
 func configTimer() {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 
 	// Launch initial config update
 	// Update Static Entries
@@ -49,7 +49,7 @@ func configTimer() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		l.Log(l.Debug, "Updating DNS configs")
+		log.Log(log.Debug, "Updating DNS configs")
 		// Update Static Entries
 		go StaticDNSEntries()
 		// Update topLevelDomains

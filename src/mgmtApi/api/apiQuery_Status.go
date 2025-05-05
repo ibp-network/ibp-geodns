@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"ibp-geodns/src/common/config"
-	"ibp-geodns/src/common/data"
+	cfg "ibp-geodns/src/common/config"
+	dat "ibp-geodns/src/common/data"
 )
 
 // ApiQuery_Status handles /api/status requests
@@ -23,8 +23,8 @@ func ApiQuery_Status(w http.ResponseWriter, r *http.Request, req ApiRequest) Api
 
 // Example byMember approach: returns a structure grouped by each member
 func apiQuery_StatusByMember() ApiResponse {
-	c := config.GetConfig()
-	sites, domains, endpoints := data.GetOfficialResults()
+	c := cfg.GetConfig()
+	sites, domains, endpoints := dat.GetOfficialResults()
 
 	byMember := make(map[string]map[string][]CheckResult)
 	// init for each known member

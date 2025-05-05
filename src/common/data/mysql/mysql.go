@@ -4,13 +4,13 @@ import (
 	"database/sql"
 	"fmt"
 
-	"ibp-geodns/src/common/config"
+	cfg "ibp-geodns/src/common/config"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
 func Init() {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
 		c.System.Mysql.User,
 		c.System.Mysql.Pass,

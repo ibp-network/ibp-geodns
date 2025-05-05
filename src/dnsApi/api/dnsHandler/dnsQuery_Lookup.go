@@ -1,25 +1,25 @@
 package api
 
 import (
-	"ibp-geodns/src/common/config"
-	"ibp-geodns/src/common/data"
-	l "ibp-geodns/src/common/logging"
-	"ibp-geodns/src/common/maxmind"
+	cfg "ibp-geodns/src/common/config"
+	dat "ibp-geodns/src/common/data"
+	log "ibp-geodns/src/common/logging"
+	max "ibp-geodns/src/common/maxmind"
 	"net/http"
 	"strings"
 )
 
 // dnsQuery_Lookup handles DNS lookup queries based on the provided parameters.
 func DnsQuery_Lookup(w http.ResponseWriter, r *http.Request, req Request) Response {
-	var records []config.DNSRecord
+	var records []cfg.DNSRecord
 
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 	var id int
 
 	domain := strings.ToLower(strings.TrimSuffix(req.Parameters.QName, "."))
 
 	// Store Client Stats
-	go data.ClientHit(req.Parameters.Remote, domain)
+	go dat.ClientHit(req.Parameters.Remote, domain)
 
 	// Initiate TopLevelDomains mutex read lock
 	TLDRecords.mu.RLock()
@@ -56,7 +56,7 @@ func DnsQuery_Lookup(w http.ResponseWriter, r *http.Request, req Request) Respon
 		for _, service := range c.Services {
 			for _, provider := range service.Providers {
 				for _, url := range provider.RpcUrls {
-					u := maxmind.ParseUrl(url)
+					u := max.ParseUrl(url)
 					uniqueDomains = append(uniqueDomains, u.Domain)
 				}
 			}
@@ -65,8 +65,8 @@ func DnsQuery_Lookup(w http.ResponseWriter, r *http.Request, req Request) Respon
 		for _, uniqueDomain := range uniqueDomains {
 			if domain == uniqueDomain {
 				if req.Parameters.QType == "A" || req.Parameters.QType == "ANY" {
-					l.Log(l.Info, "DNSLookup: No records found for domain %s, returning default result", domain)
-					records = append(records, config.DNSRecord{
+					log.Log(log.Info, "DNSLookup: No records found for domain %s, returning default result", domain)
+					records = append(records, cfg.DNSRecord{
 						DomainID: id,
 						QName:    domain,
 						QType:    "A",
@@ -81,14 +81,14 @@ func DnsQuery_Lookup(w http.ResponseWriter, r *http.Request, req Request) Respon
 
 	if len(records) == 0 {
 		// We need to return an empty record so the client knows there is no result
-		return Response{Result: []config.DNSRecord{}}
+		return Response{Result: []cfg.DNSRecord{}}
 	} else {
 		// Return compiled records
 		return Response{Result: records}
 	}
 }
 
-func appendUniqueRecords(records []config.DNSRecord, newRecords []config.DNSRecord) []config.DNSRecord {
+func appendUniqueRecords(records []cfg.DNSRecord, newRecords []cfg.DNSRecord) []cfg.DNSRecord {
 	for _, newRecord := range newRecords {
 		if !containsRecord(records, newRecord) {
 			records = append(records, newRecord)
@@ -97,7 +97,7 @@ func appendUniqueRecords(records []config.DNSRecord, newRecords []config.DNSReco
 	return records
 }
 
-func containsRecord(records []config.DNSRecord, record config.DNSRecord) bool {
+func containsRecord(records []cfg.DNSRecord, record cfg.DNSRecord) bool {
 	for _, r := range records {
 		if r.QName == record.QName && r.QType == record.QType && r.Content == record.Content {
 			return true

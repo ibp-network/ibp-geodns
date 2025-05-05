@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"ibp-geodns/src/common/config"
-	g "ibp-geodns/src/common/maxmind"
+	cfg "ibp-geodns/src/common/config"
+	max "ibp-geodns/src/common/maxmind"
 
 	"github.com/gorilla/websocket"
 )
@@ -25,8 +25,8 @@ func init() {
 	RegisterEndpointCheck("wss", WssCheck)
 }
 
-func WssCheck(check config.Check, endpoint string, service config.Service, member config.Member) {
-	u := g.ParseUrl(endpoint)
+func WssCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member) {
+	u := max.ParseUrl(endpoint)
 
 	reconstructedURL := fmt.Sprintf("%s%s%s", u.Protocol, u.Domain, u.Directory)
 	dialer := websocket.Dialer{

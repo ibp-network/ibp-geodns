@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"ibp-geodns/src/common/data/mysql"
-	l "ibp-geodns/src/common/logging"
+	log "ibp-geodns/src/common/logging"
 )
 
 func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, status bool, errorText string, data map[string]interface{}) {
@@ -22,7 +22,7 @@ func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, 
 		// Online Event: Close any existing offline event
 		event, err := mysql.FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint)
 		if err != nil {
-			l.Log(l.Error, "Failed to check for existing offline event: %v", err)
+			log.Log(log.Error, "Failed to check for existing offline event: %v", err)
 			return
 		}
 
@@ -35,9 +35,9 @@ func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, 
 			if duration < 30*time.Second {
 				err := mysql.DeleteEvent(event.ID)
 				if err != nil {
-					l.Log(l.Error, "Failed to delete short-duration event: %v", err)
+					log.Log(log.Error, "Failed to delete short-duration event: %v", err)
 				} else {
-					l.Log(l.Info, "Deleted short-duration offline event for %s %s %s", memberName, checkType, checkName)
+					log.Log(log.Info, "Deleted short-duration offline event for %s %s %s", memberName, checkType, checkName)
 				}
 				return
 			}
@@ -45,16 +45,16 @@ func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, 
 			// Otherwise, update the event end time
 			err = mysql.UpdateEventEndTime(event.ID, now)
 			if err != nil {
-				l.Log(l.Error, "Failed to update event end time: %v", err)
+				log.Log(log.Error, "Failed to update event end time: %v", err)
 				return
 			}
-			l.Log(l.Info, "Closed offline event for %s %s %s", memberName, checkType, checkName)
+			log.Log(log.Info, "Closed offline event for %s %s %s", memberName, checkType, checkName)
 		}
 	} else {
 		// Offline Event: Check if an open event already exists
 		event, err := mysql.FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint)
 		if err != nil {
-			l.Log(l.Error, "Failed to check for existing offline event: %v", err)
+			log.Log(log.Error, "Failed to check for existing offline event: %v", err)
 			return
 		}
 
@@ -72,9 +72,9 @@ func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, 
 				AdditionalData: sql.NullString{String: additionalData, Valid: additionalData != ""},
 			})
 			if err != nil {
-				l.Log(l.Error, "Failed to insert offline event: %v", err)
+				log.Log(log.Error, "Failed to insert offline event: %v", err)
 			} else {
-				l.Log(l.Info, "Recorded offline event for %s %s %s", memberName, checkType, checkName)
+				log.Log(log.Info, "Recorded offline event for %s %s %s", memberName, checkType, checkName)
 			}
 		}
 	}

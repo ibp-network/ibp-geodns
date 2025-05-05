@@ -1,7 +1,7 @@
 package data
 
 import (
-	"ibp-geodns/src/common/config"
+	cfg "ibp-geodns/src/common/config"
 	"sync"
 	"time"
 )
@@ -93,7 +93,7 @@ func GetOfficialEndpointStatus(checkName string, memberName string, domain strin
 }
 
 // UpdateOfficialSiteResult updates the official site results for a given check and member.
-func UpdateOfficialSiteResult(check config.Check, member config.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
+func UpdateOfficialSiteResult(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
 	Official.Mu.Lock()
 	defer Official.Mu.Unlock()
 
@@ -151,7 +151,7 @@ func UpdateOfficialSiteResult(check config.Check, member config.Member, status b
 }
 
 // UpdateOfficialDomainResult updates the official domain results for a given check, domain, service, and member.
-func UpdateOfficialDomainResult(check config.Check, member config.Member, service config.Service, domain string, status bool, errorMsg string, dataMap map[string]interface{}) {
+func UpdateOfficialDomainResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string, status bool, errorMsg string, dataMap map[string]interface{}) {
 	Official.Mu.Lock()
 	defer Official.Mu.Unlock()
 
@@ -211,7 +211,7 @@ func UpdateOfficialDomainResult(check config.Check, member config.Member, servic
 }
 
 // UpdateOfficialEndpointResult updates the official endpoint results for a given check, endpoint, service, and member.
-func UpdateOfficialEndpointResult(check config.Check, member config.Member, service config.Service, domain string, endpoint string, status bool, errorMsg string, dataMap map[string]interface{}) {
+func UpdateOfficialEndpointResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string, endpoint string, status bool, errorMsg string, dataMap map[string]interface{}) {
 	Official.Mu.Lock()
 	defer Official.Mu.Unlock()
 

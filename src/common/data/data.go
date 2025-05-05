@@ -1,9 +1,9 @@
 package data
 
 import (
-	"ibp-geodns/src/common/config"
+	cfg "ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data/mysql"
-	l "ibp-geodns/src/common/logging"
+	log "ibp-geodns/src/common/logging"
 )
 
 func Init() {
@@ -15,27 +15,27 @@ func Init() {
 
 // MemberEnable sets the Override to 1 for the specified member name, stores it in MySQL, and triggers an event.
 func MemberEnable(name string) {
-	member, exists := config.GetMember(name)
+	member, exists := cfg.GetMember(name)
 	if !exists {
-		l.Log(l.Debug, "Could not enable member does not exist")
+		log.Log(log.Debug, "Could not enable member does not exist")
 		return
 	}
 
 	member.Override = false
-	config.SetMember(name, member)
+	cfg.SetMember(name, member)
 	RecordEvent("site", "MemberEnable", name, "", "", true, "Member has disabled override.", nil)
 }
 
 // MemberDisable sets the Override to 0 for the specified member name, stores it in MySQL, and triggers an event.
 func MemberDisable(name string) {
-	member, exists := config.GetMember(name)
+	member, exists := cfg.GetMember(name)
 	if !exists {
-		l.Log(l.Debug, "Could not enable member does not exist")
+		log.Log(log.Debug, "Could not enable member does not exist")
 		return
 	}
 
 	member.Override = true
-	config.SetMember(name, member)
+	cfg.SetMember(name, member)
 	RecordEvent("site", "MemberEnable", name, "", "", false, "Member has enabled override.", nil)
 }
 

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	l "ibp-geodns/src/common/logging"
+	log "ibp-geodns/src/common/logging"
 )
 
 // HandleApiQuery is the single handler for all mgmt endpoints,
@@ -41,7 +41,7 @@ func HandleApiQuery(w http.ResponseWriter, r *http.Request) {
 func writeApiResponse(w http.ResponseWriter, res ApiResponse) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(res); err != nil {
-		l.Log(l.Error, "Error encoding JSON response: %v", err)
+		log.Log(log.Error, "Error encoding JSON response: %v", err)
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 	}
 }

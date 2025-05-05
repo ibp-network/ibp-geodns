@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	cfg "ibp-geodns/src/common/config"
-	l "ibp-geodns/src/common/logging"
+	log "ibp-geodns/src/common/logging"
 )
 
 func updateMaxmindDatabase() error {
@@ -23,7 +23,7 @@ func updateMaxmindDatabase() error {
 	accountID := c.System.Maxmind.AccountID
 	licenseKey := c.System.Maxmind.LicenseKey
 	if accountID == "" || licenseKey == "" {
-		l.Log(l.Warn, "MaxMind AccountID or LicenseKey is missing. Auto-update cannot proceed.")
+		log.Log(log.Warn, "MaxMind AccountID or LicenseKey is missing. Auto-update cannot proceed.")
 		return nil
 	}
 
@@ -41,7 +41,7 @@ func updateMaxmindDatabase() error {
 	for _, dl := range downloads {
 		err := checkAndDownloadOne(baseDir, accountID, licenseKey, dl.name, dl.editionID, dl.filenameLite, dl.markerFile)
 		if err != nil {
-			l.Log(l.Error, "Failed to update %s: %v", dl.name, err)
+			log.Log(log.Error, "Failed to update %s: %v", dl.name, err)
 		}
 	}
 
@@ -67,7 +67,7 @@ func checkAndDownloadOne(
 	}
 	if remoteModTime == "" {
 		// if no last-modified returned, let's do a direct skip or fallback
-		l.Log(l.Warn, "No Last-Modified header for %s from server. Will always download it.", dbName)
+		log.Log(log.Warn, "No Last-Modified header for %s from server. Will always download it.", dbName)
 		remoteModTime = "no-last-mod-header"
 	}
 
@@ -79,7 +79,7 @@ func checkAndDownloadOne(
 	mmdbStat, statErr := os.Stat(localMmdbPath)
 	if statErr != nil || remoteModTime != localStamp {
 		// We do the download
-		l.Log(l.Info, "Downloading fresh MaxMind DB for %s ...", dbName)
+		log.Log(log.Info, "Downloading fresh MaxMind DB for %s ...", dbName)
 
 		tmpArchivePath := filepath.Join(baseDir, dbName+".tar.gz")
 		err = downloadDatabase(remoteURL, accountID, licenseKey, tmpArchivePath)
@@ -100,7 +100,7 @@ func checkAndDownloadOne(
 
 		// Step F) Move/rename that to e.g. CityLite.mmdb
 		if err := os.RemoveAll(localMmdbPath); err != nil {
-			l.Log(l.Warn, "Could not remove old file %s: %v", localMmdbPath, err)
+			log.Log(log.Warn, "Could not remove old file %s: %v", localMmdbPath, err)
 		}
 		if renameErr := os.Rename(extractedMmdb, localMmdbPath); renameErr != nil {
 			return fmt.Errorf("rename to final mmdb %s failed: %w", localMmdbPath, renameErr)
@@ -108,7 +108,7 @@ func checkAndDownloadOne(
 
 		// Step G) Clean up leftover archives + directories
 		if err := os.Remove(tmpArchivePath); err != nil {
-			l.Log(l.Warn, "Could not remove archive file %s: %v", tmpArchivePath, err)
+			log.Log(log.Warn, "Could not remove archive file %s: %v", tmpArchivePath, err)
 		}
 		// Also remove leftover "GeoLite2-City_YYYYMMDD..." directories
 		cleanupExtractedDirs(baseDir, editionID)
@@ -117,7 +117,7 @@ func checkAndDownloadOne(
 		os.WriteFile(localMarkerPath, []byte(remoteModTime), 0644)
 	} else {
 		// no re-download needed
-		l.Log(l.Debug, "Local %s is up-to-date, local stamp = %s, remote = %s, size: %d",
+		log.Log(log.Debug, "Local %s is up-to-date, local stamp = %s, remote = %s, size: %d",
 			dbName, localStamp, remoteModTime, mmdbStat.Size())
 	}
 	return nil
@@ -203,7 +203,7 @@ func findExtractedMmdb(baseDir, editionID string) (string, error) {
 			subDirPath := filepath.Join(baseDir, de.Name())
 			foundMmdb, errWalk := walkForMmdb(subDirPath)
 			if errWalk != nil {
-				l.Log(l.Warn, "Error scanning folder %s: %v", subDirPath, errWalk)
+				log.Log(log.Warn, "Error scanning folder %s: %v", subDirPath, errWalk)
 				continue
 			}
 			if foundMmdb != "" {

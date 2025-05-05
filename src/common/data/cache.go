@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"ibp-geodns/src/common/config"
-	l "ibp-geodns/src/common/logging"
+	cfg "ibp-geodns/src/common/config"
+	log "ibp-geodns/src/common/logging"
 )
 
 var (
@@ -25,21 +25,21 @@ func LoadCache(filePath string, data interface{}) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			l.Log(l.Warn, "Cache file not found: %s", filePath)
+			log.Log(log.Warn, "Cache file not found: %s", filePath)
 			return nil
 		}
-		l.Log(l.Error, "Failed to open cache file: %v", err)
+		log.Log(log.Error, "Failed to open cache file: %v", err)
 		return err
 	}
 	defer file.Close()
 
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(data); err != nil {
-		l.Log(l.Error, "Failed to decode cache file: %v", err)
+		log.Log(log.Error, "Failed to decode cache file: %v", err)
 		return err
 	}
 
-	l.Log(l.Info, "Cache loaded successfully from %s", filePath)
+	log.Log(log.Info, "Cache loaded successfully from %s", filePath)
 	return nil
 }
 
@@ -47,24 +47,24 @@ func LoadCache(filePath string, data interface{}) error {
 func SaveCache(filePath string, data interface{}) error {
 	file, err := os.Create(filePath)
 	if err != nil {
-		l.Log(l.Error, "Failed to create cache file: %v", err)
+		log.Log(log.Error, "Failed to create cache file: %v", err)
 		return err
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	if err := encoder.Encode(data); err != nil {
-		l.Log(l.Error, "Failed to encode data to cache file: %v", err)
+		log.Log(log.Error, "Failed to encode data to cache file: %v", err)
 		return err
 	}
 
-	// l.Log(l.Info, "Cache saved successfully to %s", filePath)
+	// log.Log(log.Info, "Cache saved successfully to %s", filePath)
 	return nil
 }
 
 // LoadAllCaches loads Official, Local, and Stats caches into the corresponding data structures.
 func LoadAllCaches() {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 	workDir := c.System.WorkDir
 
 	officialFile := filepath.Join(workDir, "tmp", officialCacheFile)
@@ -74,25 +74,25 @@ func LoadAllCaches() {
 	Official.Mu.Lock()
 	defer Official.Mu.Unlock()
 	if err := LoadCache(officialFile, &Official); err != nil {
-		l.Log(l.Error, "Failed to load Official results cache: %v", err)
+		log.Log(log.Error, "Failed to load Official results cache: %v", err)
 	}
 
 	Local.Mu.Lock()
 	defer Local.Mu.Unlock()
 	if err := LoadCache(localFile, &Local); err != nil {
-		l.Log(l.Error, "Failed to load Local results cache: %v", err)
+		log.Log(log.Error, "Failed to load Local results cache: %v", err)
 	}
 
 	Stats.Mu.Lock()
 	defer Stats.Mu.Unlock()
 	if err := LoadCache(statsFile, &Stats.Data); err != nil {
-		l.Log(l.Error, "Failed to load Stats cache: %v", err)
+		log.Log(log.Error, "Failed to load Stats cache: %v", err)
 	}
 }
 
 // SaveAllCaches saves Official, Local, and Stats caches.
 func SaveAllCaches() {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 	workDir := c.System.WorkDir
 
 	officialFile := filepath.Join(workDir, "tmp", officialCacheFile)
@@ -102,32 +102,32 @@ func SaveAllCaches() {
 	Official.Mu.Lock()
 	defer Official.Mu.Unlock()
 	if err := SaveCache(officialFile, &Official); err != nil {
-		l.Log(l.Error, "Failed to save Official results cache: %v", err)
+		log.Log(log.Error, "Failed to save Official results cache: %v", err)
 	}
 
 	Local.Mu.Lock()
 	defer Local.Mu.Unlock()
 	if err := SaveCache(localFile, &Local); err != nil {
-		l.Log(l.Error, "Failed to save Local results cache: %v", err)
+		log.Log(log.Error, "Failed to save Local results cache: %v", err)
 	}
 
 	Stats.Mu.Lock()
 	defer Stats.Mu.Unlock()
 	if err := SaveCache(statsFile, &Stats.Data); err != nil {
-		l.Log(l.Error, "Failed to save Stats cache: %v", err)
+		log.Log(log.Error, "Failed to save Stats cache: %v", err)
 	}
 }
 
 // startAutoUpdate initializes a periodic timer to save caches automatically.
 func startAutoUpdate() {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 	cacheSaveInterval := c.System.CacheSaveTime
 
 	autoUpdateTimer = time.NewTicker(cacheSaveInterval * time.Second)
 
 	go func() {
 		for range autoUpdateTimer.C {
-			// l.Log(l.Debug, "Auto-saving caches...")
+			// log.Log(log.Debug, "Auto-saving caches...")
 			SaveAllCaches()
 		}
 	}()

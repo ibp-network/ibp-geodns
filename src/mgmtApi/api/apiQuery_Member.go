@@ -3,9 +3,9 @@ package api
 import (
 	"net/http"
 
-	"ibp-geodns/src/common/config"
-	"ibp-geodns/src/common/data"
-	l "ibp-geodns/src/common/logging"
+	cfg "ibp-geodns/src/common/config"
+	dat "ibp-geodns/src/common/data"
+	log "ibp-geodns/src/common/logging"
 )
 
 // ApiQuery_Member handles /api/member requests
@@ -23,26 +23,26 @@ func ApiQuery_Member(w http.ResponseWriter, r *http.Request, req ApiRequest) Api
 }
 
 func apiQuery_MemberEnable(params ApiRequest) ApiResponse {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 	if !checkMemberAuth(c, params.MemberName, params.AuthKey) {
 		return ApiResponse{Error: "Authentication failed"}
 	}
-	data.MemberEnable(params.MemberName)
+	dat.MemberEnable(params.MemberName)
 	return ApiResponse{Result: "Member enabled successfully"}
 }
 
 func apiQuery_MemberDisable(params ApiRequest) ApiResponse {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 	if !checkMemberAuth(c, params.MemberName, params.AuthKey) {
 		return ApiResponse{Error: "Authentication failed"}
 	}
-	data.MemberDisable(params.MemberName)
+	dat.MemberDisable(params.MemberName)
 	return ApiResponse{Result: "Member disabled successfully"}
 }
 
 func apiQuery_MemberList(params ApiRequest) ApiResponse {
-	c := config.GetConfig()
-	var memberList []config.Member
+	c := cfg.GetConfig()
+	var memberList []cfg.Member
 	for _, member := range c.Members {
 		memberList = append(memberList, member)
 	}
@@ -50,14 +50,14 @@ func apiQuery_MemberList(params ApiRequest) ApiResponse {
 }
 
 // checkMemberAuth ensures the (MemberName, AuthKey) pair is valid
-func checkMemberAuth(c config.ConfigData, memberName, authKey string) bool {
+func checkMemberAuth(c cfg.ConfigData, memberName, authKey string) bool {
 	expectedKey, exists := c.System.MgmtApi.AuthKeys[memberName]
 	if !exists {
-		l.Log(l.Warn, "Auth failed: no AuthKey found for memberName %s", memberName)
+		log.Log(log.Warn, "Auth failed: no AuthKey found for memberName %s", memberName)
 		return false
 	}
 	if expectedKey != authKey {
-		l.Log(l.Warn, "Auth failed: AuthKey mismatch for member %s", memberName)
+		log.Log(log.Warn, "Auth failed: AuthKey mismatch for member %s", memberName)
 		return false
 	}
 	return true

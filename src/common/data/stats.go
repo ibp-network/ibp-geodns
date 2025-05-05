@@ -1,8 +1,8 @@
 package data
 
 import (
-	l "ibp-geodns/src/common/logging"
-	g "ibp-geodns/src/common/maxmind"
+	log "ibp-geodns/src/common/logging"
+	max "ibp-geodns/src/common/maxmind"
 	"time"
 )
 
@@ -71,16 +71,16 @@ func GetStats() map[string]map[string]*DailyStats {
 // ClientHit records a client request for a given IP and Domain.
 func ClientHit(ReqIP string, ReqDomain string) {
 	if Stats == nil {
-		l.Log(l.Error, "Stats not initialized. Call InitStats first.")
+		log.Log(log.Error, "Stats not initialized. Call InitStats first.")
 		return
 	}
 
 	today := time.Now().UTC().Format("2006-01-02")
-	countryCode := g.GetCountryCode(ReqIP)
+	countryCode := max.GetCountryCode(ReqIP)
 	if countryCode == "" {
 		countryCode = "Unknown"
 	}
-	classC := g.GetClassC(ReqIP)
+	classC := max.GetClassC(ReqIP)
 
 	Stats.Mu.Lock()
 	defer Stats.Mu.Unlock()
@@ -108,16 +108,16 @@ func ClientHit(ReqIP string, ReqDomain string) {
 // MemberHit records that a member served the request to the client.
 func MemberHit(memberName string, ReqIP string, ReqDomain string) {
 	if Stats == nil {
-		l.Log(l.Error, "Stats not initialized. Call InitStats first.")
+		log.Log(log.Error, "Stats not initialized. Call InitStats first.")
 		return
 	}
 
 	today := time.Now().UTC().Format("2006-01-02")
-	countryCode := g.GetCountryCode(ReqIP)
+	countryCode := max.GetCountryCode(ReqIP)
 	if countryCode == "" {
 		countryCode = "Unknown"
 	}
-	classC := g.GetClassC(ReqIP)
+	classC := max.GetClassC(ReqIP)
 
 	Stats.Mu.Lock()
 	defer Stats.Mu.Unlock()

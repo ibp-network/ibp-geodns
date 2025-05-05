@@ -1,11 +1,11 @@
 package rpcMonitor
 
 import (
-	l "ibp-geodns/src/common/logging"
+	log "ibp-geodns/src/common/logging"
 )
 
 func Init() {
-	l.Log(l.Debug, "Monitor Package initializing...")
+	log.Log(log.Debug, "Monitor Package initializing...")
 
 	// Start checks
 	go startChecks()

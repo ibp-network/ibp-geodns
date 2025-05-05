@@ -2,7 +2,7 @@ package rpcMonitor
 
 import (
 	"crypto/tls"
-	"ibp-geodns/src/common/config"
+	cfg "ibp-geodns/src/common/config"
 	"net"
 	"time"
 )
@@ -11,7 +11,7 @@ func init() {
 	RegisterDomainCheck("ssl", SslCheck)
 }
 
-func SslCheck(check config.Check, domain string, service config.Service, member config.Member) {
+func SslCheck(check cfg.Check, domain string, service cfg.Service, member cfg.Member) {
 	conn, err := net.DialTimeout("tcp", net.JoinHostPort(member.Service.ServiceIPv4, "443"), time.Duration(getIntOption(check.ExtraOptions, "ConnectTimeout", 5))*time.Second)
 	if err != nil {
 		go UpdateDomainResultLocal(check, domain, service, member, false, "TCP connection error", nil)

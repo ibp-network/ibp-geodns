@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"ibp-geodns/src/common/data"
+	dat "ibp-geodns/src/common/data"
 )
 
 // ApiQuery_Usage handles /api/usage requests
@@ -24,7 +24,7 @@ func ApiQuery_Usage(w http.ResponseWriter, r *http.Request, req ApiRequest) ApiR
 
 // Example usage grouping
 func apiQuery_UsageByCountry() ApiResponse {
-	s := data.GetStats()
+	s := dat.GetStats()
 	// Return the raw stats or transform them as needed
 	return ApiResponse{Result: s}
 }

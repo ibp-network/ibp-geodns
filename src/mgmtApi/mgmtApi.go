@@ -1,12 +1,11 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"time"
 
-	"ibp-geodns/src/common/config"
-	l "ibp-geodns/src/common/logging"
+	cfg "ibp-geodns/src/common/config"
+	log "ibp-geodns/src/common/logging"
 	api "ibp-geodns/src/mgmtApi/api"
 )
 
@@ -14,10 +13,10 @@ import (
 func main() {
 	// Initialize config (adjust path if needed)
 	cfgPath := "D:\\Sync\\Projects\\stake.plus\\code\\ibp-geodns-v2\\config\\config.json"
-	config.Init(cfgPath)
+	cfg.Init(cfgPath)
 
 	// Optionally set log level
-	l.SetLogLevel(l.Info)
+	log.SetLogLevel(log.Info)
 
 	// Initialize mgmt api
 	api.Init()
@@ -32,12 +31,11 @@ func main() {
 	mux.HandleFunc("/api/usage", api.HandleApiQuery)
 
 	// Grab host/port from config
-	addr := config.GetConfig().System.MgmtApi.ListenAddress + ":" + config.GetConfig().System.MgmtApi.ListenPort
-	log.Printf("Starting mgmt-api on %s\n", addr)
+	addr := cfg.GetConfig().System.MgmtApi.ListenAddress + ":" + cfg.GetConfig().System.MgmtApi.ListenPort
 
 	// Run server
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("Error starting mgmt-api: %v", err)
+		log.Log(log.Fatal, "Error starting mgmt-api: %v", err)
 	}
 
 	go loop()

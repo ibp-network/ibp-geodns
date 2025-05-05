@@ -1,7 +1,7 @@
 package data
 
 import (
-	"ibp-geodns/src/common/config"
+	cfg "ibp-geodns/src/common/config"
 	"sync"
 	"time"
 )
@@ -21,7 +21,7 @@ type LocalResults struct {
 }
 
 type Result struct {
-	Member    config.Member
+	Member    cfg.Member
 	Status    bool
 	Checktime time.Time
 	ErrorText string
@@ -29,20 +29,20 @@ type Result struct {
 }
 
 type SiteResult struct {
-	Check   config.Check
+	Check   cfg.Check
 	Results []Result
 }
 
 type DomainResult struct {
-	Check   config.Check
-	Service config.Service
+	Check   cfg.Check
+	Service cfg.Service
 	Domain  string
 	Results []Result
 }
 
 type EndpointResult struct {
-	Check    config.Check
-	Service  config.Service
+	Check    cfg.Check
+	Service  cfg.Service
 	RpcUrl   string
 	Protocol string
 	Domain   string

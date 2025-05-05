@@ -7,9 +7,9 @@ import (
 
 	"ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data"
-	l "ibp-geodns/src/common/logging"
-	geo "ibp-geodns/src/common/maxmind"
-	nComm "ibp-geodns/src/common/nodeComm"
+	log "ibp-geodns/src/common/logging"
+	max "ibp-geodns/src/common/maxmind"
+	com "ibp-geodns/src/common/nodeComm"
 	api "ibp-geodns/src/dnsApi/api"
 	mon "ibp-geodns/src/dnsApi/rpcMonitor"
 )
@@ -18,8 +18,8 @@ var version = "0.2.0"
 
 func main() {
 	// Initialize the logging level
-	l.SetLogLevel(l.Debug)
-	l.Log(l.Info, "IBP-GeoDNS v%s starting...", version)
+	log.SetLogLevel(log.Debug)
+	log.Log(log.Info, "IBP-GeoDNS v%s starting...", version)
 
 	// Define a command-line flag for the config file path
 	cfgFile := flag.String("config", "config.json", "Path to the configuration file")
@@ -27,24 +27,24 @@ func main() {
 
 	// Check if the provided config file exists
 	if _, err := os.Stat(*cfgFile); os.IsNotExist(err) {
-		l.Log(l.Fatal, "Configuration file not found: %s", *cfgFile)
+		log.Log(log.Fatal, "Configuration file not found: %s", *cfgFile)
 		os.Exit(1)
 	}
 
-	// Initialize components
+	// Initialize Config file, memory pointers
 	config.Init(*cfgFile)
 
-	// Initialize Maxmind and Geoip
-	geo.Init()
+	// Update maxmind, initialize geoip database
+	max.Init()
 
-	// Start data package
+	// Start data helper, Load caches
 	data.Init()
 
-	// Sleep to load the caches load
-	time.Sleep(1 * time.Second)
+	// Sleep while we load caches
+	time.Sleep(2 * time.Second)
 
-	// Launch Node Communications
-	nComm.Init()
+	// Launch NATS Internode Communication
+	com.Init()
 
 	// Launch RPC Monitor
 	mon.Init()

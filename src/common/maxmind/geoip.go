@@ -2,8 +2,8 @@ package maxmind
 
 import (
 	"fmt"
-	"ibp-geodns/src/common/config"
-	l "ibp-geodns/src/common/logging"
+	cfg "ibp-geodns/src/common/config"
+	log "ibp-geodns/src/common/logging"
 	"math"
 	"net"
 	"net/url"
@@ -31,26 +31,26 @@ type URLParts struct {
 // Init is called once on startup. It triggers the auto-update procedure,
 // then opens each .mmdb file (CityLite, CountryLite, AsnLite) into memory.
 func Init() {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 
 	// Step 1: Make sure "workDir/tmp/maxmind/" exists
 	baseDir := filepath.Join(c.System.Maxmind.MaxmindDBPath)
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
-		l.Log(l.Fatal, "Failed to create maxmind directory %s: %v", baseDir, err)
+		log.Log(log.Fatal, "Failed to create maxmind directory %s: %v", baseDir, err)
 		os.Exit(1)
 	}
 
 	// Step 2: Download/update each mmdb if needed
 	err := updateMaxmindDatabase()
 	if err != nil {
-		l.Log(l.Error, "Auto-update error: %v", err)
+		log.Log(log.Error, "Auto-update error: %v", err)
 		// Not fatal: we can still attempt to load if older mmdb is present
 	}
 
 	// Step 3: Attempt to open each local .mmdb
 	err = loadLocalDatabases(baseDir)
 	if err != nil {
-		l.Log(l.Fatal, "Failed to load local maxmind databases: %v", err)
+		log.Log(log.Fatal, "Failed to load local maxmind databases: %v", err)
 		os.Exit(1)
 	}
 }
@@ -71,7 +71,7 @@ func loadLocalDatabases(baseDir string) error {
 			return fmt.Errorf("could not open city database %s: %w", cityPath, err)
 		}
 	} else {
-		l.Log(l.Warn, "CityLite.mmdb not found at %s", cityPath)
+		log.Log(log.Warn, "CityLite.mmdb not found at %s", cityPath)
 	}
 
 	// Country
@@ -81,7 +81,7 @@ func loadLocalDatabases(baseDir string) error {
 			return fmt.Errorf("could not open country database %s: %w", countryPath, err)
 		}
 	} else {
-		l.Log(l.Warn, "CountryLite.mmdb not found at %s", countryPath)
+		log.Log(log.Warn, "CountryLite.mmdb not found at %s", countryPath)
 	}
 
 	// ASN
@@ -91,7 +91,7 @@ func loadLocalDatabases(baseDir string) error {
 			return fmt.Errorf("could not open ASN database %s: %w", asnPath, err)
 		}
 	} else {
-		l.Log(l.Warn, "AsnLite.mmdb not found at %s", asnPath)
+		log.Log(log.Warn, "AsnLite.mmdb not found at %s", asnPath)
 	}
 
 	return nil
@@ -116,13 +116,13 @@ func Distance(lat1, lon1, lat2, lon2 float64) float64 {
 // GetClientCoordinates retrieves lat/long from the CityLite database
 func GetClientCoordinates(ipStr string) (float64, float64) {
 	if maxmindCity == nil {
-		l.Log(l.Error, "CityLite is not loaded")
+		log.Log(log.Error, "CityLite is not loaded")
 		return 0, 0
 	}
 
 	ip := net.ParseIP(ipStr)
 	if ip == nil {
-		l.Log(l.Error, "Invalid IP address: %s", ipStr)
+		log.Log(log.Error, "Invalid IP address: %s", ipStr)
 		return 0, 0
 	}
 
@@ -134,7 +134,7 @@ func GetClientCoordinates(ipStr string) (float64, float64) {
 	}
 
 	if err := maxmindCity.Lookup(ip, &record); err != nil {
-		l.Log(l.Error, "CityLite lookup error: %v", err)
+		log.Log(log.Error, "CityLite lookup error: %v", err)
 		return 0, 0
 	}
 	return record.Location.Latitude, record.Location.Longitude
@@ -143,13 +143,13 @@ func GetClientCoordinates(ipStr string) (float64, float64) {
 // GetCountryCode retrieves the ISO country code from the CityLite database
 func GetCountryCode(ipStr string) string {
 	if maxmindCity == nil {
-		l.Log(l.Warn, "CityLite DB is not loaded, cannot fetch country code.")
+		log.Log(log.Warn, "CityLite DB is not loaded, cannot fetch country code.")
 		return ""
 	}
 
 	ip := net.ParseIP(ipStr)
 	if ip == nil {
-		l.Log(l.Error, "Invalid IP address: %s", ipStr)
+		log.Log(log.Error, "Invalid IP address: %s", ipStr)
 		return ""
 	}
 
@@ -159,7 +159,7 @@ func GetCountryCode(ipStr string) string {
 		} `maxminddb:"country"`
 	}
 	if err := maxmindCity.Lookup(ip, &record); err != nil {
-		l.Log(l.Error, "Failed city lookup for IP %s: %v", ipStr, err)
+		log.Log(log.Error, "Failed city lookup for IP %s: %v", ipStr, err)
 		return ""
 	}
 
@@ -170,12 +170,12 @@ func GetCountryCode(ipStr string) string {
 func GetClassC(ipStr string) string {
 	ip := net.ParseIP(ipStr)
 	if ip == nil {
-		l.Log(l.Error, "Invalid IP address: %s", ipStr)
+		log.Log(log.Error, "Invalid IP address: %s", ipStr)
 		return ""
 	}
 	ipv4 := ip.To4()
 	if ipv4 == nil {
-		l.Log(l.Error, "Non-IPv4 address: %s", ipStr)
+		log.Log(log.Error, "Non-IPv4 address: %s", ipStr)
 		return ""
 	}
 	return fmt.Sprintf("%d.%d.%d", ipv4[0], ipv4[1], ipv4[2])
@@ -198,7 +198,7 @@ func Close() {
 func ParseUrl(rawURL string) URLParts {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		l.Log(l.Debug, "Error parsing URL %s", rawURL)
+		log.Log(log.Debug, "Error parsing URL %s", rawURL)
 		return URLParts{}
 	}
 

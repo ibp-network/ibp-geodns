@@ -1,15 +1,15 @@
 package api
 
 import (
-	"ibp-geodns/src/common/config"
-	rpcMon "ibp-geodns/src/dnsApi/rpcMonitor"
+	cfg "ibp-geodns/src/common/config"
+	mon "ibp-geodns/src/dnsApi/rpcMonitor"
 	"sync"
 )
 
 // Define the StaticEntries type with a mutex
 type StaticMap struct {
 	mu      sync.RWMutex
-	records []config.DNSRecord
+	records []cfg.DNSRecord
 }
 
 type TLDMap struct {
@@ -30,7 +30,7 @@ type ServiceConfigs struct {
 	LevelRequired int
 	NetworkName   string
 	ServiceType   string
-	Members       map[string]config.Member
+	Members       map[string]cfg.Member
 }
 
 // Request represents a DNS query request.
@@ -77,8 +77,8 @@ type DomainInfo struct {
 }
 
 type OfficialResults = struct {
-	SiteResults     []rpcMon.SiteResult
-	DomainResults   []rpcMon.DomainResult
-	EndpointResults []rpcMon.EndpointResult
+	SiteResults     []mon.SiteResult
+	DomainResults   []mon.DomainResult
+	EndpointResults []mon.EndpointResult
 	Mu              sync.RWMutex
 }

@@ -2,8 +2,8 @@ package api
 
 import (
 	"fmt"
-	"ibp-geodns/src/common/config"
-	l "ibp-geodns/src/common/logging"
+	cfg "ibp-geodns/src/common/config"
+	log "ibp-geodns/src/common/logging"
 	"io"
 	"net/http"
 	"strings"
@@ -12,15 +12,15 @@ import (
 
 // StaticDNSEntries synchronizes staticEntries with c.StaticDNS
 func StaticDNSEntries() {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 
 	StaticRecords.mu.Lock()
 	defer StaticRecords.mu.Unlock()
 	StaticRecords.records = c.StaticDNS
 }
 
-func ProcessSOA(params Parameters, id int, domain string) []config.DNSRecord {
-	var records []config.DNSRecord
+func ProcessSOA(params Parameters, id int, domain string) []cfg.DNSRecord {
+	var records []cfg.DNSRecord
 
 	tld := extractTopLevelDomain(domain)
 
@@ -39,7 +39,7 @@ func ProcessSOA(params Parameters, id int, domain string) []config.DNSRecord {
 			currentUnixTimestamp := int(time.Now().UTC().Unix())
 
 			// Insert SOA return record
-			records = append(records, config.DNSRecord{
+			records = append(records, cfg.DNSRecord{
 				DomainID: id,
 				QName:    tld,
 				QType:    "SOA",
@@ -53,8 +53,8 @@ func ProcessSOA(params Parameters, id int, domain string) []config.DNSRecord {
 	return records
 }
 
-func ProcessACME(param Parameters, id int, domain string) []config.DNSRecord {
-	var records []config.DNSRecord
+func ProcessACME(param Parameters, id int, domain string) []cfg.DNSRecord {
+	var records []cfg.DNSRecord
 
 	StaticRecords.mu.RLock()
 	defer StaticRecords.mu.RUnlock()
@@ -67,7 +67,7 @@ func ProcessACME(param Parameters, id int, domain string) []config.DNSRecord {
 					acmeContent := fetchACMEChallenge(record.Content)
 					if acmeContent != "" {
 						// Insert response record for ACME
-						records = append(records, config.DNSRecord{
+						records = append(records, cfg.DNSRecord{
 							DomainID: id,
 							QName:    record.QName,
 							QType:    "TXT",
@@ -84,8 +84,8 @@ func ProcessACME(param Parameters, id int, domain string) []config.DNSRecord {
 	return records
 }
 
-func ProcessNS(params Parameters, id int, domain string) []config.DNSRecord {
-	var records []config.DNSRecord
+func ProcessNS(params Parameters, id int, domain string) []cfg.DNSRecord {
+	var records []cfg.DNSRecord
 
 	StaticRecords.mu.RLock()
 	defer StaticRecords.mu.RUnlock()
@@ -102,8 +102,8 @@ func ProcessNS(params Parameters, id int, domain string) []config.DNSRecord {
 	return records
 }
 
-func ProcessANY(params Parameters, id int, domain string) []config.DNSRecord {
-	var records []config.DNSRecord
+func ProcessANY(params Parameters, id int, domain string) []cfg.DNSRecord {
+	var records []cfg.DNSRecord
 
 	StaticRecords.mu.RLock()
 	defer StaticRecords.mu.RUnlock()
@@ -124,14 +124,14 @@ func ProcessANY(params Parameters, id int, domain string) []config.DNSRecord {
 func fetchACMEChallenge(url string) string {
 	resp, err := http.Get(url)
 	if err != nil {
-		l.Log(l.Error, "DNSLookup: failed to fetch ACME challenge from %s: %+v", url, err)
+		log.Log(log.Error, "DNSLookup: failed to fetch ACME challenge from %s: %+v", url, err)
 		return ""
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		l.Log(l.Error, "DNSLookup: failed to read response body: %+v", err)
+		log.Log(log.Error, "DNSLookup: failed to read response body: %+v", err)
 		return ""
 	}
 

@@ -5,16 +5,16 @@ import (
 	"net"
 	"strings"
 
-	"ibp-geodns/src/common/config"
-	"ibp-geodns/src/common/data"
-	g "ibp-geodns/src/common/maxmind"
+	cfg "ibp-geodns/src/common/config"
+	dat "ibp-geodns/src/common/data"
+	max "ibp-geodns/src/common/maxmind"
 
 	"golang.org/x/net/publicsuffix"
 )
 
 // DynamicDNSEntries remains similar, it populates the map of domains and members.
 func DynamicDNSEntries() {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 
 	newDynamicServices := make(map[string]ServiceConfigs)
 
@@ -23,14 +23,14 @@ func DynamicDNSEntries() {
 		svcConfig := service.Configuration
 		for _, provider := range service.Providers {
 			for _, rpcUrl := range provider.RpcUrls {
-				url := g.ParseUrl(rpcUrl)
+				url := max.ParseUrl(rpcUrl)
 				if _, exists := newDynamicServices[url.Domain]; !exists {
 					newDynamicServices[url.Domain] = ServiceConfigs{
 						Name:          svcConfig.Name,
 						Active:        svcConfig.Active,
 						LevelRequired: svcConfig.LevelRequired,
 						NetworkName:   svcConfig.NetworkName,
-						Members:       make(map[string]config.Member),
+						Members:       make(map[string]cfg.Member),
 					}
 				}
 			}
@@ -53,7 +53,7 @@ func DynamicDNSEntries() {
 
 						for domainName, serviceConfig := range newDynamicServices {
 							if serviceConfig.Name == service.Configuration.Name {
-								memberInfo := config.Member{
+								memberInfo := cfg.Member{
 									Details:    member.Details,
 									Membership: member.Membership,
 									Service:    member.Service,
@@ -73,11 +73,11 @@ func DynamicDNSEntries() {
 	ServiceRecords.Services = newDynamicServices
 }
 
-func ProcessDynamic(params Parameters, id int, domain string) []config.DNSRecord {
-	var records []config.DNSRecord
-	var closestMember config.Member
+func ProcessDynamic(params Parameters, id int, domain string) []cfg.DNSRecord {
+	var records []cfg.DNSRecord
+	var closestMember cfg.Member
 	minDistance := math.MaxFloat64
-	clientLat, clientLon := g.GetClientCoordinates(params.Remote)
+	clientLat, clientLon := max.GetClientCoordinates(params.Remote)
 
 	// Read service configs
 	ServiceRecords.mu.RLock()
@@ -98,12 +98,12 @@ func ProcessDynamic(params Parameters, id int, domain string) []config.DNSRecord
 				}
 
 				// Use data package to determine online/offline:
-				if !data.IsMemberOnlineForDomain(domain, member.Details.Name) {
+				if !dat.IsMemberOnlineForDomain(domain, member.Details.Name) {
 					continue
 				}
 
 				// If the member is online, measure distance and pick closest
-				dist := g.Distance(clientLat, clientLon, member.Location.Latitude, member.Location.Longitude)
+				dist := max.Distance(clientLat, clientLon, member.Location.Latitude, member.Location.Longitude)
 				if dist < minDistance {
 					minDistance = dist
 					closestMember = member
@@ -115,7 +115,7 @@ func ProcessDynamic(params Parameters, id int, domain string) []config.DNSRecord
 				// Append IPv4 records if requested
 				if params.QType == "A" || params.QType == "ANY" {
 					if closestMember.Service.ServiceIPv4 != "" {
-						records = append(records, config.DNSRecord{
+						records = append(records, cfg.DNSRecord{
 							DomainID: id,
 							QName:    domain,
 							QType:    "A",
@@ -129,7 +129,7 @@ func ProcessDynamic(params Parameters, id int, domain string) []config.DNSRecord
 				// Append IPv6 if available (adjust if needed)
 				if params.QType == "AAAA" || params.QType == "ANY" {
 					if closestMember.Service.ServiceIPv6 != "" {
-						records = append(records, config.DNSRecord{
+						records = append(records, cfg.DNSRecord{
 							DomainID: id,
 							QName:    domain,
 							QType:    "AAAA",
@@ -142,7 +142,7 @@ func ProcessDynamic(params Parameters, id int, domain string) []config.DNSRecord
 
 				// Store Member Stats
 				if closestMember.Details.Name != "" {
-					go data.MemberHit(closestMember.Details.Name, params.Remote, domain)
+					go dat.MemberHit(closestMember.Details.Name, params.Remote, domain)
 				}
 			}
 		}
@@ -158,7 +158,7 @@ func IsValidIPv4(ip string) bool {
 
 // GenerateTLDs iterates through StaticDNS and Services to collect unique top-level domains
 func GenerateTLDs() {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 
 	// Initialize the map with integer keys and string values
 	TLDRecords.records = make(map[int]string)

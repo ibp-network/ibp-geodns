@@ -1,7 +1,7 @@
 package data
 
 import (
-	"ibp-geodns/src/common/config"
+	cfg "ibp-geodns/src/common/config"
 	"sync"
 	"time"
 )
@@ -45,7 +45,7 @@ func GetLocalResults() (sites []SiteResult, domains []DomainResult, endpoints []
 }
 
 // Update Local Results
-func UpdateLocalSiteResult(check config.Check, member config.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
+func UpdateLocalSiteResult(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
 	Local.Mu.Lock()
 	defer Local.Mu.Unlock()
 
@@ -88,7 +88,7 @@ func UpdateLocalSiteResult(check config.Check, member config.Member, status bool
 	}
 }
 
-func UpdateLocalDomainResult(check config.Check, member config.Member, service config.Service, domain string, status bool, errorMsg string, dataMap map[string]interface{}) {
+func UpdateLocalDomainResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string, status bool, errorMsg string, dataMap map[string]interface{}) {
 	Local.Mu.Lock()
 	defer Local.Mu.Unlock()
 
@@ -133,7 +133,7 @@ func UpdateLocalDomainResult(check config.Check, member config.Member, service c
 	}
 }
 
-func UpdateLocalEndpointResult(check config.Check, member config.Member, service config.Service, domain string, endpoint string, status bool, errorMsg string, dataMap map[string]interface{}) {
+func UpdateLocalEndpointResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string, endpoint string, status bool, errorMsg string, dataMap map[string]interface{}) {
 	Local.Mu.Lock()
 	defer Local.Mu.Unlock()
 

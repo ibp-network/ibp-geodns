@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"ibp-geodns/src/common/config"
+	cfg "ibp-geodns/src/common/config"
 )
 
 // Results type
@@ -17,15 +17,15 @@ type Results struct {
 
 // SiteResult represents the result of a site check
 type SiteResult struct {
-	Check   config.Check
+	Check   cfg.Check
 	Results []Result
 	Mu      sync.RWMutex
 }
 
 // DomainResult represents the result of a domain check
 type DomainResult struct {
-	Check   config.Check
-	Service config.Service
+	Check   cfg.Check
+	Service cfg.Service
 	Domain  string
 	Results []Result
 	Mu      sync.RWMutex
@@ -33,8 +33,8 @@ type DomainResult struct {
 
 // EndpointResult represents the result of an endpoint check
 type EndpointResult struct {
-	Check    config.Check
-	Service  config.Service
+	Check    cfg.Check
+	Service  cfg.Service
 	RpcUrl   string
 	Protocol string
 	Domain   string
@@ -46,7 +46,7 @@ type EndpointResult struct {
 
 // Result represents the result profile for a member's check
 type Result struct {
-	Member    config.Member
+	Member    cfg.Member
 	Status    bool
 	Checktime time.Time
 	ErrorText string

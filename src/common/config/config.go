@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"time"
 
-	l "ibp-geodns/src/common/logging"
+	log "ibp-geodns/src/common/logging"
 )
 
 var (
@@ -17,7 +17,7 @@ var (
 
 // NewConfig creates a new Config instance and starts the update ticker
 func Init(cfgFile string) {
-	l.Log(l.Debug, "Config Package initializing...")
+	log.Log(log.Debug, "Config Package initializing...")
 	cfg = &Config{
 		cfgFile: cfgFile,
 	}
@@ -46,9 +46,9 @@ func loadConfig(cfgFile string, initialLoad bool) {
 func loadSystemConfig(configPath string, initialLoad bool) {
 	file, err := os.Open(configPath)
 	if err != nil {
-		l.Log(l.Error, "Failed to open system config file: %v", err)
+		log.Log(log.Error, "Failed to open system config file: %v", err)
 		if initialLoad {
-			l.Log(l.Fatal, "Terminating program due to critical error on initial load.")
+			log.Log(log.Fatal, "Terminating program due to critical error on initial load.")
 			os.Exit(1)
 		}
 		return
@@ -58,16 +58,16 @@ func loadSystemConfig(configPath string, initialLoad bool) {
 	var systemConfig SystemConfig
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(&systemConfig); err != nil {
-		l.Log(l.Error, "Failed to decode system config: %v", err)
+		log.Log(log.Error, "Failed to decode system config: %v", err)
 		if initialLoad {
-			l.Log(l.Fatal, "Terminating program due to critical error on initial load.")
+			log.Log(log.Fatal, "Terminating program due to critical error on initial load.")
 			os.Exit(1)
 		}
 		return
 	}
 
 	cfg.data.System = systemConfig
-	l.Log(l.Debug, "System configuration loaded from %s", configPath)
+	log.Log(log.Debug, "System configuration loaded from %s", configPath)
 }
 
 // loadStaticDNSConfig loads the static DNS config from a URL
@@ -79,19 +79,19 @@ func loadStaticDNSConfig(url string, initialLoad bool) {
 
 	var records []DNSRecord
 	if err := json.Unmarshal(data, &records); err != nil {
-		l.Log(l.Error, "Failed to unmarshal StaticDNS config: %v", err)
+		log.Log(log.Error, "Failed to unmarshal StaticDNS config: %v", err)
 		if initialLoad {
-			l.Log(l.Fatal, "Terminating program due to critical error on initial load.")
+			log.Log(log.Fatal, "Terminating program due to critical error on initial load.")
 			os.Exit(1)
 		}
 		return
 	}
 
 	cfg.data.StaticDNS = records
-	l.Log(l.Debug, "StaticDNS configuration loaded from %s", url)
+	log.Log(log.Debug, "StaticDNS configuration loaded from %s", url)
 }
 
-// loadMembersConfig loads the members config from a URL.
+// loadMembersConfig loads the members config from a URlog.
 func loadMembersConfig(url string, initialLoad bool) {
 	data := downloadConfig(url, initialLoad)
 	if data == nil {
@@ -100,9 +100,9 @@ func loadMembersConfig(url string, initialLoad bool) {
 
 	var newMembers map[string]Member
 	if err := json.Unmarshal(data, &newMembers); err != nil {
-		l.Log(l.Error, "Failed to unmarshal Members config: %v", err)
+		log.Log(log.Error, "Failed to unmarshal Members config: %v", err)
 		if initialLoad {
-			l.Log(l.Fatal, "Terminating program due to critical error on initial load.")
+			log.Log(log.Fatal, "Terminating program due to critical error on initial load.")
 			os.Exit(1)
 		}
 		return
@@ -120,7 +120,7 @@ func loadMembersConfig(url string, initialLoad bool) {
 
 	// Overwrite existing members with the new configuration
 	cfg.data.Members = newMembers
-	l.Log(l.Debug, "Members configuration loaded from %s", url)
+	log.Log(log.Debug, "Members configuration loaded from %s", url)
 }
 
 // loadServicesConfig loads the services config from a URL
@@ -131,16 +131,16 @@ func loadServicesConfig(url string, initialLoad bool) {
 	}
 	var services map[string]Service
 	if err := json.Unmarshal(data, &services); err != nil {
-		l.Log(l.Error, "Failed to unmarshal Services config: %v", err)
+		log.Log(log.Error, "Failed to unmarshal Services config: %v", err)
 		if initialLoad {
-			l.Log(l.Fatal, "Terminating program due to critical error on initial load.")
+			log.Log(log.Fatal, "Terminating program due to critical error on initial load.")
 			os.Exit(1)
 		}
 		return
 	}
 
 	cfg.data.Services = services
-	l.Log(l.Debug, "Services configuration loaded from %s", url)
+	log.Log(log.Debug, "Services configuration loaded from %s", url)
 }
 
 // loadIaasPricing loads the IaaS Pricing data from a URL
@@ -152,16 +152,16 @@ func loadIaasPricing(url string, initialLoad bool) {
 
 	var pricing map[string]IaasPricing
 	if err := json.Unmarshal(data, &pricing); err != nil {
-		l.Log(l.Error, "Failed to unmarshal IaaS pricing config: %v", err)
+		log.Log(log.Error, "Failed to unmarshal IaaS pricing config: %v", err)
 		if initialLoad {
-			l.Log(l.Fatal, "Terminating program due to critical error on initial load.")
+			log.Log(log.Fatal, "Terminating program due to critical error on initial load.")
 			os.Exit(1)
 		}
 		return
 	}
 
 	cfg.data.Pricing = pricing
-	l.Log(l.Debug, "IaaS pricing configuration loaded from %s", url)
+	log.Log(log.Debug, "IaaS pricing configuration loaded from %s", url)
 }
 
 // loadSaasPricing loads the SASS Pricing data from a URL
@@ -173,26 +173,26 @@ func loadServiceRequestsConfig(url string, initialLoad bool) {
 	var requests ServiceRequests
 	if err := json.Unmarshal(data, &requests); err != nil {
 		_, _, line, _ := runtime.Caller(2)
-		l.Log(l.Error, "Failed to unmarshal Services config Line: %d Error: %v", line, err)
+		log.Log(log.Error, "Failed to unmarshal Services config Line: %d Error: %v", line, err)
 		if initialLoad {
-			l.Log(l.Fatal, "Terminating program due to critical error on initial load.")
+			log.Log(log.Fatal, "Terminating program due to critical error on initial load.")
 			os.Exit(1)
 		}
 		return
 	}
 
 	cfg.data.ServiceRequests = requests
-	l.Log(l.Debug, "Services configuration loaded from %s", url)
+	log.Log(log.Debug, "Services configuration loaded from %s", url)
 }
 
 // downloadConfig downloads a config file from a URL
 func downloadConfig(url string, initialLoad bool) []byte {
 	resp, err := http.Get(url)
 	if err != nil {
-		l.Log(l.Error, "Failed to download config from %s: %v", url, err)
+		log.Log(log.Error, "Failed to download config from %s: %v", url, err)
 		if initialLoad {
 			_, _, line, _ := runtime.Caller(2)
-			l.Log(l.Fatal, "Terminating program due to critical error on initial load. Line: %d", line)
+			log.Log(log.Fatal, "Terminating program due to critical error on initial load. Line: %d", line)
 			os.Exit(1)
 		}
 		return nil
@@ -200,10 +200,10 @@ func downloadConfig(url string, initialLoad bool) []byte {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		l.Log(l.Error, "Non-OK HTTP status while downloading config from %s: %s", url, resp.Status)
+		log.Log(log.Error, "Non-OK HTTP status while downloading config from %s: %s", url, resp.Status)
 		if initialLoad {
 			_, _, line, _ := runtime.Caller(2)
-			l.Log(l.Fatal, "Terminating program due to critical error on initial load. Line: %d", line)
+			log.Log(log.Fatal, "Terminating program due to critical error on initial load. Line: %d", line)
 			os.Exit(1)
 		}
 		return nil
@@ -211,10 +211,10 @@ func downloadConfig(url string, initialLoad bool) []byte {
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		l.Log(l.Error, "Failed to read response body from %s: %v", url, err)
+		log.Log(log.Error, "Failed to read response body from %s: %v", url, err)
 		if initialLoad {
 			_, _, line, _ := runtime.Caller(2)
-			l.Log(l.Fatal, "Terminating program due to critical error on initial load. Line: %d", line)
+			log.Log(log.Fatal, "Terminating program due to critical error on initial load. Line: %d", line)
 			os.Exit(1)
 		}
 		return nil
@@ -244,11 +244,11 @@ func GetConfig() ConfigData {
 	var dataCopy ConfigData
 	dataBytes, err := json.Marshal(cfg.data)
 	if err != nil {
-		l.Log(l.Error, "Failed to marshal configuration data: %v", err)
+		log.Log(log.Error, "Failed to marshal configuration data: %v", err)
 	} else {
 		err = json.Unmarshal(dataBytes, &dataCopy)
 		if err != nil {
-			l.Log(l.Error, "Failed to unmarshal configuration data: %v", err)
+			log.Log(log.Error, "Failed to unmarshal configuration data: %v", err)
 		}
 	}
 

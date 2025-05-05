@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"ibp-geodns/src/common/config"
+	cfg "ibp-geodns/src/common/config"
 
 	"github.com/go-ping/ping"
 )
@@ -13,7 +13,7 @@ func init() {
 	RegisterSiteCheck("ping", PingCheck)
 }
 
-func PingCheck(check config.Check, member config.Member) {
+func PingCheck(check cfg.Check, member cfg.Member) {
 	// Prepare ping parameters
 	pingCount := getIntOption(check.ExtraOptions, "PingCount", 3)
 	pingInterval := time.Duration(getIntOption(check.ExtraOptions, "PingInterval", 100)) * time.Millisecond

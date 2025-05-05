@@ -1,7 +1,7 @@
 package api
 
 import (
-	"ibp-geodns/src/common/config"
+	cfg "ibp-geodns/src/common/config"
 	"net/http"
 	"time"
 )
@@ -113,7 +113,7 @@ func DnsQuery_GetDomainKeys(w http.ResponseWriter, r *http.Request, req Request)
 }
 
 func DnsQuery_List(w http.ResponseWriter, r *http.Request, req Request) Response {
-	var records []config.DNSRecord
+	var records []cfg.DNSRecord
 	var id int
 
 	for key, domain := range TLDRecords.records {
@@ -124,7 +124,7 @@ func DnsQuery_List(w http.ResponseWriter, r *http.Request, req Request) Response
 
 	for _, record := range StaticRecords.records {
 		if extractTopLevelDomain(req.Parameters.Zonename) == extractTopLevelDomain(record.QName) {
-			records = append(records, config.DNSRecord{
+			records = append(records, cfg.DNSRecord{
 				DomainID: id,
 				QName:    record.QName,
 				QType:    record.QType,

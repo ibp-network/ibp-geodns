@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	l "ibp-geodns/src/common/logging"
+	log "ibp-geodns/src/common/logging"
 )
 
 // ApiQuery_Billing processes incoming requests for /api/billing
@@ -16,7 +16,7 @@ func ApiQuery_Billing(w http.ResponseWriter, r *http.Request, req ApiRequest) Ap
 	case "historical":
 		return apiQuery_BillingHistorical(req)
 	default:
-		l.Log(l.Warn, "Billing request with unknown method: %s", req.Method)
+		log.Log(log.Warn, "Billing request with unknown method: %s", req.Method)
 		return ApiResponse{Error: "Invalid billing method"}
 	}
 }
