@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"ibp-geodns/src/common/config"
-	"ibp-geodns/src/common/data"
+	cfg "ibp-geodns/src/common/config"
+	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
 	com "ibp-geodns/src/common/nodeComm"
@@ -32,13 +32,13 @@ func main() {
 	}
 
 	// Initialize Config file, memory pointers
-	config.Init(*cfgFile)
+	cfg.Init(*cfgFile)
 
 	// Update maxmind, initialize geoip database
 	max.Init()
 
 	// Start data helper, Load caches
-	data.Init()
+	dat.Init()
 
 	// Sleep while we load caches
 	time.Sleep(2 * time.Second)

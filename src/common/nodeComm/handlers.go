@@ -1,9 +1,9 @@
-package consensus
+package nodeComm
 
 import (
 	"encoding/json"
-	"ibp-geodns/src/common/data"
-	l "ibp-geodns/src/common/logging"
+	dat "ibp-geodns/src/common/data"
+	log "ibp-geodns/src/common/logging"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -13,12 +13,12 @@ import (
 func handleProposeMessage(m *nats.Msg) {
 	var prop Proposal
 	if err := json.Unmarshal(m.Data, &prop); err != nil {
-		l.Log(l.Error, "Failed to unmarshal proposal message: %v", err)
+		log.Log(log.Error, "Failed to unmarshal proposal message: %v", err)
 		return
 	}
 
 	// Log that the proposal was received
-	//l.Log(l.Debug, "Received proposal: ID=%s, CheckType=%s, MemberName=%s", prop.ID, prop.CheckType, prop.MemberName)
+	//log.Log(log.Debug, "Received proposal: ID=%s, CheckType=%s, MemberName=%s", prop.ID, prop.CheckType, prop.MemberName)
 
 	state.Mu.Lock()
 	_, exists := state.Proposals[prop.ID]
@@ -50,7 +50,7 @@ func handleProposeMessage(m *nats.Msg) {
 		}
 
 		// Log that the node is voting
-		//l.Log(l.Debug, "Voting on proposal: ID=%s, Agree=%t, NodeID=%s", prop.ID, v.Agree, state.NodeID)
+		//log.Log(log.Debug, "Voting on proposal: ID=%s, Agree=%t, NodeID=%s", prop.ID, v.Agree, state.NodeID)
 
 		data, _ := json.Marshal(v)
 		go publishMessage(state.SubjectVote, data)
@@ -61,12 +61,12 @@ func handleProposeMessage(m *nats.Msg) {
 func handleVoteMessage(m *nats.Msg) {
 	var vote Vote
 	if err := json.Unmarshal(m.Data, &vote); err != nil {
-		l.Log(l.Error, "Failed to unmarshal vote message: %v", err)
+		log.Log(log.Error, "Failed to unmarshal vote message: %v", err)
 		return
 	}
 
 	// Log that a vote was received
-	//l.Log(l.Debug, "Received vote: ProposalID=%s, NodeID=%s, Agree=%t", vote.ProposalID, vote.NodeID, vote.Agree)
+	//log.Log(log.Debug, "Received vote: ProposalID=%s, NodeID=%s, Agree=%t", vote.ProposalID, vote.NodeID, vote.Agree)
 
 	state.Mu.Lock()
 	pt, exists := state.Proposals[vote.ProposalID]
@@ -123,7 +123,7 @@ func handleVoteMessage(m *nats.Msg) {
 func handleFinalizeMessage(m *nats.Msg) {
 	var fm FinalizeMessage
 	if err := json.Unmarshal(m.Data, &fm); err != nil {
-		l.Log(l.Error, "Failed to unmarshal finalize message: %v", err)
+		log.Log(log.Error, "Failed to unmarshal finalize message: %v", err)
 		return
 	}
 
@@ -180,7 +180,7 @@ func finalizeVote(pid ProposalID) {
 	state.Mu.Unlock()
 
 	// Log the timeout and final status
-	//l.Log(l.Debug, "Proposal timeout: ProposalID=%s, FinalStatus=%t", pid, finalStatus)
+	//log.Log(log.Debug, "Proposal timeout: ProposalID=%s, FinalStatus=%t", pid, finalStatus)
 	if finalStatus {
 		// Do stuff if a proposal for official change is passed
 		go applyOfficialChanges(pt.Proposal)
@@ -192,28 +192,28 @@ func finalizeVote(pid ProposalID) {
 func checkLocalStatus(checkType string, checkName string, memberName string, domainName string, endpoint string) (bool, bool) {
 	switch checkType {
 	case "site":
-		found, status := data.GetLocalSiteStatus(checkName, memberName)
+		found, status := dat.GetLocalSiteStatus(checkName, memberName)
 		if !found {
 			return false, false
 		}
 		return true, status
 
 	case "domain":
-		found, status := data.GetLocalDomainStatus(checkName, memberName, domainName)
+		found, status := dat.GetLocalDomainStatus(checkName, memberName, domainName)
 		if !found {
 			return false, false
 		}
 		return true, status
 
 	case "endpoint":
-		found, status := data.GetLocalEndpointStatus(checkName, memberName, endpoint)
+		found, status := dat.GetLocalEndpointStatus(checkName, memberName, endpoint)
 		if !found {
 			return false, false
 		}
 		return true, status
 
 	default:
-		l.Log(l.Warn, "checkLocalStatus: unknown checkType %s, defaulting to offline", checkType)
+		log.Log(log.Warn, "checkLocalStatus: unknown checkType %s, defaulting to offline", checkType)
 		return false, false
 	}
 }

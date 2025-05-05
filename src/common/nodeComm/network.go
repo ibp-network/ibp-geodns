@@ -1,8 +1,8 @@
-package consensus
+package nodeComm
 
 import (
 	"encoding/json"
-	"ibp-geodns/src/common/config"
+	cfg "ibp-geodns/src/common/config"
 	"sync"
 	"time"
 
@@ -15,7 +15,7 @@ var (
 )
 
 func ConnectNats(url string) error {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 	natsMu.Lock()
 	defer natsMu.Unlock()
 
