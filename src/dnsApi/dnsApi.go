@@ -9,7 +9,7 @@ import (
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	com "ibp-geodns/src/common/nodeComm"
+	sig "ibp-geodns/src/common/signal"
 	api "ibp-geodns/src/dnsApi/api"
 	mon "ibp-geodns/src/dnsApi/rpcMonitor"
 )
@@ -44,7 +44,7 @@ func main() {
 	time.Sleep(2 * time.Second)
 
 	// Launch NATS Internode Communication
-	com.Init()
+	sig.Init()
 
 	// Launch RPC Monitor
 	mon.Init()

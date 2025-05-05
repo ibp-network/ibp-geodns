@@ -1,11 +1,11 @@
 package rpcMonitor
 
 import (
-	"ibp-geodns/src/common/config"
-	"ibp-geodns/src/common/data"
+	cfg "ibp-geodns/src/common/config"
+	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	com "ibp-geodns/src/common/nodeComm"
+	sig "ibp-geodns/src/common/signal"
 	"sync"
 	"time"
 )
@@ -28,7 +28,7 @@ func startChecks() {
 	go InitEndpointCheck()
 }
 
-type CheckSiteFunc func(check config.Check, member config.Member)
+type CheckSiteFunc func(check cfg.Check, member cfg.Member)
 
 func RegisterSiteCheck(name string, checkFunc CheckSiteFunc) {
 	CheckRegistry.Site[name] = checkFunc
@@ -45,7 +45,7 @@ func GetSiteCheck(name string) (CheckSiteFunc, bool) {
 }
 
 func InitSiteCheck() {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 
 	for _, check := range c.System.Checks {
 		if check.CheckType == "site" {
@@ -58,7 +58,7 @@ func InitSiteCheck() {
 	}
 }
 
-func SiteCheckTimer(check config.Check, checkFunc CheckSiteFunc) {
+func SiteCheckTimer(check cfg.Check, checkFunc CheckSiteFunc) {
 	time.Sleep(2 * time.Second)
 	RunSiteCheck(check, checkFunc)
 
@@ -70,8 +70,8 @@ func SiteCheckTimer(check config.Check, checkFunc CheckSiteFunc) {
 	}
 }
 
-func RunSiteCheck(check config.Check, checkFunc CheckSiteFunc) {
-	c := config.GetConfig()
+func RunSiteCheck(check cfg.Check, checkFunc CheckSiteFunc) {
+	c := cfg.GetConfig()
 
 	for _, member := range c.Members {
 		if (member.Service.Active == 1) && (!member.Override) {
@@ -81,7 +81,7 @@ func RunSiteCheck(check config.Check, checkFunc CheckSiteFunc) {
 	}
 }
 
-func SiteCheckWrapper(check config.Check, checkFunc CheckSiteFunc, member config.Member) {
+func SiteCheckWrapper(check cfg.Check, checkFunc CheckSiteFunc, member cfg.Member) {
 	done := make(chan struct{})
 	timer := time.NewTimer(time.Duration(check.Timeout) * time.Second)
 
@@ -104,17 +104,17 @@ func SiteCheckWrapper(check config.Check, checkFunc CheckSiteFunc, member config
 	}
 }
 
-func UpdateSiteResultLocal(check config.Check, member config.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
-	go data.UpdateLocalSiteResult(check, member, status, errorMsg, dataMap)
+func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
+	go dat.UpdateLocalSiteResult(check, member, status, errorMsg, dataMap)
 
 	// Check difference
-	exists, OfficialStatus := data.GetOfficialSiteStatus(check.Name, member.Details.Name)
+	exists, OfficialStatus := dat.GetOfficialSiteStatus(check.Name, member.Details.Name)
 
 	if !exists {
-		go com.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
+		go sig.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
 	} else {
 		if OfficialStatus != status {
-			go com.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
+			go sig.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
 		}
 	}
 }
@@ -125,7 +125,7 @@ func UpdateSiteResultLocal(check config.Check, member config.Member, status bool
  *
  */
 
-type CheckDomainFunc func(check config.Check, domain string, service config.Service, member config.Member)
+type CheckDomainFunc func(check cfg.Check, domain string, service cfg.Service, member cfg.Member)
 
 func RegisterDomainCheck(name string, checkFunc CheckDomainFunc) {
 	CheckRegistry.Domain[name] = checkFunc
@@ -142,7 +142,7 @@ func GetDomainCheck(name string) (CheckDomainFunc, bool) {
 }
 
 func InitDomainCheck() {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 
 	for _, check := range c.System.Checks {
 		if check.CheckType == "domain" {
@@ -155,7 +155,7 @@ func InitDomainCheck() {
 	}
 }
 
-func DomainCheckTimer(check config.Check, checkFunc CheckDomainFunc) {
+func DomainCheckTimer(check cfg.Check, checkFunc CheckDomainFunc) {
 	time.Sleep(3 * time.Second)
 	RunDomainCheck(check, checkFunc)
 
@@ -167,8 +167,8 @@ func DomainCheckTimer(check config.Check, checkFunc CheckDomainFunc) {
 	}
 }
 
-func RunDomainCheck(check config.Check, checkFunc CheckDomainFunc) {
-	c := config.GetConfig()
+func RunDomainCheck(check cfg.Check, checkFunc CheckDomainFunc) {
+	c := cfg.GetConfig()
 
 	for serviceName, service := range c.Services {
 		for _, member := range c.Members {
@@ -200,7 +200,7 @@ func RunDomainCheck(check config.Check, checkFunc CheckDomainFunc) {
 	}
 }
 
-func DomainCheckWrapper(check config.Check, checkFunc CheckDomainFunc, domain string, service config.Service, member config.Member) {
+func DomainCheckWrapper(check cfg.Check, checkFunc CheckDomainFunc, domain string, service cfg.Service, member cfg.Member) {
 	done := make(chan struct{})
 	timer := time.NewTimer(time.Duration(check.Timeout) * time.Second)
 
@@ -223,22 +223,22 @@ func DomainCheckWrapper(check config.Check, checkFunc CheckDomainFunc, domain st
 	}
 }
 
-func UpdateDomainResultLocal(check config.Check, domain string, service config.Service, member config.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
-	go data.UpdateLocalDomainResult(check, member, service, domain, status, errorMsg, dataMap)
+func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
+	go dat.UpdateLocalDomainResult(check, member, service, domain, status, errorMsg, dataMap)
 
 	// Check difference
-	exists, OfficialStatus := data.GetOfficialDomainStatus(check.Name, member.Details.Name, domain)
+	exists, OfficialStatus := dat.GetOfficialDomainStatus(check.Name, member.Details.Name, domain)
 
 	if !exists {
-		go com.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
+		go sig.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
 	} else {
 		if OfficialStatus != status {
-			go com.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
+			go sig.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
 		}
 	}
 }
 
-type CheckEndpointFunc func(check config.Check, endpoint string, service config.Service, member config.Member)
+type CheckEndpointFunc func(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member)
 
 func RegisterEndpointCheck(name string, checkFunc CheckEndpointFunc) {
 	CheckRegistry.Endpoint[name] = checkFunc
@@ -251,7 +251,7 @@ func GetEndpointCheck(name string) (CheckEndpointFunc, bool) {
 }
 
 func InitEndpointCheck() {
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 
 	for _, check := range c.System.Checks {
 		if check.CheckType == "endpoint" {
@@ -264,7 +264,7 @@ func InitEndpointCheck() {
 	}
 }
 
-func EndpointCheckTimer(check config.Check, checkFunc CheckEndpointFunc) {
+func EndpointCheckTimer(check cfg.Check, checkFunc CheckEndpointFunc) {
 	time.Sleep(4 * time.Second)
 	RunEndpointCheck(check, checkFunc)
 
@@ -276,8 +276,8 @@ func EndpointCheckTimer(check config.Check, checkFunc CheckEndpointFunc) {
 	}
 }
 
-func RunEndpointCheck(check config.Check, checkFunc CheckEndpointFunc) {
-	c := config.GetConfig()
+func RunEndpointCheck(check cfg.Check, checkFunc CheckEndpointFunc) {
+	c := cfg.GetConfig()
 
 	for serviceName, service := range c.Services {
 		for _, member := range c.Members {
@@ -302,7 +302,7 @@ func RunEndpointCheck(check config.Check, checkFunc CheckEndpointFunc) {
 	}
 }
 
-func EndpointCheckWrapper(check config.Check, checkFunc CheckEndpointFunc, endpoint string, service config.Service, member config.Member) {
+func EndpointCheckWrapper(check cfg.Check, checkFunc CheckEndpointFunc, endpoint string, service cfg.Service, member cfg.Member) {
 	done := make(chan struct{})
 	timer := time.NewTimer(time.Duration(check.Timeout) * time.Second)
 	u := max.ParseUrl(endpoint)
@@ -326,19 +326,19 @@ func EndpointCheckWrapper(check config.Check, checkFunc CheckEndpointFunc, endpo
 	}
 }
 
-func UpdateEndpointResultLocal(check config.Check, member config.Member, service config.Service, domain string, endpoint string, status bool, errorMsg string, dataMap map[string]interface{}) {
+func UpdateEndpointResultLocal(check cfg.Check, member cfg.Member, service cfg.Service, domain string, endpoint string, status bool, errorMsg string, dataMap map[string]interface{}) {
 	u := max.ParseUrl(endpoint)
 
-	go data.UpdateLocalEndpointResult(check, member, service, u.Domain, endpoint, status, errorMsg, dataMap)
+	go dat.UpdateLocalEndpointResult(check, member, service, u.Domain, endpoint, status, errorMsg, dataMap)
 
 	// Check difference
-	exists, OfficialStatus := data.GetOfficialEndpointStatus(check.Name, member.Details.Name, u.Domain, endpoint)
+	exists, OfficialStatus := dat.GetOfficialEndpointStatus(check.Name, member.Details.Name, u.Domain, endpoint)
 
 	if !exists {
-		go com.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
+		go sig.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
 	} else {
 		if OfficialStatus != status {
-			go com.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
+			go sig.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
 		}
 	}
 }

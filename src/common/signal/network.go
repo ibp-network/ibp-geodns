@@ -1,4 +1,4 @@
-package nodeComm
+package signal
 
 import (
 	"encoding/json"
