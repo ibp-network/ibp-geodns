@@ -186,8 +186,9 @@ type NatsConfig struct {
 
 // NodeInfo holds information about a cluster node.
 type MaxmindConfig struct {
-	AccountID  string `json:"NodeID"`
-	LicenseKey string `json:"User"`
+	MaxmindDBPath string `json:"MaxmindDBPath"`
+	AccountID     string `json:"NodeID"`
+	LicenseKey    string `json:"User"`
 }
 
 // NodeInfo holds information about a cluster node.

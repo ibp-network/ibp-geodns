@@ -34,7 +34,7 @@ func Init() {
 	c := config.GetConfig()
 
 	// Step 1: Make sure "workDir/tmp/maxmind/" exists
-	baseDir := filepath.Join(c.System.WorkDir, "tmp", c.System.GeoliteDBPath)
+	baseDir := filepath.Join(c.System.Maxmind.MaxmindDBPath)
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		l.Log(l.Fatal, "Failed to create maxmind directory %s: %v", baseDir, err)
 		os.Exit(1)
