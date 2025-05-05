@@ -33,6 +33,7 @@ type SystemConfig struct {
 	IaasPricingConfig      string        `json:"IaasPricingConfig"`
 	ServicesRequestsConfig string        `json:"ServicesRequestsConfig"`
 	MinimumOfflineTime     int           `json:"MinimumOfflineTime"`
+	Maxmind                MaxmindConfig `json:"Maxmind"`
 	Nats                   NatsConfig    `json:"Nats"`
 	Mysql                  MysqlConfig   `json:"Mysql"`
 	DnsApi                 ApiConfig     `json:"DnsApi"`
@@ -181,6 +182,12 @@ type NatsConfig struct {
 	User   string `json:"User"`
 	Pass   string `json:"Pass"`
 	Url    string `json:"Url"`
+}
+
+// NodeInfo holds information about a cluster node.
+type MaxmindConfig struct {
+	AccountID  string `json:"NodeID"`
+	LicenseKey string `json:"User"`
 }
 
 // NodeInfo holds information about a cluster node.

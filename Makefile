@@ -2,9 +2,11 @@
 ifeq ($(OS),Windows_NT)
   MKDIRBIN = if not exist $(BIN_DIR) mkdir $(BIN_DIR)
   DELBIN    = if exist     $(BIN_DIR) rmdir /S /Q $(BIN_DIR)
+  EXT       = .exe
 else
   MKDIRBIN = mkdir -p $(BIN_DIR)
   DELBIN    = rm -rf $(BIN_DIR)
+  EXT       =
 endif
 
 # Constants
@@ -12,7 +14,7 @@ BIN_DIR := bin
 SEP     := /
 
 # Phony targets
-.PHONY: all clean deps mgmtBotMatrix mgmtBotMatrix mgmtApi dnsApi
+.PHONY: all clean deps mgmtBotMatrix mgmtBotDiscord mgmtApi dnsApi
 
 # Default: clean → update deps → build everything
 all: clean deps mgmtBotMatrix mgmtBotDiscord mgmtApi dnsApi
@@ -26,18 +28,18 @@ deps:
 $(BIN_DIR):
 	$(MKDIRBIN)
 
-# Build rules (uses forward-slashes)
+# Build rules, appending $(EXT) if on Windows
 mgmtBotMatrix: $(BIN_DIR)
-	go build -o $(BIN_DIR)$(SEP)$@ src/mgmtBotMatrix/mgmtBotMatrix.go
+	go build -o $(BIN_DIR)$(SEP)mgmtBotMatrix$(EXT) src/mgmtBotMatrix/mgmtBotMatrix.go
 
 mgmtBotDiscord: $(BIN_DIR)
-	go build -o $(BIN_DIR)$(SEP)$@ src/mgmtBotDiscord/mgmtBotDiscord.go
+	go build -o $(BIN_DIR)$(SEP)mgmtBotDiscord$(EXT) src/mgmtBotDiscord/mgmtBotDiscord.go
 
 mgmtApi: $(BIN_DIR)
-	go build -o $(BIN_DIR)$(SEP)$@ src/mgmtApi/mgmtApi.go
+	go build -o $(BIN_DIR)$(SEP)mgmtApi$(EXT) src/mgmtApi/mgmtApi.go
 
-pdnsBackend: $(BIN_DIR)
-	go build -o $(BIN_DIR)$(SEP)$@ src/dnsApi/dnsApi.go
+dnsApi: $(BIN_DIR)
+	go build -o $(BIN_DIR)$(SEP)dnsApi$(EXT) src/dnsApi/dnsApi.go
 
 # Clean workspace
 clean:

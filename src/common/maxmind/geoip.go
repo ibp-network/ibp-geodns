@@ -13,12 +13,14 @@ import (
 	"github.com/oschwald/maxminddb-golang"
 )
 
+// Global handles to mmdb Readers, loaded after updating from the website
 var (
 	maxmindAsn     *maxminddb.Reader
 	maxmindCity    *maxminddb.Reader
 	maxmindCountry *maxminddb.Reader
 )
 
+// URLParts is just a simple breakdown of a parsed URL
 type URLParts struct {
 	Protocol  string
 	Domain    string
@@ -26,39 +28,76 @@ type URLParts struct {
 	Directory string
 }
 
-// Init initializes the GeoIP database reader with the specified database path.
+// Init is called once on startup. It triggers the auto-update procedure,
+// then opens each .mmdb file (CityLite, CountryLite, AsnLite) into memory.
 func Init() {
 	c := config.GetConfig()
-	var err error
 
-	updateMaxmindDatabase()
-
-	maxmindAsnDB := filepath.Join(c.System.GeoliteDBPath, "Asn.mmdb")
-	maxmindAsn, err = maxminddb.Open(maxmindAsnDB)
-
-	if err != nil {
-		l.Log(l.Error, "Could not initialize Maxmind ASN Database")
+	// Step 1: Make sure "workDir/tmp/maxmind/" exists
+	baseDir := filepath.Join(c.System.WorkDir, "tmp", c.System.GeoliteDBPath)
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		l.Log(l.Fatal, "Failed to create maxmind directory %s: %v", baseDir, err)
 		os.Exit(1)
 	}
 
-	maxmindCountryDB := filepath.Join(c.System.GeoliteDBPath, "Country.mmdb")
-	maxmindCountry, err = maxminddb.Open(maxmindCountryDB)
-
+	// Step 2: Download/update each mmdb if needed
+	err := updateMaxmindDatabase()
 	if err != nil {
-		l.Log(l.Error, "Could not initialize Maxmind Country Database")
-		os.Exit(1)
+		l.Log(l.Error, "Auto-update error: %v", err)
+		// Not fatal: we can still attempt to load if older mmdb is present
 	}
 
-	maxmindCityDB := filepath.Join(c.System.WorkDir, c.System.GeoliteDBPath, "City.mmdb")
-	maxmindCity, err = maxminddb.Open(maxmindCityDB)
-
+	// Step 3: Attempt to open each local .mmdb
+	err = loadLocalDatabases(baseDir)
 	if err != nil {
-		l.Log(l.Error, "Could not initialize Maxmind City Database")
+		l.Log(l.Fatal, "Failed to load local maxmind databases: %v", err)
 		os.Exit(1)
 	}
 }
 
-// Distance calculates the Haversine distance between two geographic coordinates.
+// loadLocalDatabases attempts to open the (already-downloaded) .mmdb files
+// CityLite.mmdb, CountryLite.mmdb, AsnLite.mmdb
+func loadLocalDatabases(baseDir string) error {
+	var err error
+
+	cityPath := filepath.Join(baseDir, "CityLite.mmdb")
+	countryPath := filepath.Join(baseDir, "CountryLite.mmdb")
+	asnPath := filepath.Join(baseDir, "AsnLite.mmdb")
+
+	// City
+	if _, statErr := os.Stat(cityPath); statErr == nil {
+		maxmindCity, err = maxminddb.Open(cityPath)
+		if err != nil {
+			return fmt.Errorf("could not open city database %s: %w", cityPath, err)
+		}
+	} else {
+		l.Log(l.Warn, "CityLite.mmdb not found at %s", cityPath)
+	}
+
+	// Country
+	if _, statErr := os.Stat(countryPath); statErr == nil {
+		maxmindCountry, err = maxminddb.Open(countryPath)
+		if err != nil {
+			return fmt.Errorf("could not open country database %s: %w", countryPath, err)
+		}
+	} else {
+		l.Log(l.Warn, "CountryLite.mmdb not found at %s", countryPath)
+	}
+
+	// ASN
+	if _, statErr := os.Stat(asnPath); statErr == nil {
+		maxmindAsn, err = maxminddb.Open(asnPath)
+		if err != nil {
+			return fmt.Errorf("could not open ASN database %s: %w", asnPath, err)
+		}
+	} else {
+		l.Log(l.Warn, "AsnLite.mmdb not found at %s", asnPath)
+	}
+
+	return nil
+}
+
+// Distance calculates the Haversine distance between two geographic coordinates in kilometers.
 func Distance(lat1, lon1, lat2, lon2 float64) float64 {
 	const R = 6371 // Earth radius in kilometers
 	dLat := (lat2 - lat1) * (math.Pi / 180.0)
@@ -74,8 +113,19 @@ func Distance(lat1, lon1, lat2, lon2 float64) float64 {
 	return R * c
 }
 
-// GetClientCoordinates retrieves the latitude and longitude for a given IP address.
+// GetClientCoordinates retrieves lat/long from the CityLite database
 func GetClientCoordinates(ipStr string) (float64, float64) {
+	if maxmindCity == nil {
+		l.Log(l.Error, "CityLite is not loaded")
+		return 0, 0
+	}
+
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		l.Log(l.Error, "Invalid IP address: %s", ipStr)
+		return 0, 0
+	}
+
 	var record struct {
 		Location struct {
 			Latitude  float64 `maxminddb:"latitude"`
@@ -83,35 +133,23 @@ func GetClientCoordinates(ipStr string) (float64, float64) {
 		} `maxminddb:"location"`
 	}
 
-	if maxmindCity == nil {
-		l.Log(l.Error, "GeoIP database is not initialized")
+	if err := maxmindCity.Lookup(ip, &record); err != nil {
+		l.Log(l.Error, "CityLite lookup error: %v", err)
 		return 0, 0
 	}
-
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		l.Log(l.Error, "Invalid IP Address: %s", ipStr)
-		return 0, 0
-	}
-
-	err := maxmindCity.Lookup(ip, &record)
-	if err != nil {
-		return 0, 0
-	}
-
 	return record.Location.Latitude, record.Location.Longitude
 }
 
-// GetCountryCode looks up the country code for the given IP address.
+// GetCountryCode retrieves the ISO country code from the CityLite database
 func GetCountryCode(ipStr string) string {
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		l.Log(l.Error, "Invalid IP address: %s", ipStr)
+	if maxmindCity == nil {
+		l.Log(l.Warn, "CityLite DB is not loaded, cannot fetch country code.")
 		return ""
 	}
 
-	if maxmindCity == nil {
-		l.Log(l.Error, "GeoIP reader not initialized")
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		l.Log(l.Error, "Invalid IP address: %s", ipStr)
 		return ""
 	}
 
@@ -120,42 +158,43 @@ func GetCountryCode(ipStr string) string {
 			IsoCode string `maxminddb:"iso_code"`
 		} `maxminddb:"country"`
 	}
-
-	err := maxmindCity.Lookup(ip, &record)
-	if err != nil {
-		l.Log(l.Error, "Failed to lookup GeoIP data: %v", err)
+	if err := maxmindCity.Lookup(ip, &record); err != nil {
+		l.Log(l.Error, "Failed city lookup for IP %s: %v", ipStr, err)
 		return ""
 	}
 
 	return record.Country.IsoCode
 }
 
-// GetClassC strips the IP address to its Class C subnet (e.g., "192.168.1").
+// GetClassC strips an IPv4 address to the first 3 octets: e.g. 192.168.1
 func GetClassC(ipStr string) string {
 	ip := net.ParseIP(ipStr)
 	if ip == nil {
 		l.Log(l.Error, "Invalid IP address: %s", ipStr)
 		return ""
 	}
-
-	// Ensure IPv4
 	ipv4 := ip.To4()
 	if ipv4 == nil {
 		l.Log(l.Error, "Non-IPv4 address: %s", ipStr)
 		return ""
 	}
-
-	classC := fmt.Sprintf("%d.%d.%d", ipv4[0], ipv4[1], ipv4[2])
-	return classC
+	return fmt.Sprintf("%d.%d.%d", ipv4[0], ipv4[1], ipv4[2])
 }
 
-// Close cleans up resources used by the stats package.
+// Close frees resources used by maxmind. (If needed)
 func Close() {
 	if maxmindCity != nil {
 		maxmindCity.Close()
 	}
+	if maxmindCountry != nil {
+		maxmindCountry.Close()
+	}
+	if maxmindAsn != nil {
+		maxmindAsn.Close()
+	}
 }
 
+// ParseUrl is used elsewhere in your code, unchanged
 func ParseUrl(rawURL string) URLParts {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -163,12 +202,10 @@ func ParseUrl(rawURL string) URLParts {
 		return URLParts{}
 	}
 
-	parts := URLParts{
+	return URLParts{
 		Protocol:  u.Scheme + "://",
 		Domain:    u.Hostname(),
 		Port:      u.Port(),
 		Directory: u.Path,
 	}
-
-	return parts
 }

@@ -4,159 +4,267 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"fmt"
-	cfg "ibp-geodns/src/common/config"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
+
+	cfg "ibp-geodns/src/common/config"
+	l "ibp-geodns/src/common/logging"
 )
 
+// updateMaxmindDatabase checks each of CityLite, CountryLite, AsnLite.
+//
+// For each, we do:
+// 1) Build the HEAD request to see remote "Last-Modified"
+// 2) Compare with local .(CityLite|CountryLite|AsnLite) file content
+// 3) If different or local .mmdb absent => download, extract, rename, remove leftover
+// 4) Save new last-modified in .(CityLite|CountryLite|AsnLite)
 func updateMaxmindDatabase() error {
 	c := cfg.GetConfig()
-	baseDir := filepath.Join(c.System.WorkDir, c.System.GeoliteDBPath)
+	baseDir := filepath.Join(c.System.WorkDir, "tmp", c.System.GeoliteDBPath)
 
-	var cityPattern = regexp.MustCompile(`^GeoLite2-City_(\d{8})\.tar\.gz$`)
-	var countryPattern = regexp.MustCompile(`^GeoLite2-Country_(\d{8})\.tar\.gz$`)
-	var asnPattern = regexp.MustCompile(`^GeoLite2-ASN_(\d{8})\.tar\.gz$`)
-
-	cityArchive, err := findNewestArchive(baseDir, cityPattern)
-	if err != nil {
-		return fmt.Errorf("failed to find city archive: %w", err)
-	}
-	countryArchive, err := findNewestArchive(baseDir, countryPattern)
-	if err != nil {
-		return fmt.Errorf("failed to find country archive: %w", err)
-	}
-	asnArchive, err := findNewestArchive(baseDir, asnPattern)
-	if err != nil {
-		return fmt.Errorf("failed to find ASN archive: %w", err)
+	// The direct download method requires your account ID & license key
+	accountID := c.System.Maxmind.AccountID
+	licenseKey := c.System.Maxmind.LicenseKey
+	if accountID == "" || licenseKey == "" {
+		l.Log(l.Warn, "MaxMind AccountID or LicenseKey is missing. Auto-update cannot proceed.")
+		return nil
 	}
 
-	if cityArchive != "" {
-		if err := extractIfNeededAndLinkFile(baseDir, cityArchive, "City.mmdb"); err != nil {
-			return fmt.Errorf("city extraction error: %w", err)
-		}
-	}
-	if countryArchive != "" {
-		if err := extractIfNeededAndLinkFile(baseDir, countryArchive, "Country.mmdb"); err != nil {
-			return fmt.Errorf("country extraction error: %w", err)
-		}
+	// We define 3 downloads: CityLite, CountryLite, AsnLite
+	// (You must fill in the correct edition IDs & suffix for each.)
+	// Example EditionIDs from MaxMind docs:
+	//  - "GeoLite2-City"
+	//  - "GeoLite2-Country"
+	//  - "GeoLite2-ASN"
+	// Suffix is typically "tar.gz"
+
+	downloads := []struct {
+		name         string // "CityLite" or "CountryLite" or "AsnLite"
+		editionID    string // e.g. "GeoLite2-City"
+		filenameLite string // final "CityLite.mmdb" or "CountryLite.mmdb" or "AsnLite.mmdb"
+		markerFile   string // local file storing the last remote Last-Modified
+	}{
+		{"CityLite", "GeoLite2-City", "CityLite.mmdb", ".CityLite"},
+		{"CountryLite", "GeoLite2-Country", "CountryLite.mmdb", ".CountryLite"},
+		{"AsnLite", "GeoLite2-ASN", "AsnLite.mmdb", ".AsnLite"},
 	}
 
-	if asnArchive != "" {
-		if err := extractIfNeededAndLinkFile(baseDir, asnArchive, "Asn.mmdb"); err != nil {
-			return fmt.Errorf("asn extraction error: %w", err)
+	for _, dl := range downloads {
+		err := checkAndDownloadOne(baseDir, accountID, licenseKey, dl.name, dl.editionID, dl.filenameLite, dl.markerFile)
+		if err != nil {
+			l.Log(l.Error, "Failed to update %s: %v", dl.name, err)
 		}
 	}
 
 	return nil
 }
 
-func findNewestArchive(baseDir string, pattern *regexp.Regexp) (string, error) {
-	dirEntries, err := os.ReadDir(baseDir)
+// checkAndDownloadOne does the HEAD request to see if remote is newer, and if so, downloads + extracts.
+func checkAndDownloadOne(
+	baseDir, accountID, licenseKey, dbName, editionID, mmdbFilename, markerFilename string,
+) error {
+	localMmdbPath := filepath.Join(baseDir, mmdbFilename)     // e.g. .../CityLite.mmdb
+	localMarkerPath := filepath.Join(baseDir, markerFilename) // e.g. .../.CityLite
+
+	remoteURL := fmt.Sprintf(
+		"https://download.maxmind.com/geoip/databases/%s/download?edition_id=%s&suffix=tar.gz",
+		editionID, editionID,
+	)
+
+	// Step A) HEAD request for last-modified
+	remoteModTime, err := getRemoteLastModified(remoteURL, accountID, licenseKey)
+	if err != nil {
+		return fmt.Errorf("%s HEAD request error: %w", dbName, err)
+	}
+	if remoteModTime == "" {
+		// if no last-modified returned, let's do a direct skip or fallback
+		l.Log(l.Warn, "No Last-Modified header for %s from server. Will always download it.", dbName)
+		remoteModTime = "no-last-mod-header"
+	}
+
+	// Step B) read local marker
+	localMarker, _ := os.ReadFile(localMarkerPath)
+	localStamp := strings.TrimSpace(string(localMarker))
+
+	// Step C) decide if we must re-download
+	mmdbStat, statErr := os.Stat(localMmdbPath)
+	if statErr != nil || remoteModTime != localStamp {
+		// We do the download
+		l.Log(l.Info, "Downloading fresh MaxMind DB for %s ...", dbName)
+
+		tmpArchivePath := filepath.Join(baseDir, dbName+".tar.gz")
+		err = downloadDatabase(remoteURL, accountID, licenseKey, tmpArchivePath)
+		if err != nil {
+			return fmt.Errorf("download of %s failed: %w", dbName, err)
+		}
+
+		// Step D) Extract the tar.gz
+		if err := extractTarGz(tmpArchivePath, baseDir); err != nil {
+			return fmt.Errorf("extract error for %s: %w", dbName, err)
+		}
+
+		// Step E) find the .mmdb we extracted
+		extractedMmdb, findErr := findExtractedMmdb(baseDir, editionID)
+		if findErr != nil {
+			return fmt.Errorf("cannot find extracted mmdb for %s: %w", dbName, findErr)
+		}
+
+		// Step F) Move/rename that to e.g. CityLite.mmdb
+		if err := os.RemoveAll(localMmdbPath); err != nil {
+			l.Log(l.Warn, "Could not remove old file %s: %v", localMmdbPath, err)
+		}
+		if renameErr := os.Rename(extractedMmdb, localMmdbPath); renameErr != nil {
+			return fmt.Errorf("rename to final mmdb %s failed: %w", localMmdbPath, renameErr)
+		}
+
+		// Step G) Clean up leftover archives + directories
+		if err := os.Remove(tmpArchivePath); err != nil {
+			l.Log(l.Warn, "Could not remove archive file %s: %v", tmpArchivePath, err)
+		}
+		// Also remove leftover "GeoLite2-City_YYYYMMDD..." directories
+		cleanupExtractedDirs(baseDir, editionID)
+
+		// Step H) Save new marker
+		os.WriteFile(localMarkerPath, []byte(remoteModTime), 0644)
+	} else {
+		// no re-download needed
+		l.Log(l.Debug, "Local %s is up-to-date, local stamp = %s, remote = %s, size: %d",
+			dbName, localStamp, remoteModTime, mmdbStat.Size())
+	}
+	return nil
+}
+
+// getRemoteLastModified sends HEAD to see if the Last-Modified is present
+func getRemoteLastModified(url, accountID, licenseKey string) (string, error) {
+	req, err := http.NewRequest("HEAD", url, nil)
 	if err != nil {
 		return "", err
 	}
+	// Basic auth for MaxMind
+	req.SetBasicAuth(accountID, licenseKey)
 
-	var candidates []string
-	for _, de := range dirEntries {
-		if de.IsDir() {
-			continue
-		}
-		name := de.Name()
-		if pattern.MatchString(name) {
-			candidates = append(candidates, name)
-		}
-	}
-	if len(candidates) == 0 {
-		return "", nil
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// Ensure we follow redirect
+			return nil
+		},
 	}
 
-	sort.Slice(candidates, func(i, j int) bool {
-		dateI := extractDate(candidates[i], pattern)
-		dateJ := extractDate(candidates[j], pattern)
-		return dateI > dateJ
-	})
-
-	return candidates[0], nil
-}
-
-func extractDate(filename string, pattern *regexp.Regexp) string {
-	matches := pattern.FindStringSubmatch(filename)
-	if len(matches) == 2 {
-		return matches[1]
-	}
-	return "00000000"
-}
-
-func extractIfNeededAndLinkFile(baseDir, archiveName, symlinkFile string) error {
-	outFolder := strings.TrimSuffix(archiveName, ".tar.gz")
-	extractedPath := filepath.Join(baseDir, outFolder)
-
-	if _, err := os.Stat(extractedPath); err != nil {
-		archivePath := filepath.Join(baseDir, archiveName)
-		if err := extractTarGz(archivePath, baseDir); err != nil {
-			return err
-		}
-	}
-
-	mmdbFile, err := findMMDBFile(extractedPath)
+	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to locate mmdb in %s: %w", extractedPath, err)
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HEAD status: %d, %s", resp.StatusCode, resp.Status)
 	}
 
-	targetFile := mmdbFile
-
-	return updateFileSymlink(baseDir, symlinkFile, targetFile)
+	return resp.Header.Get("Last-Modified"), nil
 }
 
-func findMMDBFile(extractedDir string) (string, error) {
-	var mmdbPath string
-	err := filepath.Walk(extractedDir, func(path string, info os.FileInfo, err error) error {
+// downloadDatabase sends GET with BasicAuth to get the .tar.gz
+func downloadDatabase(url, accountID, licenseKey, outPath string) error {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth(accountID, licenseKey)
+
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return nil // allow 3xx follow
+		},
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GET status: %d, %s", resp.StatusCode, resp.Status)
+	}
+
+	f, err := os.Create(outPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.Copy(f, resp.Body)
+	return err
+}
+
+// findExtractedMmdb tries to locate the .mmdb file in the extracted folder
+// For instance, after extracting GeoLite2-City_YYYYMMDD/ we want the .mmdb
+func findExtractedMmdb(baseDir, editionID string) (string, error) {
+	// We'll guess the folder name starts with "GeoLite2-City_" or similar
+	pattern := fmt.Sprintf(`^%s_(\d{8})$`, editionID)
+	re := regexp.MustCompile(pattern)
+
+	dEntries, err := os.ReadDir(baseDir)
+	if err != nil {
+		return "", err
+	}
+	for _, de := range dEntries {
+		if de.IsDir() && re.MatchString(de.Name()) {
+			// Inside that dir, find a .mmdb
+			subDirPath := filepath.Join(baseDir, de.Name())
+			foundMmdb, errWalk := walkForMmdb(subDirPath)
+			if errWalk != nil {
+				l.Log(l.Warn, "Error scanning folder %s: %v", subDirPath, errWalk)
+				continue
+			}
+			if foundMmdb != "" {
+				return foundMmdb, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("no extracted mmdb found for %s in %s", editionID, baseDir)
+}
+
+// walkForMmdb finds the first .mmdb file under a directory
+func walkForMmdb(path string) (string, error) {
+	var found string
+	err := filepath.Walk(path, func(fp string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if !info.IsDir() && strings.HasSuffix(info.Name(), ".mmdb") {
-			mmdbPath = path
-			return io.EOF
+			found = fp
+			return io.EOF // short-circuit
 		}
 		return nil
 	})
 	if err == io.EOF {
-		err = nil
+		return found, nil
 	}
-	if err != nil {
-		return "", err
-	}
-	if mmdbPath == "" {
-		return "", fmt.Errorf("no .mmdb file found in %s", extractedDir)
-	}
-	return mmdbPath, nil
+	return found, err
 }
 
-func updateFileSymlink(baseDir, symlinkFile, targetFile string) error {
-	symlinkPath := filepath.Join(baseDir, symlinkFile)
-
-	info, err := os.Stat(targetFile)
-	if err != nil {
-		return fmt.Errorf("target file not found: %s (err: %w)", targetFile, err)
+// cleanupExtractedDirs removes leftover directories like "GeoLite2-City_YYYYMMDD"
+// so that baseDir remains tidy.
+func cleanupExtractedDirs(baseDir, editionID string) {
+	entries, _ := os.ReadDir(baseDir)
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasPrefix(name, editionID+"_") {
+			fullPath := filepath.Join(baseDir, name)
+			os.RemoveAll(fullPath)
+		}
 	}
-	if info.IsDir() {
-		return fmt.Errorf("target path is a directory, not a file: %s", targetFile)
-	}
-
-	if err := os.RemoveAll(symlinkPath); err != nil {
-		return fmt.Errorf("failed to remove old link or file at %s: %w", symlinkPath, err)
-	}
-
-	if err := os.Symlink(targetFile, symlinkPath); err != nil {
-		return fmt.Errorf("failed to create symlink %s -> %s: %w", symlinkPath, targetFile, err)
-	}
-	return nil
 }
 
+// extractTarGz is your standard tar/gz extraction
 func extractTarGz(tarGzPath, destDir string) error {
 	f, err := os.Open(tarGzPath)
 	if err != nil {
@@ -164,26 +272,27 @@ func extractTarGz(tarGzPath, destDir string) error {
 	}
 	defer f.Close()
 
-	gz, err := gzip.NewReader(f)
+	gzr, err := gzip.NewReader(f)
 	if err != nil {
 		return err
 	}
-	defer gz.Close()
+	defer gzr.Close()
 
-	tr := tar.NewReader(gz)
+	tarReader := tar.NewReader(gzr)
+
 	for {
-		header, err := tr.Next()
+		header, err := tarReader.Next()
 		if err == io.EOF {
 			break
-		}
-		if err != nil {
+		} else if err != nil {
 			return err
 		}
 
 		outPath := filepath.Join(destDir, header.Name)
+
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(outPath, os.FileMode(header.Mode)); err != nil {
+			if err := os.MkdirAll(outPath, 0755); err != nil {
 				return err
 			}
 		case tar.TypeReg:
@@ -194,13 +303,13 @@ func extractTarGz(tarGzPath, destDir string) error {
 			if err != nil {
 				return err
 			}
-			if _, err := io.Copy(outFile, tr); err != nil {
-				outFile.Close()
-				return err
-			}
+			_, copyErr := io.Copy(outFile, tarReader)
 			outFile.Close()
+			if copyErr != nil {
+				return copyErr
+			}
 		default:
-			// skip symlinks, etc. or handle as needed
+			// skip symlinks, etc
 		}
 	}
 	return nil
