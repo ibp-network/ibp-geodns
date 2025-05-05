@@ -16,7 +16,6 @@ go.sum
 
 # Ignore config directory but keep structure
 /config/*
-!/config/*.gitignore
 
 # Ignore tmp directory but keep structure
 /tmp/*
