@@ -26,3 +26,8 @@ go.sum
 # Ignore bin directory but keep structure
 /bin/*
 !/bin/.gitignore
+
+# Ignore files in maxmind directory but keep structure
+/tmp/maxmind/*
+!/tmp/maxmind
+!/tmp/maxmind/.gitignore
