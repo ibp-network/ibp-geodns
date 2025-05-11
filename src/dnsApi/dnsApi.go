@@ -14,11 +14,11 @@ import (
 	mon "ibp-geodns/src/dnsApi/monitor"
 )
 
-var version = "0.2.0"
+var version = "0.3.0"
 
 func main() {
 	// Initialize the logging level
-	log.SetLogLevel(log.Warn)
+	log.SetLogLevel(log.Info)
 	log.Log(log.Info, "IBP-GeoDNS v%s starting...", version)
 
 	// Define a command-line flag for the config file path
