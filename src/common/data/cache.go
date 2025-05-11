@@ -58,7 +58,7 @@ func SaveCache(filePath string, data interface{}) error {
 		return err
 	}
 
-	// log.Log(log.Info, "Cache saved successfully to %s", filePath)
+	log.Log(log.Info, "Cache saved successfully to %s", filePath)
 	return nil
 }
 
@@ -127,7 +127,7 @@ func startAutoUpdate() {
 
 	go func() {
 		for range autoUpdateTimer.C {
-			// log.Log(log.Debug, "Auto-saving caches...")
+			log.Log(log.Info, "Auto-saving caches...")
 			SaveAllCaches()
 		}
 	}()
