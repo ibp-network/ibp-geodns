@@ -67,7 +67,6 @@ type ApiConfig struct {
 
 // MatrixConfig represents the Matrix configuration
 type MatrixConfig struct {
-	Enabled       int    `json:"Enabled"`
 	HomeServerURL string `json:"HomeServerURL"`
 	Username      string `json:"Username"`
 	Password      string `json:"Password"`

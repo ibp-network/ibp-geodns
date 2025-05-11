@@ -1,19 +1,22 @@
 {
-    "workDir": "/opt/ibp-geodns/tmp",
-    "GeoliteDBPath": "GeoLite2-City.mmdb",
-    "StaticDNSConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/geodns-static.json",
-    "MembersConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/members_professional.json",
-    "ServicesConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/services_rpc.json",
-    "IaasPricingConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/services_rpc_iaaspricing.json",
-    "ServicesRequestsConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/services_rpc_requests.json",
-    "ConfigReloadTime": 3600,
-    "CacheSaveTime": 90,
-    "MinimumOfflineTime": 3600,
+    "System": {
+        "WorkDir": "D:\\Sync\\Projects\\stake.plus\\code\\ibp-geodns-v2\\",
+        "ConfigUrls": {
+            "StaticDNSConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/geodns-static.json",
+            "MembersConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/members_professional.json",
+            "ServicesConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/services_rpc.json",
+            "IaasPricingConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/services_rpc_iaaspricing.json",
+            "ServicesRequestsConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/services_rpc_requests.json"
+        },
+        "ConfigReloadTime": 3600,
+        "CacheSaveTime": 90,
+        "MinimumOfflineTime": 3600
+    },
     "Maxmind": {
         "AccountID": "",
         "LicenseKey": ""
     },
-    "Nats": {
+    "Signal": {
         "NodeID": "DNS-01",
         "Url": "nats://127.0.0.1:5222",
         "User": "DNS01",
@@ -41,7 +44,6 @@
         }
     },
     "Matrix": {
-        "Enabled": 0,
         "HomeServerURL": "https://matrix.org",
         "Username": "user",
         "Password": "password",
