@@ -11,7 +11,7 @@ import (
 	max "ibp-geodns/src/common/maxmind"
 	sig "ibp-geodns/src/common/signal"
 	"ibp-geodns/src/dnsApi/api"
-	mon "ibp-geodns/src/dnsApi/rpcMonitor"
+	mon "ibp-geodns/src/dnsApi/monitor"
 )
 
 var version = "0.2.0"

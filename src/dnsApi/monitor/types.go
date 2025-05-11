@@ -1,4 +1,4 @@
-package rpcMonitor
+package monitor
 
 import (
 	"sync"

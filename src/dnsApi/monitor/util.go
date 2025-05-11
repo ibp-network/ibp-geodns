@@ -1,4 +1,4 @@
-package rpcMonitor
+package monitor
 
 func getIntOption(extraOptions map[string]interface{}, key string, defaultValue int) int {
 	if value, ok := extraOptions[key].(float64); ok {

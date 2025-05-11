@@ -1,4 +1,4 @@
-package rpcMonitor
+package monitor
 
 import (
 	log "ibp-geodns/src/common/logging"
