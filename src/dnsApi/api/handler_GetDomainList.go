@@ -2,10 +2,9 @@ package api
 
 import (
 	cfg "ibp-geodns/src/common/config"
-	"net/http"
 )
 
-func handle_GetDomainList(w http.ResponseWriter, r *http.Request, req Request) Response {
+func handle_GetDomainList(req Request) Response {
 	var records []cfg.DNSRecord
 	var id int
 

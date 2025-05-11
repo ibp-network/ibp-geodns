@@ -1,11 +1,10 @@
 package api
 
 import (
-	"net/http"
 	"time"
 )
 
-func handle_GetDomainInfo(w http.ResponseWriter, r *http.Request, req Request) Response {
+func handle_GetDomainInfo(req Request) Response {
 	var records []DomainInfo
 	currentUnixTimestamp := int(time.Now().UTC().Unix())
 

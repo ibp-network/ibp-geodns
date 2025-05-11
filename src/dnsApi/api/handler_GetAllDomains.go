@@ -1,11 +1,10 @@
 package api
 
 import (
-	"net/http"
 	"time"
 )
 
-func handle_GetAllDomains(w http.ResponseWriter, r *http.Request, req Request) Response {
+func handle_GetAllDomains(req Request) Response {
 	currentUnixTimestamp := int(time.Now().UTC().Unix())
 	records := []DomainInfo{}
 	for key, domain := range TLDRecords.records {

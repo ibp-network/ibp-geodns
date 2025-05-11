@@ -5,12 +5,11 @@ import (
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	"net/http"
 	"strings"
 )
 
 // dnsQuery_Lookup handles DNS lookup queries based on the provided parameters.
-func handle_DNSLookup(w http.ResponseWriter, r *http.Request, req Request) Response {
+func handle_DNSLookup(req Request) Response {
 	var records []cfg.DNSRecord
 
 	c := cfg.GetConfig()

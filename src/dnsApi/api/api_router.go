@@ -19,17 +19,17 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 
 	switch req.Method {
 	case "initialize":
-		res = handle_Init(w, r, req)
+		res = handle_Init(req)
 	case "lookup":
-		res = handle_DNSLookup(w, r, req)
+		res = handle_DNSLookup(req)
 	case "list":
-		res = handle_GetDomainList(w, r, req)
+		res = handle_GetDomainList(req)
 	case "getDomainInfo":
-		res = handle_GetDomainInfo(w, r, req)
+		res = handle_GetDomainInfo(req)
 	case "getAllDomains":
-		res = handle_GetAllDomains(w, r, req)
+		res = handle_GetAllDomains(req)
 	case "getDomainKeys":
-		res = handle_GetDomainKeys(w, r, req)
+		res = handle_GetDomainKeys(req)
 	default:
 		writeDnsResponse(w, Response{Result: "Invalid Request"})
 		return
