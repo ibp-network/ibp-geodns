@@ -24,7 +24,7 @@ func handleProposeMessage(m *nats.Msg) {
 	state.Mu.Lock()
 	_, exists := state.Proposals[prop.ID]
 	if !exists {
-		pt := &ProposalTracking{
+		pt := &types.ProposalTracking{
 			Proposal: prop,
 			Votes:    make(map[string]bool),
 		}
@@ -36,14 +36,14 @@ func handleProposeMessage(m *nats.Msg) {
 	}
 	state.Mu.Unlock()
 
-	go func(prop Proposal) {
+	go func(prop types.Proposal) {
 		found, localStatus := checkLocalStatus(prop.CheckType, prop.CheckName, prop.MemberName, prop.DomainName, prop.Endpoint)
 		if !found {
 			// Not participating in voting because we don't have a local state for this check.
 			return
 		}
 
-		v := Vote{
+		v := types.Vote{
 			ProposalID: prop.ID,
 			NodeID:     state.NodeID,
 			Agree:      (localStatus == prop.ProposedStatus),
@@ -60,7 +60,7 @@ func handleProposeMessage(m *nats.Msg) {
 
 // handleVoteMessage: Processes votes and may finalize early.
 func handleVoteMessage(m *nats.Msg) {
-	var vote Vote
+	var vote types.Vote
 	if err := json.Unmarshal(m.Data, &vote); err != nil {
 		log.Log(log.Error, "Failed to unmarshal vote message: %v", err)
 		return
@@ -122,7 +122,7 @@ func handleVoteMessage(m *nats.Msg) {
 
 // handleFinalizeMessage: Applies the final decision.
 func handleFinalizeMessage(m *nats.Msg) {
-	var fm FinalizeMessage
+	var fm types.FinalizeMessage
 	if err := json.Unmarshal(m.Data, &fm); err != nil {
 		log.Log(log.Error, "Failed to unmarshal finalize message: %v", err)
 		return
@@ -141,7 +141,7 @@ func handleFinalizeMessage(m *nats.Msg) {
 }
 
 // finalizeDueToTimeout: Handles proposals that timed out.
-func finalizeVote(pid ProposalID) {
+func finalizeVote(pid types.ProposalID) {
 	state.Mu.Lock()
 	pt, exists := state.Proposals[pid]
 	if !exists {
