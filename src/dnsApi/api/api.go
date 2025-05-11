@@ -18,12 +18,12 @@ func Init() {
 	dnsApi.HandleFunc("/dns", handleDnsQuery)
 
 	log.Log(log.Info, "Starting DNS API server on %s:%s",
-		c.System.DnsApi.ListenAddress,
-		c.System.DnsApi.ListenPort,
+		c.Local.DnsApi.ListenAddress,
+		c.Local.DnsApi.ListenPort,
 	)
 
 	go http.ListenAndServe(
-		c.System.DnsApi.ListenAddress+":"+c.System.DnsApi.ListenPort,
+		c.Local.DnsApi.ListenAddress+":"+c.Local.DnsApi.ListenPort,
 		dnsApi,
 	)
 }

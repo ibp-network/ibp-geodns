@@ -12,11 +12,11 @@ import (
 func Init() {
 	c := cfg.GetConfig()
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
-		c.Mysql.User,
-		c.System.Mysql.Pass,
-		c.System.Mysql.Host,
-		c.System.Mysql.Port,
-		c.System.Mysql.DB,
+		c.Local.Mysql.User,
+		c.Local.Mysql.Pass,
+		c.Local.Mysql.Host,
+		c.Local.Mysql.Port,
+		c.Local.Mysql.DB,
 	)
 
 	var err error

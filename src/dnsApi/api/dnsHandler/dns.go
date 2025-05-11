@@ -45,7 +45,7 @@ func configTimer() {
 	// Load Dynamic Entries
 	go DynamicDNSEntries()
 
-	ticker := time.NewTicker(c.System.System.ConfigReloadTime * time.Second)
+	ticker := time.NewTicker(c.Local.System.ConfigReloadTime * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {

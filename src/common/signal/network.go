@@ -24,7 +24,7 @@ func ConnectNats(url string) error {
 	}
 
 	var err error
-	nc, err = nats.Connect(url, nats.UserInfo(c.System.Signal.User, c.System.Signal.Pass))
+	nc, err = nats.Connect(url, nats.UserInfo(c.Local.Signal.User, c.Local.Signal.Pass))
 	return err
 }
 

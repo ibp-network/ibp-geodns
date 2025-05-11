@@ -31,7 +31,7 @@ func main() {
 	mux.HandleFunc("/api/usage", api.HandleApiQuery)
 
 	// Grab host/port from config
-	addr := cfg.GetConfig().System.MgmtApi.ListenAddress + ":" + cfg.GetConfig().System.MgmtApi.ListenPort
+	addr := cfg.GetConfig().Local.MgmtApi.ListenAddress + ":" + cfg.GetConfig().Local.MgmtApi.ListenPort
 
 	// Run server
 	if err := http.ListenAndServe(addr, mux); err != nil {

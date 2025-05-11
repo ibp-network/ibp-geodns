@@ -51,7 +51,7 @@ func apiQuery_MemberList(params ApiRequest) ApiResponse {
 
 // checkMemberAuth ensures the (MemberName, AuthKey) pair is valid
 func checkMemberAuth(c cfg.Config, memberName, authKey string) bool {
-	expectedKey, exists := c.System.MgmtApi.AuthKeys[memberName]
+	expectedKey, exists := c.Local.MgmtApi.AuthKeys[memberName]
 	if !exists {
 		log.Log(log.Warn, "Auth failed: no AuthKey found for memberName %s", memberName)
 		return false

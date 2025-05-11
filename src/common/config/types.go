@@ -14,7 +14,7 @@ type ConfigInit struct {
 
 // ConfigData holds the actual configuration data without the mutex
 type Config struct {
-	System          Local                  `json:"System"`
+	Local           LocalConfig            `json:"System"`
 	StaticDNS       []DNSRecord            `json:"StaticDNS"`
 	Members         map[string]Member      `json:"Members"`
 	Services        map[string]Service     `json:"Services"`
@@ -23,7 +23,7 @@ type Config struct {
 }
 
 // SystemConfig represents the configuration loaded from disk (config.json)
-type Local struct {
+type LocalConfig struct {
 	System  SystemConfig  `json:"System"`
 	Maxmind MaxmindConfig `json:"Maxmind"`
 	Signal  SignalConfig  `json:"Signal"`

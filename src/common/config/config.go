@@ -35,11 +35,11 @@ func loadConfig(cfgFile string, initialLoad bool) {
 	loadSystemConfig(cfgFile, initialLoad)
 
 	// Load other configs from URLs
-	loadStaticDNSConfig(cfg.data.System.System.ConfigUrls.StaticDNSConfig, initialLoad)
-	loadMembersConfig(cfg.data.System.System.ConfigUrls.MembersConfig, initialLoad)
-	loadServicesConfig(cfg.data.System.System.ConfigUrls.ServicesConfig, initialLoad)
-	loadIaasPricing(cfg.data.System.System.ConfigUrls.IaasPricingConfig, initialLoad)
-	loadServiceRequestsConfig(cfg.data.System.System.ConfigUrls.ServicesRequestsConfig, initialLoad)
+	loadStaticDNSConfig(cfg.data.Local.System.ConfigUrls.StaticDNSConfig, initialLoad)
+	loadMembersConfig(cfg.data.Local.System.ConfigUrls.MembersConfig, initialLoad)
+	loadServicesConfig(cfg.data.Local.System.ConfigUrls.ServicesConfig, initialLoad)
+	loadIaasPricing(cfg.data.Local.System.ConfigUrls.IaasPricingConfig, initialLoad)
+	loadServiceRequestsConfig(cfg.data.Local.System.ConfigUrls.ServicesRequestsConfig, initialLoad)
 }
 
 // loadSystemConfig loads the system config from disk
@@ -55,7 +55,7 @@ func loadSystemConfig(configPath string, initialLoad bool) {
 	}
 	defer file.Close()
 
-	var systemConfig Local
+	var systemConfig LocalConfig
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(&systemConfig); err != nil {
 		log.Log(log.Error, "Failed to decode system config: %v", err)
@@ -66,7 +66,7 @@ func loadSystemConfig(configPath string, initialLoad bool) {
 		return
 	}
 
-	cfg.data.System = systemConfig
+	cfg.data.Local = systemConfig
 	log.Log(log.Debug, "System configuration loaded from %s", configPath)
 }
 
@@ -227,7 +227,7 @@ func downloadConfig(url string, initialLoad bool) []byte {
 func configUpdater(cfgFile string) {
 	c := GetConfig()
 
-	ticker := time.NewTicker(c.System.System.ConfigReloadTime * time.Second)
+	ticker := time.NewTicker(c.Local.System.ConfigReloadTime * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {

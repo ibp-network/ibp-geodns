@@ -47,7 +47,7 @@ func GetSiteCheck(name string) (CheckSiteFunc, bool) {
 func InitSiteCheck() {
 	c := cfg.GetConfig()
 
-	for _, check := range c.System.Checks {
+	for _, check := range c.Local.Checks {
 		if check.CheckType == "site" {
 			checkFunc, exists := GetSiteCheck(check.Name)
 			if exists {
@@ -144,7 +144,7 @@ func GetDomainCheck(name string) (CheckDomainFunc, bool) {
 func InitDomainCheck() {
 	c := cfg.GetConfig()
 
-	for _, check := range c.System.Checks {
+	for _, check := range c.Local.Checks {
 		if check.CheckType == "domain" {
 			checkFunc, exists := GetDomainCheck(check.Name)
 			if exists {
@@ -253,7 +253,7 @@ func GetEndpointCheck(name string) (CheckEndpointFunc, bool) {
 func InitEndpointCheck() {
 	c := cfg.GetConfig()
 
-	for _, check := range c.System.Checks {
+	for _, check := range c.Local.Checks {
 		if check.CheckType == "endpoint" {
 			checkFunc, exists := GetEndpointCheck(check.Name)
 			if exists {

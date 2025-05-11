@@ -17,11 +17,11 @@ import (
 
 func updateMaxmindDatabase() error {
 	c := cfg.GetConfig()
-	baseDir := filepath.Join(c.System.Maxmind.MaxmindDBPath)
+	baseDir := filepath.Join(c.Local.Maxmind.MaxmindDBPath)
 
 	// The direct download method requires your account ID & license key
-	accountID := c.System.Maxmind.AccountID
-	licenseKey := c.System.Maxmind.LicenseKey
+	accountID := c.Local.Maxmind.AccountID
+	licenseKey := c.Local.Maxmind.LicenseKey
 	if accountID == "" || licenseKey == "" {
 		log.Log(log.Warn, "MaxMind AccountID or LicenseKey is missing. Auto-update cannot proceed.")
 		return nil
