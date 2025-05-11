@@ -9,7 +9,7 @@ import (
 )
 
 // dnsQuery_Lookup handles DNS lookup queries based on the provided parameters.
-func handle_DNSLookup(req Request) Response {
+func handle_DNSQuery(req Request) Response {
 	var records []cfg.DNSRecord
 
 	c := cfg.GetConfig()

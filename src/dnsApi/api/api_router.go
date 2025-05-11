@@ -21,7 +21,7 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 	case "initialize":
 		res = handle_Init(req)
 	case "lookup":
-		res = handle_DNSLookup(req)
+		res = handle_DNSQuery(req)
 	case "list":
 		res = handle_GetDomainList(req)
 	case "getDomainInfo":
