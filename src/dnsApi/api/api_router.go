@@ -19,11 +19,11 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 
 	switch req.Method {
 	case "initialize":
-		res = handle_Initialize(w, r, req)
+		res = handle_Init(w, r, req)
 	case "lookup":
-		res = handle_Lookup(w, r, req)
+		res = handle_DNSLookup(w, r, req)
 	case "list":
-		res = handle_List(w, r, req)
+		res = handle_GetDomainList(w, r, req)
 	case "getDomainInfo":
 		res = handle_GetDomainInfo(w, r, req)
 	case "getAllDomains":
