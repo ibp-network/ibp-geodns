@@ -1,6 +1,6 @@
 # Communication - Pub Sub
 
-The pubsub communications are provided by NATS and the library located under common/signal/
+The pubsub communications are provided by NATS and the library located under src/common/signal/
 
 ### Client Configuration:
 
