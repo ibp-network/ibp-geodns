@@ -18,7 +18,7 @@ var version = "0.2.0"
 
 func main() {
 	// Initialize the logging level
-	log.SetLogLevel(log.Debug)
+	log.SetLogLevel(log.Warn)
 	log.Log(log.Info, "IBP-GeoDNS v%s starting...", version)
 
 	// Define a command-line flag for the config file path

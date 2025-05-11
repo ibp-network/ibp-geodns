@@ -64,7 +64,7 @@ func handle_DNSQuery(req Request) Response {
 		for _, uniqueDomain := range uniqueDomains {
 			if domain == uniqueDomain {
 				if req.Parameters.QType == "A" || req.Parameters.QType == "ANY" {
-					log.Log(log.Info, "DNSLookup: No records found for domain %s, returning default result", domain)
+					log.Log(log.Warn, "DNSLookup: No records found for domain %s, returning default result", domain)
 					records = append(records, cfg.DNSRecord{
 						DomainID: id,
 						QName:    domain,

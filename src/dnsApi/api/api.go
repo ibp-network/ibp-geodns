@@ -74,7 +74,7 @@ func Listener() {
 	dnsApi := http.NewServeMux()
 	dnsApi.HandleFunc("/dns", dnsApiRouter)
 
-	log.Log(log.Info, "Starting DNS API server on %s:%s",
+	log.Log(log.Debug, "Starting DNS API server on %s:%s",
 		c.Local.DnsApi.ListenAddress,
 		c.Local.DnsApi.ListenPort,
 	)

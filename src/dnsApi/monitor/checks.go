@@ -88,7 +88,7 @@ func SiteCheckWrapper(check cfg.Check, checkFunc CheckSiteFunc, member cfg.Membe
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Log(log.Debug, "Check %s for member %s crashed: %v", check.Name, member.Details.Name, r)
+				log.Log(log.Error, "Check %s for member %s crashed: %v", check.Name, member.Details.Name, r)
 				go UpdateSiteResultLocal(check, member, false, "Check crashed", map[string]interface{}{})
 				close(done)
 			}
@@ -207,7 +207,7 @@ func DomainCheckWrapper(check cfg.Check, checkFunc CheckDomainFunc, domain strin
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Log(log.Debug, "Check %s for member %s crashed: %v", check.Name, member.Details.Name, r)
+				log.Log(log.Error, "Check %s for member %s crashed: %v", check.Name, member.Details.Name, r)
 				go UpdateDomainResultLocal(check, domain, service, member, false, "Check crashed", map[string]interface{}{})
 				close(done)
 			}
@@ -310,7 +310,7 @@ func EndpointCheckWrapper(check cfg.Check, checkFunc CheckEndpointFunc, endpoint
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Log(log.Debug, "Check %s for member %s crashed: %v", check.Name, member.Details.Name, r)
+				log.Log(log.Error, "Check %s for member %s crashed: %v", check.Name, member.Details.Name, r)
 				go UpdateEndpointResultLocal(check, member, service, u.Domain, endpoint, false, "Check crashed", map[string]interface{}{})
 				close(done)
 			}
