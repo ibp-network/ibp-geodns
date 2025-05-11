@@ -5,7 +5,7 @@ import (
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	sig "ibp-geodns/src/common/signal"
+	sig "ibp-geodns/src/common/signal/nats"
 	"sync"
 	"time"
 )

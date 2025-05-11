@@ -4,14 +4,12 @@ import (
 	"encoding/json"
 	log "ibp-geodns/src/common/logging"
 
-	"ibp-geodns/src/common/signal/types"
-
 	"github.com/nats-io/nats.go"
 )
 
 // handleFinalizeMessage: Applies the final decision.
-func handleFinalizeMessage(m *nats.Msg, state types.NodeState) {
-	var fm types.FinalizeMessage
+func handleFinalizeMessage(m *nats.Msg, state NodeState) {
+	var fm FinalizeMessage
 	if err := json.Unmarshal(m.Data, &fm); err != nil {
 		log.Log(log.Error, "Failed to unmarshal finalize message: %v", err)
 		return

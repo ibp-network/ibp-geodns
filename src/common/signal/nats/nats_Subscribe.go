@@ -1,16 +1,14 @@
 package nats
 
 import (
-	"ibp-geodns/src/common/signal/types"
-
 	"github.com/nats-io/nats.go"
 )
 
-func Subscribe(state types.NodeState) error {
+func Subscribe(state NodeState) error {
 	var sub *nats.Subscription
 	var err error
 
-	sub, err = nc.Subscribe(state.SubjectPropose, handlers.handleProposedMessage)
+	sub, err = nc.Subscribe(state.SubjectPropose, handleProposalMessage)
 	if err != nil {
 		return err
 	}

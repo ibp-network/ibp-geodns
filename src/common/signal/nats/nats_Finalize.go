@@ -2,12 +2,11 @@ package nats
 
 import (
 	"encoding/json"
-	"ibp-geodns/src/common/signal/types"
 	"time"
 )
 
-func Finalize(pid types.ProposalID, finalStatus bool, state types.NodeState) {
-	fm := types.FinalizeMessage{
+func Finalize(pid ProposalID, finalStatus bool, state NodeState) {
+	fm := FinalizeMessage{
 		ProposalID:  pid,
 		FinalStatus: finalStatus,
 		DecidedAt:   time.Now().UTC(),

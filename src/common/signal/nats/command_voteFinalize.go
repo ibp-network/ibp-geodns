@@ -2,12 +2,10 @@ package nats
 
 import (
 	log "ibp-geodns/src/common/logging"
-
-	"ibp-geodns/src/common/signal/types"
 )
 
 // finalizeDueToTimeout: Handles proposals that timed out.
-func finalizeVote(pid types.ProposalID, state types.NodeState) {
+func finalizeVote(pid ProposalID, state NodeState) {
 	state.Mu.Lock()
 	pt, exists := state.Proposals[pid]
 	if !exists {

@@ -4,8 +4,6 @@ import (
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
-
-	"ibp-geodns/src/common/signal/types"
 )
 
 // applyOfficialChanges updates the official results once a vote passes.
@@ -13,7 +11,7 @@ import (
 //
 // proposal: the Proposal that reached consensus
 // finalStatus: the boolean result of the vote (true=online, false=offline)
-func applyOfficialChanges(proposal types.Proposal) {
+func applyOfficialChanges(proposal Proposal) {
 	member, memberExists := findMemberByName(proposal.MemberName)
 	if !memberExists {
 		log.Log(log.Warn, "applyOfficialChanges: member %s not found", proposal.MemberName)

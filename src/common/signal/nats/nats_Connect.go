@@ -3,10 +3,10 @@ package nats
 import (
 	cfg "ibp-geodns/src/common/config"
 
-	"github.com/nats-io/nats.go"
+	nats "github.com/nats-io/nats.go"
 )
 
-func Connect(url string) error {
+func Connect(state NodeState) error {
 	c := cfg.GetConfig()
 	natsMu.Lock()
 	defer natsMu.Unlock()
@@ -16,6 +16,6 @@ func Connect(url string) error {
 	}
 
 	var err error
-	nc, err = nats.Connect(url, nats.UserInfo(c.Local.Signal.User, c.Local.Signal.Pass))
+	nc, err = nats.Connect(c.Local.Signal.Url, nats.UserInfo(c.Local.Signal.User, c.Local.Signal.Pass))
 	return err
 }

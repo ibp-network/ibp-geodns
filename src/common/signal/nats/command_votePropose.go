@@ -4,14 +4,12 @@ import (
 	"encoding/json"
 	log "ibp-geodns/src/common/logging"
 
-	"ibp-geodns/src/common/signal/types"
-
 	"github.com/nats-io/nats.go"
 )
 
 // handleVoteMessage: Processes votes and may finalize early.
-func handleVoteMessage(m *nats.Msg, state types.NodeState) {
-	var vote types.Vote
+func handleVoteMessage(m *nats.Msg, state NodeState) {
+	var vote Vote
 	if err := json.Unmarshal(m.Data, &vote); err != nil {
 		log.Log(log.Error, "Failed to unmarshal vote message: %v", err)
 		return
