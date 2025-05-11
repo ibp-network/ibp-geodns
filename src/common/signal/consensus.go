@@ -38,13 +38,13 @@ func Init() {
 
 	err := ConnectNats(state.NatsUrl)
 	if err != nil {
-		log.Log(log.Debug, "Nats connection error: %+v", err)
+		log.Log(log.Fatal, "Nats connection error: %+v", err)
 		os.Exit(1)
 	}
 
 	err = subscribeSubjects()
 	if err != nil {
-		log.Log(log.Debug, "Nats subscription error: %+v", err)
+		log.Log(log.Fatal, "Nats subscription error: %+v", err)
 		os.Exit(1)
 	}
 
@@ -146,13 +146,13 @@ func applyOfficialChanges(proposal types.Proposal) {
 
 	switch proposal.CheckType {
 	case "site":
-		log.Log(log.Debug, "Updating official result from finalized proposal check: %s member: %s status: %t", check.Name, member.Details.Name, proposal.ProposedStatus)
+		log.Log(log.Info, "Updating official result from finalized proposal check: %s member: %s status: %t", check.Name, member.Details.Name, proposal.ProposedStatus)
 		go dat.UpdateOfficialSiteResult(check, member, proposal.ProposedStatus, proposal.ErrorText, proposal.Data)
 	case "domain":
-		log.Log(log.Debug, "Updating official result from finalized proposal check: %s member: %s status: %t domain: %s", check.Name, member.Details.Name, proposal.ProposedStatus, proposal.DomainName)
+		log.Log(log.Info, "Updating official result from finalized proposal check: %s member: %s status: %t domain: %s", check.Name, member.Details.Name, proposal.ProposedStatus, proposal.DomainName)
 		go dat.UpdateOfficialDomainResult(check, member, service, proposal.DomainName, proposal.ProposedStatus, proposal.ErrorText, proposal.Data)
 	case "endpoint":
-		log.Log(log.Debug, "Updating official result from finalized proposal check: %s member: %s status: %t domain: %s endpoint: %s", check.Name, member.Details.Name, proposal.ProposedStatus, proposal.DomainName, proposal.Endpoint)
+		log.Log(log.Info, "Updating official result from finalized proposal check: %s member: %s status: %t domain: %s endpoint: %s", check.Name, member.Details.Name, proposal.ProposedStatus, proposal.DomainName, proposal.Endpoint)
 		go dat.UpdateOfficialEndpointResult(check, member, service, proposal.DomainName, proposal.Endpoint, proposal.ProposedStatus, proposal.ErrorText, proposal.Data)
 	}
 }

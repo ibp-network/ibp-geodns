@@ -51,7 +51,7 @@ func handleProposeMessage(m *nats.Msg) {
 		}
 
 		// Log that the node is voting
-		//log.Log(log.Debug, "Voting on proposal: ID=%s, Agree=%t, NodeID=%s", prop.ID, v.Agree, state.NodeID)
+		log.Log(log.Debug, "Voting on proposal: ID=%s, Agree=%t, NodeID=%s", prop.ID, v.Agree, state.NodeID)
 
 		data, _ := json.Marshal(v)
 		go publishMessage(state.SubjectVote, data)
@@ -67,7 +67,7 @@ func handleVoteMessage(m *nats.Msg) {
 	}
 
 	// Log that a vote was received
-	//log.Log(log.Debug, "Received vote: ProposalID=%s, NodeID=%s, Agree=%t", vote.ProposalID, vote.NodeID, vote.Agree)
+	log.Log(log.Debug, "Received vote: ProposalID=%s, NodeID=%s, Agree=%t", vote.ProposalID, vote.NodeID, vote.Agree)
 
 	state.Mu.Lock()
 	pt, exists := state.Proposals[vote.ProposalID]
@@ -181,7 +181,7 @@ func finalizeVote(pid types.ProposalID) {
 	state.Mu.Unlock()
 
 	// Log the timeout and final status
-	//log.Log(log.Debug, "Proposal timeout: ProposalID=%s, FinalStatus=%t", pid, finalStatus)
+	log.Log(log.Debug, "Proposal timeout: ProposalID=%s, FinalStatus=%t", pid, finalStatus)
 	if finalStatus {
 		// Do stuff if a proposal for official change is passed
 		go applyOfficialChanges(pt.Proposal)
