@@ -16,7 +16,7 @@ var (
 
 // Init initializes the DNS server with the provided configuration.
 func Init() {
-	log.Log(log.Debug, "DNS Package initializing...")
+	log.Log(log.Info, "DNS Package initializing...")
 
 	// Load staticEntries
 	StaticDNSEntries()
@@ -54,7 +54,7 @@ func configTimer() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		log.Log(log.Debug, "Updating DNS configs")
+		log.Log(log.Info, "Updating DNS configs")
 		// Update Static Entries
 		go StaticDNSEntries()
 		// Update topLevelDomains
@@ -65,7 +65,7 @@ func configTimer() {
 }
 
 func Listener() {
-	log.Log(log.Debug, "API Package initializing...")
+	log.Log(log.Info, "API Package initializing...")
 
 	// Load configuration
 	c := cfg.GetConfig()
@@ -74,7 +74,7 @@ func Listener() {
 	dnsApi := http.NewServeMux()
 	dnsApi.HandleFunc("/dns", dnsApiRouter)
 
-	log.Log(log.Debug, "Starting DNS API server on %s:%s",
+	log.Log(log.Info, "Starting DNS API server on %s:%s",
 		c.Local.DnsApi.ListenAddress,
 		c.Local.DnsApi.ListenPort,
 	)

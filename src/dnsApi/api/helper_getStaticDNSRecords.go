@@ -124,7 +124,7 @@ func ProcessANY(params Parameters, id int, domain string) []cfg.DNSRecord {
 func fetchACMEChallenge(url string) string {
 	resp, err := http.Get(url)
 	if err != nil {
-		log.Log(log.Warn, "DNSLookup: failed to fetch ACME challenge from %s: %+v", url, err)
+		log.Log(log.Error, "DNSLookup: failed to fetch ACME challenge from %s: %+v", url, err)
 		return ""
 	}
 	defer resp.Body.Close()

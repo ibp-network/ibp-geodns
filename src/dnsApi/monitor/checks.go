@@ -32,7 +32,7 @@ type CheckSiteFunc func(check cfg.Check, member cfg.Member)
 
 func RegisterSiteCheck(name string, checkFunc CheckSiteFunc) {
 	CheckRegistry.Site[name] = checkFunc
-	log.Log(log.Debug, "Registered site check '%s'", name)
+	log.Log(log.Info, "Registered site check '%s'", name)
 }
 
 func GetSiteCheck(name string) (CheckSiteFunc, bool) {
@@ -51,7 +51,7 @@ func InitSiteCheck() {
 		if check.CheckType == "site" {
 			checkFunc, exists := GetSiteCheck(check.Name)
 			if exists {
-				log.Log(log.Debug, "Site check %s detected. Timer Activated.", check.Name)
+				log.Log(log.Info, "Site check %s detected. Timer Activated.", check.Name)
 				go SiteCheckTimer(check, checkFunc)
 			}
 		}
@@ -129,7 +129,7 @@ type CheckDomainFunc func(check cfg.Check, domain string, service cfg.Service, m
 
 func RegisterDomainCheck(name string, checkFunc CheckDomainFunc) {
 	CheckRegistry.Domain[name] = checkFunc
-	log.Log(log.Debug, "Registered domain check '%s'", name)
+	log.Log(log.Info, "Registered domain check '%s'", name)
 }
 
 func GetDomainCheck(name string) (CheckDomainFunc, bool) {
@@ -148,7 +148,7 @@ func InitDomainCheck() {
 		if check.CheckType == "domain" {
 			checkFunc, exists := GetDomainCheck(check.Name)
 			if exists {
-				log.Log(log.Debug, "Domain check %s detected. Timer Activated.", check.Name)
+				log.Log(log.Info, "Domain check %s detected. Timer Activated.", check.Name)
 				go DomainCheckTimer(check, checkFunc)
 			}
 		}
@@ -242,7 +242,7 @@ type CheckEndpointFunc func(check cfg.Check, endpoint string, service cfg.Servic
 
 func RegisterEndpointCheck(name string, checkFunc CheckEndpointFunc) {
 	CheckRegistry.Endpoint[name] = checkFunc
-	log.Log(log.Debug, "Registered endpoint check '%s'", name)
+	log.Log(log.Info, "Registered endpoint check '%s'", name)
 }
 
 func GetEndpointCheck(name string) (CheckEndpointFunc, bool) {
@@ -257,7 +257,7 @@ func InitEndpointCheck() {
 		if check.CheckType == "endpoint" {
 			checkFunc, exists := GetEndpointCheck(check.Name)
 			if exists {
-				log.Log(log.Debug, "Endpoint check %s detected. Timer Activated.", check.Name)
+				log.Log(log.Info, "Endpoint check %s detected. Timer Activated.", check.Name)
 				go EndpointCheckTimer(check, checkFunc)
 			}
 		}
