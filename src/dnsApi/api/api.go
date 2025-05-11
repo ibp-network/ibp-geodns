@@ -1,16 +1,19 @@
 package api
 
 import (
+
+	"net/http"
+	"time"
+
 	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
-	"ibp-geodns/src/mgmtApi/api/types"
-	"time"
+
 )
 
 var (
-	ServiceRecords ServiceMap
-	StaticRecords  StaticMap
-	TLDRecords     TLDMap
+	ServiceRecords *ServiceMap
+	StaticRecords  *StaticMap
+	TLDRecords     *TLDMap
 )
 
 // Init initializes the DNS server with the provided configuration.
@@ -67,7 +70,7 @@ func Listener() {
 	log.Log(log.Debug, "API Package initializing...")
 
 	// Load configuration
-	c := config.GetConfig()
+	c := cfg.GetConfig()
 
 	// DNS API for PowerDNS (unchanged)
 	dnsApi := http.NewServeMux()

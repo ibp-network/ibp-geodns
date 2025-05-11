@@ -5,7 +5,7 @@ import (
 )
 
 // dnsQuery_GetDomainKeys retrieves DNSKEY records for a given domain.
-func DnsQuery_GetDomainKeys(w http.ResponseWriter, r *http.Request, req Request) Response {
+func handle_GetDomainKeys(w http.ResponseWriter, r *http.Request, req Request) Response {
 	for _, domain := range TLDRecords.records {
 		if req.Parameters.QName == domain {
 			keys := []struct {

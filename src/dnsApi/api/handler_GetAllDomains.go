@@ -1,14 +1,13 @@
 package api
 
 import (
-	"ibp-geodns/src/mgmtApi/api/types"
 	"net/http"
 	"time"
 )
 
-func DnsQuery_GetAllDomains(w http.ResponseWriter, r *http.Request, req Request) Response {
+func handle_GetAllDomains(w http.ResponseWriter, r *http.Request, req Request) Response {
 	currentUnixTimestamp := int(time.Now().UTC().Unix())
-	records := []types.DomainInfo{}
+	records := []DomainInfo{}
 	for key, domain := range TLDRecords.records {
 		Masters := []string{}
 

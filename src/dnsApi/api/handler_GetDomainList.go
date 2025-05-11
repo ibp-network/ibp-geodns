@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-func DnsQuery_List(w http.ResponseWriter, r *http.Request, req Request) Response {
+func handle_List(w http.ResponseWriter, r *http.Request, req Request) Response {
 	var records []cfg.DNSRecord
 	var id int
 

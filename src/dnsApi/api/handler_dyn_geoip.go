@@ -8,7 +8,6 @@ import (
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 	max "ibp-geodns/src/common/maxmind"
-	"ibp-geodns/src/mgmtApi/api/types"
 
 	"golang.org/x/net/publicsuffix"
 )
@@ -17,7 +16,7 @@ import (
 func DynamicDNSEntries() {
 	c := cfg.GetConfig()
 
-	newDynamicServices := make(map[string]types.ServiceConfigs)
+	newDynamicServices := make(map[string]ServiceConfigs)
 
 	// Populate service-domain map from services
 	for _, service := range c.Services {
