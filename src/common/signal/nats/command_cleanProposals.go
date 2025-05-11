@@ -1,4 +1,4 @@
-package helpers
+package nats
 
 import (
 	types "ibp-geodns/src/common/signal/types"
