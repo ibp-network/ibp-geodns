@@ -1,23 +1,24 @@
-package signal
+package helpers
 
 import (
+	types "ibp-geodns/src/common/signal/types"
 	"time"
 )
 
 // Timer to run clean up task for old proposals every 5 seconds.
-func StartProposalCleanup() {
+func StartProposalCleanup(state types.NodeState) {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
 		for range ticker.C {
-			CleanOldProposals()
+			CleanOldProposals(state)
 		}
 	}()
 }
 
 // CleanOldProposals removes proposals from state.Proposals that are older than 10 seconds.
-func CleanOldProposals() {
+func CleanOldProposals(state types.NodeState) {
 	state.Mu.Lock()
 	defer state.Mu.Unlock()
 

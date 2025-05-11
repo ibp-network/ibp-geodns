@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
+	types "ibp-geodns/src/common/signal/types"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -11,7 +12,7 @@ import (
 
 // handleProposeMessage: Receives a proposal message and processes it.
 func handleProposeMessage(m *nats.Msg) {
-	var prop Proposal
+	var prop types.Proposal
 	if err := json.Unmarshal(m.Data, &prop); err != nil {
 		log.Log(log.Error, "Failed to unmarshal proposal message: %v", err)
 		return

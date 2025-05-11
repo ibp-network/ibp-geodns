@@ -9,6 +9,9 @@ import (
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 
+	"ibp-geodns/src/common/signal/helpers"
+	"ibp-geodns/src/common/signal/types"
+
 	"github.com/google/uuid"
 )
 
@@ -18,12 +21,12 @@ func Init() {
 	con := c.Local.Signal
 
 	state.NodeID = con.NodeID
-	state.ThisNode = NodeInfo{
+	state.ThisNode = types.NodeInfo{
 		NodeID: con.NodeID,
 	}
 
-	state.Proposals = make(map[ProposalID]*ProposalTracking)
-	state.ClusterNodes = make(map[string]NodeInfo)
+	state.Proposals = make(map[types.ProposalID]*types.ProposalTracking)
+	state.ClusterNodes = make(map[string]types.NodeInfo)
 	state.ClusterNodes[state.NodeID] = state.ThisNode
 
 	state.SubjectPropose = "consensus.propose"
@@ -45,16 +48,16 @@ func Init() {
 		os.Exit(1)
 	}
 
-	go StartProposalCleanup()
+	go helpers.StartProposalCleanup(state)
 }
 
 func Shutdown() {
 	CloseNats()
 }
 
-func Propose(checkType string, checkName string, memberName string, domainName string, endpoint string, proposedStatus bool, errorText string, dataMap map[string]interface{}) (ProposalID, error) {
-	pid := ProposalID(generateProposalID())
-	prop := Proposal{
+func Propose(checkType string, checkName string, memberName string, domainName string, endpoint string, proposedStatus bool, errorText string, dataMap map[string]interface{}) (types.ProposalID, error) {
+	pid := types.ProposalID(generateProposalID())
+	prop := types.Proposal{
 		ID:             pid,
 		CheckType:      checkType,
 		CheckName:      checkName,
@@ -67,7 +70,7 @@ func Propose(checkType string, checkName string, memberName string, domainName s
 		Timestamp:      time.Now().UTC(),
 	}
 
-	pt := &ProposalTracking{
+	pt := &types.ProposalTracking{
 		Proposal: prop,
 		Votes:    make(map[string]bool),
 	}
@@ -118,7 +121,7 @@ func ProposeCheckStatus(checkType, checkName, memberName, domainName, endpoint s
 //
 // proposal: the Proposal that reached consensus
 // finalStatus: the boolean result of the vote (true=online, false=offline)
-func applyOfficialChanges(proposal Proposal) {
+func applyOfficialChanges(proposal types.Proposal) {
 	member, memberExists := findMemberByName(proposal.MemberName)
 	if !memberExists {
 		log.Log(log.Warn, "applyOfficialChanges: member %s not found", proposal.MemberName)

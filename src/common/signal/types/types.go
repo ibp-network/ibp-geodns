@@ -1,4 +1,4 @@
-package signal
+package types
 
 import (
 	"sync"
@@ -63,10 +63,6 @@ type NodeState struct {
 	NatsUrl         string
 	JoinUrl         string
 }
-
-var (
-	state NodeState
-)
 
 type ProposalCaches struct {
 	Cache map[string]bool

@@ -3,6 +3,7 @@ package signal
 import (
 	"encoding/json"
 	cfg "ibp-geodns/src/common/config"
+	types "ibp-geodns/src/common/signal/types"
 	"sync"
 	"time"
 
@@ -71,8 +72,8 @@ func publishMessage(subject string, data []byte) error {
 	return nc.Publish(subject, data)
 }
 
-func publishFinalize(pid ProposalID, finalStatus bool) {
-	fm := FinalizeMessage{
+func publishFinalize(pid types.ProposalID, finalStatus bool) {
+	fm := types.FinalizeMessage{
 		ProposalID:  pid,
 		FinalStatus: finalStatus,
 		DecidedAt:   time.Now().UTC(),
