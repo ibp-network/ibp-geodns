@@ -37,17 +37,17 @@ func Init() {
 	state.ProposalTimeout = 4 * time.Second
 	state.NatsUrl = con.Url
 
-	err := Connect(state)
+	err := Connect()
 	if err != nil {
 		log.Log(log.Fatal, "Nats connection error: %+v", err)
 		os.Exit(1)
 	}
 
-	err = Subscribe(state)
+	err = Subscribe()
 	if err != nil {
 		log.Log(log.Fatal, "Nats subscription error: %+v", err)
 		os.Exit(1)
 	}
 
-	go StartProposalCleanup(state)
+	go StartGarbageCollection()
 }

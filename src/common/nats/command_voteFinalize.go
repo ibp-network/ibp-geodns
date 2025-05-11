@@ -5,7 +5,7 @@ import (
 )
 
 // finalizeDueToTimeout: Handles proposals that timed out.
-func finalizeVote(pid ProposalID, state NodeState) {
+func finalizeVote(pid ProposalID) {
 	state.Mu.Lock()
 	pt, exists := state.Proposals[pid]
 	if !exists {
@@ -49,6 +49,6 @@ func finalizeVote(pid ProposalID, state NodeState) {
 	if finalStatus {
 		// Do stuff if a proposal for official change is passed
 		go applyOfficialChanges(pt.Proposal)
-		go Finalize(pid, finalStatus, state)
+		go Finalize(pid, finalStatus)
 	}
 }

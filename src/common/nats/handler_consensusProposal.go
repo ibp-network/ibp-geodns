@@ -9,7 +9,7 @@ import (
 )
 
 // handleProposeMessage: Receives a proposal message and processes it.
-func handleProposals(m *nats.Msg, state NodeState) {
+func handleProposal(m *nats.Msg) {
 	var prop Proposal
 	if err := json.Unmarshal(m.Data, &prop); err != nil {
 		log.Log(log.Error, "Failed to unmarshal proposal message: %v", err)
@@ -29,7 +29,7 @@ func handleProposals(m *nats.Msg, state NodeState) {
 
 		state.Proposals[prop.ID] = pt
 		pt.Timer = time.AfterFunc(state.ProposalTimeout, func() {
-			finalizeVote(prop.ID, state)
+			finalizeVote(prop.ID)
 		})
 	}
 	state.Mu.Unlock()

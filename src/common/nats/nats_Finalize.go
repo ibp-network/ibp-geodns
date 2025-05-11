@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func Finalize(pid ProposalID, finalStatus bool, state NodeState) {
+func Finalize(pid ProposalID, finalStatus bool) {
 	fm := FinalizeMessage{
 		ProposalID:  pid,
 		FinalStatus: finalStatus,

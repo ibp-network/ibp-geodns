@@ -6,7 +6,7 @@ import (
 	nats "github.com/nats-io/nats.go"
 )
 
-func Connect(state NodeState) error {
+func Connect() error {
 	c := cfg.GetConfig()
 	natsMu.Lock()
 	defer natsMu.Unlock()

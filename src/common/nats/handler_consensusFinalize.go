@@ -8,7 +8,7 @@ import (
 )
 
 // handleFinalizeMessage: Applies the final decision.
-func handleFinalizeMessage(m *nats.Msg, state NodeState) {
+func handleFinalize(m *nats.Msg) {
 	var fm FinalizeMessage
 	if err := json.Unmarshal(m.Data, &fm); err != nil {
 		log.Log(log.Error, "Failed to unmarshal finalize message: %v", err)
@@ -23,6 +23,6 @@ func handleFinalizeMessage(m *nats.Msg, state NodeState) {
 		state.Mu.Lock()
 		state.Proposals[pt.Proposal.ID].Finalized = true
 		state.Mu.Unlock()
-		go finalizeVote(pt.Proposal.ID, state)
+		go finalizeVote(pt.Proposal.ID)
 	}
 }
