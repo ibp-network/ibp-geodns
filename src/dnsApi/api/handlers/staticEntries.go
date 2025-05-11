@@ -1,9 +1,10 @@
-package api
+package handlers
 
 import (
 	"fmt"
 	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
+	types "ibp-geodns/src/dnsApi/api/types"
 	"io"
 	"net/http"
 	"strings"
@@ -19,7 +20,7 @@ func StaticDNSEntries() {
 	StaticRecords.records = c.StaticDNS
 }
 
-func ProcessSOA(params Parameters, id int, domain string) []cfg.DNSRecord {
+func ProcessSOA(params types.Parameters, id int, domain string) []cfg.DNSRecord {
 	var records []cfg.DNSRecord
 
 	tld := extractTopLevelDomain(domain)
@@ -53,7 +54,7 @@ func ProcessSOA(params Parameters, id int, domain string) []cfg.DNSRecord {
 	return records
 }
 
-func ProcessACME(param Parameters, id int, domain string) []cfg.DNSRecord {
+func ProcessACME(param types.Parameters, id int, domain string) []cfg.DNSRecord {
 	var records []cfg.DNSRecord
 
 	StaticRecords.mu.RLock()
@@ -84,7 +85,7 @@ func ProcessACME(param Parameters, id int, domain string) []cfg.DNSRecord {
 	return records
 }
 
-func ProcessNS(params Parameters, id int, domain string) []cfg.DNSRecord {
+func ProcessNS(params types.Parameters, id int, domain string) []cfg.DNSRecord {
 	var records []cfg.DNSRecord
 
 	StaticRecords.mu.RLock()
@@ -102,7 +103,7 @@ func ProcessNS(params Parameters, id int, domain string) []cfg.DNSRecord {
 	return records
 }
 
-func ProcessANY(params Parameters, id int, domain string) []cfg.DNSRecord {
+func ProcessANY(params types.Parameters, id int, domain string) []cfg.DNSRecord {
 	var records []cfg.DNSRecord
 
 	StaticRecords.mu.RLock()

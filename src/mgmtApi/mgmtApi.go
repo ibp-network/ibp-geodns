@@ -1,42 +1,53 @@
 package main
 
 import (
-	"net/http"
+	"flag"
+	"os"
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
+	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
-	api "ibp-geodns/src/mgmtApi/api"
+	max "ibp-geodns/src/common/maxmind"
+	sig "ibp-geodns/src/common/signal"
+	api "ibp-geodns/src/dnsApi/api"
 )
+
+var version = "0.2.0"
 
 // main starts your standalone mgmt-api server.
 func main() {
-	// Initialize config (adjust path if needed)
-	cfgPath := "D:\\Sync\\Projects\\stake.plus\\code\\ibp-geodns-v2\\config\\config.json"
-	cfg.Init(cfgPath)
+	// Initialize the logging level
+	log.SetLogLevel(log.Debug)
+	log.Log(log.Info, "IBP-GeoDNS v%s starting...", version)
 
-	// Optionally set log level
-	log.SetLogLevel(log.Info)
+	// Define a command-line flag for the config file path
+	cfgFile := flag.String("config", "config.json", "Path to the configuration file")
+	flag.Parse()
 
-	// Initialize mgmt api
-	api.Init()
-
-	// Build routes
-	mux := http.NewServeMux()
-
-	// Old endpoints, now served by mgmt-api
-	mux.HandleFunc("/api/billing", api.HandleApiQuery)
-	mux.HandleFunc("/api/member", api.HandleApiQuery)
-	mux.HandleFunc("/api/status", api.HandleApiQuery)
-	mux.HandleFunc("/api/usage", api.HandleApiQuery)
-
-	// Grab host/port from config
-	addr := cfg.GetConfig().Local.MgmtApi.ListenAddress + ":" + cfg.GetConfig().Local.MgmtApi.ListenPort
-
-	// Run server
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Log(log.Fatal, "Error starting mgmt-api: %v", err)
+	// Check if the provided config file exists
+	if _, err := os.Stat(*cfgFile); os.IsNotExist(err) {
+		log.Log(log.Fatal, "Configuration file not found: %s", *cfgFile)
+		os.Exit(1)
 	}
+
+	// Initialize Config file, memory pointers
+	cfg.Init(*cfgFile)
+
+	// Update maxmind, initialize geoip database
+	max.Init()
+
+	// Start data helper, Load caches
+	dat.Init()
+
+	// Sleep while we load caches
+	time.Sleep(2 * time.Second)
+
+	// Launch NATS Internode Communication
+	sig.Init()
+
+	// Launch API Listener
+	api.Init()
 
 	go loop()
 }

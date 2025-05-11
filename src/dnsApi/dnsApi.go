@@ -10,7 +10,7 @@ import (
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
 	sig "ibp-geodns/src/common/signal"
-	api "ibp-geodns/src/dnsApi/api"
+	"ibp-geodns/src/dnsApi/api"
 	mon "ibp-geodns/src/dnsApi/rpcMonitor"
 )
 
@@ -49,7 +49,7 @@ func main() {
 	// Launch RPC Monitor
 	mon.Init()
 
-	// Launch DNS / PDNS API
+	// Launch API Listener
 	api.Init()
 
 	// Infinite loop to keep things operational

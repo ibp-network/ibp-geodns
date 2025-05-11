@@ -1,4 +1,4 @@
-package api
+package handlers
 
 import (
 	"math"
@@ -8,6 +8,7 @@ import (
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 	max "ibp-geodns/src/common/maxmind"
+	"ibp-geodns/src/mgmtApi/api/types"
 
 	"golang.org/x/net/publicsuffix"
 )
@@ -16,7 +17,7 @@ import (
 func DynamicDNSEntries() {
 	c := cfg.GetConfig()
 
-	newDynamicServices := make(map[string]ServiceConfigs)
+	newDynamicServices := make(map[string]types.ServiceConfigs)
 
 	// Populate service-domain map from services
 	for _, service := range c.Services {
@@ -25,7 +26,7 @@ func DynamicDNSEntries() {
 			for _, rpcUrl := range provider.RpcUrls {
 				url := max.ParseUrl(rpcUrl)
 				if _, exists := newDynamicServices[url.Domain]; !exists {
-					newDynamicServices[url.Domain] = ServiceConfigs{
+					newDynamicServices[url.Domain] = types.ServiceConfigs{
 						Name:          svcConfig.Name,
 						Active:        svcConfig.Active,
 						LevelRequired: svcConfig.LevelRequired,
@@ -73,7 +74,7 @@ func DynamicDNSEntries() {
 	ServiceRecords.Services = newDynamicServices
 }
 
-func ProcessDynamic(params Parameters, id int, domain string) []cfg.DNSRecord {
+func ProcessDynamic(params types.Parameters, id int, domain string) []cfg.DNSRecord {
 	var records []cfg.DNSRecord
 	var closestMember cfg.Member
 	minDistance := math.MaxFloat64

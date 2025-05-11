@@ -5,10 +5,11 @@ import (
 
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
+	types "ibp-geodns/src/mgmtApi/api/types"
 )
 
 // ApiQuery_Status handles /api/status requests
-func ApiQuery_Status(w http.ResponseWriter, r *http.Request, req ApiRequest) ApiResponse {
+func ApiQuery_Status(w http.ResponseWriter, r *http.Request, req types.Request) types.Response {
 	switch req.Method {
 	case "byMember":
 		return apiQuery_StatusByMember()
@@ -17,29 +18,29 @@ func ApiQuery_Status(w http.ResponseWriter, r *http.Request, req ApiRequest) Api
 	case "byService":
 		return apiQuery_StatusByService()
 	default:
-		return ApiResponse{Error: "Invalid status request"}
+		return types.Response{Error: "Invalid status request"}
 	}
 }
 
 // Example byMember approach: returns a structure grouped by each member
-func apiQuery_StatusByMember() ApiResponse {
+func apiQuery_StatusByMember() types.Response {
 	c := cfg.GetConfig()
 	sites, domains, endpoints := dat.GetOfficialResults()
 
-	byMember := make(map[string]map[string][]CheckResult)
+	byMember := make(map[string]map[string][]types.CheckResult)
 	// init for each known member
 	for memberName := range c.Members {
-		byMember[memberName] = make(map[string][]CheckResult)
+		byMember[memberName] = make(map[string][]types.CheckResult)
 	}
 
 	// Helper closure to attach a check result
 	addCheck := func(memberName, domainName, checkName string, status bool, errText string, dataMap map[string]interface{}) {
 		if _, ok := byMember[memberName][domainName]; !ok {
-			byMember[memberName][domainName] = []CheckResult{}
+			byMember[memberName][domainName] = []types.CheckResult{}
 		}
 		byMember[memberName][domainName] = append(
 			byMember[memberName][domainName],
-			CheckResult{CheckName: checkName, Status: status, ErrorText: errText, Data: dataMap},
+			types.CheckResult{CheckName: checkName, Status: status, ErrorText: errText, Data: dataMap},
 		)
 	}
 
@@ -80,18 +81,18 @@ func apiQuery_StatusByMember() ApiResponse {
 		}
 	}
 
-	return ApiResponse{Result: byMember}
+	return types.Response{Result: byMember}
 }
 
 // Similarly, define domain or service groupings if you want:
-func apiQuery_StatusByDomain() ApiResponse {
+func apiQuery_StatusByDomain() types.Response {
 	// c := config.GetConfig() ...
 	// gather OfficialResults, group them by domain
-	return ApiResponse{Result: "TODO: status byDomain not yet implemented"}
+	return types.Response{Result: "TODO: status byDomain not yet implemented"}
 }
 
-func apiQuery_StatusByService() ApiResponse {
+func apiQuery_StatusByService() types.Response {
 	// c := config.GetConfig() ...
 	// gather OfficialResults, group them by service
-	return ApiResponse{Result: "TODO: status byService not yet implemented"}
+	return types.Response{Result: "TODO: status byService not yet implemented"}
 }

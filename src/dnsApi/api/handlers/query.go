@@ -1,19 +1,20 @@
-package api
+package handlers
 
 import (
 	cfg "ibp-geodns/src/common/config"
+	"ibp-geodns/src/mgmtApi/api/types"
 	"net/http"
 	"time"
 )
 
 // Handle initialization call (not necessary for us to do anything)
-func DnsQuery_Initialize(w http.ResponseWriter, r *http.Request, req Request) Response {
-	return Response{Result: true}
+func DnsQuery_Initialize(w http.ResponseWriter, r *http.Request, req types.Request) types.Response {
+	return types.Response{Result: true}
 }
 
-func DnsQuery_GetAllDomains(w http.ResponseWriter, r *http.Request, req Request) Response {
+func DnsQuery_GetAllDomains(w http.ResponseWriter, r *http.Request, req types.Request) types.Response {
 	currentUnixTimestamp := int(time.Now().UTC().Unix())
-	records := []DomainInfo{}
+	records := []types.DomainInfo{}
 	for key, domain := range TLDRecords.records {
 		Masters := []string{}
 
@@ -33,7 +34,7 @@ func DnsQuery_GetAllDomains(w http.ResponseWriter, r *http.Request, req Request)
 			}
 		}
 
-		records = append(records, DomainInfo{
+		records = append(records, types.DomainInfo{
 			DomainID:       key,
 			Zone:           domain,
 			Masters:        Masters,
@@ -44,11 +45,11 @@ func DnsQuery_GetAllDomains(w http.ResponseWriter, r *http.Request, req Request)
 		})
 	}
 
-	return Response{Result: records}
+	return types.Response{Result: records}
 }
 
-func DnsQuery_GetDomainInfo(w http.ResponseWriter, r *http.Request, req Request) Response {
-	var records []DomainInfo
+func DnsQuery_GetDomainInfo(w http.ResponseWriter, r *http.Request, req types.Request) types.Response {
+	var records []types.DomainInfo
 	currentUnixTimestamp := int(time.Now().UTC().Unix())
 
 	for key, domain := range TLDRecords.records {
@@ -72,7 +73,7 @@ func DnsQuery_GetDomainInfo(w http.ResponseWriter, r *http.Request, req Request)
 				}
 			}
 
-			records = append(records, DomainInfo{
+			records = append(records, types.DomainInfo{
 				DomainID:       key,
 				Zone:           domain,
 				Masters:        Masters,
@@ -84,11 +85,11 @@ func DnsQuery_GetDomainInfo(w http.ResponseWriter, r *http.Request, req Request)
 		}
 	}
 
-	return Response{Result: records}
+	return types.Response{Result: records}
 }
 
 // dnsQuery_GetDomainKeys retrieves DNSKEY records for a given domain.
-func DnsQuery_GetDomainKeys(w http.ResponseWriter, r *http.Request, req Request) Response {
+func DnsQuery_GetDomainKeys(w http.ResponseWriter, r *http.Request, req types.Request) types.Response {
 	for _, domain := range TLDRecords.records {
 		if req.Parameters.QName == domain {
 			keys := []struct {
@@ -105,14 +106,14 @@ func DnsQuery_GetDomainKeys(w http.ResponseWriter, r *http.Request, req Request)
 				Content:   domain + " IN DNSKEY 257 3 13 Ts7EglQbnyZDVklFGoiAnbB/DGzlJC4RBft7/wouiSxgQ9OB7sXD9yOkhyjhs5BzaOFs0LivpUwQZnYFkafAYA==",
 			}}
 
-			return Response{Result: keys}
+			return types.Response{Result: keys}
 		}
 	}
 
-	return Response{Result: nil}
+	return types.Response{Result: nil}
 }
 
-func DnsQuery_List(w http.ResponseWriter, r *http.Request, req Request) Response {
+func DnsQuery_List(w http.ResponseWriter, r *http.Request, req types.Request) types.Response {
 	var records []cfg.DNSRecord
 	var id int
 
@@ -135,5 +136,5 @@ func DnsQuery_List(w http.ResponseWriter, r *http.Request, req Request) Response
 		}
 	}
 
-	return Response{Result: records}
+	return types.Response{Result: records}
 }
