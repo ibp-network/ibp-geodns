@@ -1,5 +1,6 @@
 {
     "System": {
+        "NodeType": "client",
         "WorkDir": "D:\\Sync\\Projects\\stake.plus\\code\\ibp-geodns-v2\\",
         "ConfigUrls": {
             "StaticDNSConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/geodns-static.json",
