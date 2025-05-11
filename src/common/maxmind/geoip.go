@@ -71,7 +71,7 @@ func loadLocalDatabases(baseDir string) error {
 			return fmt.Errorf("could not open city database %s: %w", cityPath, err)
 		}
 	} else {
-		log.Log(log.Warn, "CityLite.mmdb not found at %s", cityPath)
+		log.Log(log.Error, "CityLite.mmdb not found at %s", cityPath)
 	}
 
 	// Country
@@ -81,7 +81,7 @@ func loadLocalDatabases(baseDir string) error {
 			return fmt.Errorf("could not open country database %s: %w", countryPath, err)
 		}
 	} else {
-		log.Log(log.Warn, "CountryLite.mmdb not found at %s", countryPath)
+		log.Log(log.Error, "CountryLite.mmdb not found at %s", countryPath)
 	}
 
 	// ASN
@@ -91,7 +91,7 @@ func loadLocalDatabases(baseDir string) error {
 			return fmt.Errorf("could not open ASN database %s: %w", asnPath, err)
 		}
 	} else {
-		log.Log(log.Warn, "AsnLite.mmdb not found at %s", asnPath)
+		log.Log(log.Error, "AsnLite.mmdb not found at %s", asnPath)
 	}
 
 	return nil
@@ -143,7 +143,7 @@ func GetClientCoordinates(ipStr string) (float64, float64) {
 // GetCountryCode retrieves the ISO country code from the CityLite database
 func GetCountryCode(ipStr string) string {
 	if maxmindCity == nil {
-		log.Log(log.Warn, "CityLite DB is not loaded, cannot fetch country code.")
+		log.Log(log.Error, "CityLite DB is not loaded, cannot fetch country code.")
 		return ""
 	}
 
@@ -198,7 +198,7 @@ func Close() {
 func ParseUrl(rawURL string) URLParts {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		log.Log(log.Debug, "Error parsing URL %s", rawURL)
+		log.Log(log.Error, "Error parsing URL %s", rawURL)
 		return URLParts{}
 	}
 

@@ -23,7 +23,7 @@ func updateMaxmindDatabase() error {
 	accountID := c.Local.Maxmind.AccountID
 	licenseKey := c.Local.Maxmind.LicenseKey
 	if accountID == "" || licenseKey == "" {
-		log.Log(log.Warn, "MaxMind AccountID or LicenseKey is missing. Auto-update cannot proceed.")
+		log.Log(log.Fatal, "MaxMind AccountID or LicenseKey is missing. Auto-update cannot proceed.")
 		return nil
 	}
 
@@ -100,7 +100,7 @@ func checkAndDownloadOne(
 
 		// Step F) Move/rename that to e.g. CityLite.mmdb
 		if err := os.RemoveAll(localMmdbPath); err != nil {
-			log.Log(log.Warn, "Could not remove old file %s: %v", localMmdbPath, err)
+			log.Log(log.Error, "Could not remove old file %s: %v", localMmdbPath, err)
 		}
 		if renameErr := os.Rename(extractedMmdb, localMmdbPath); renameErr != nil {
 			return fmt.Errorf("rename to final mmdb %s failed: %w", localMmdbPath, renameErr)
@@ -108,7 +108,7 @@ func checkAndDownloadOne(
 
 		// Step G) Clean up leftover archives + directories
 		if err := os.Remove(tmpArchivePath); err != nil {
-			log.Log(log.Warn, "Could not remove archive file %s: %v", tmpArchivePath, err)
+			log.Log(log.Error, "Could not remove archive file %s: %v", tmpArchivePath, err)
 		}
 		// Also remove leftover "GeoLite2-City_YYYYMMDD..." directories
 		cleanupExtractedDirs(baseDir, editionID)
@@ -117,7 +117,7 @@ func checkAndDownloadOne(
 		os.WriteFile(localMarkerPath, []byte(remoteModTime), 0644)
 	} else {
 		// no re-download needed
-		log.Log(log.Debug, "Local %s is up-to-date, local stamp = %s, remote = %s, size: %d",
+		log.Log(log.Info, "Local %s is up-to-date, local stamp = %s, remote = %s, size: %d",
 			dbName, localStamp, remoteModTime, mmdbStat.Size())
 	}
 	return nil
@@ -203,7 +203,7 @@ func findExtractedMmdb(baseDir, editionID string) (string, error) {
 			subDirPath := filepath.Join(baseDir, de.Name())
 			foundMmdb, errWalk := walkForMmdb(subDirPath)
 			if errWalk != nil {
-				log.Log(log.Warn, "Error scanning folder %s: %v", subDirPath, errWalk)
+				log.Log(log.Error, "Error scanning folder %s: %v", subDirPath, errWalk)
 				continue
 			}
 			if foundMmdb != "" {
