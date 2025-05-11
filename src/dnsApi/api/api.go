@@ -1,4 +1,4 @@
-package handlers
+package api
 
 import (
 	cfg "ibp-geodns/src/common/config"

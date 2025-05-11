@@ -8,6 +8,10 @@ var (
 	TLDRecords     types.TLDMap
 )
 
-func init() {
+func init(service types.ServiceMap, static types.StaticMap, tld types.TLDMap) {
+
+	ServiceRecords = service
+	StaticRecords = static
+	TLDRecords = tld
 
 }
