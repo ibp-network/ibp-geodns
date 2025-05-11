@@ -1,19 +1,17 @@
 package api
 
 import (
-
 	"net/http"
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
-
 )
 
 var (
-	ServiceRecords *ServiceMap
-	StaticRecords  *StaticMap
-	TLDRecords     *TLDMap
+	ServiceRecords = &ServiceMap{Services: make(map[string]ServiceConfigs)}
+	StaticRecords  = &StaticMap{records: []cfg.DNSRecord{}}
+	TLDRecords     = &TLDMap{records: make(map[int]string)}
 )
 
 // Init initializes the DNS server with the provided configuration.
