@@ -5,7 +5,7 @@ import (
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	sig "ibp-geodns/src/common/signal/nats"
+	nats "ibp-geodns/src/common/nats"
 	"sync"
 	"time"
 )
@@ -111,10 +111,10 @@ func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, erro
 	exists, OfficialStatus := dat.GetOfficialSiteStatus(check.Name, member.Details.Name)
 
 	if !exists {
-		go sig.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
+		go nats.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
 	} else {
 		if OfficialStatus != status {
-			go sig.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
+			go nats.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
 		}
 	}
 }
@@ -230,10 +230,10 @@ func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service
 	exists, OfficialStatus := dat.GetOfficialDomainStatus(check.Name, member.Details.Name, domain)
 
 	if !exists {
-		go sig.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
+		go nats.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
 	} else {
 		if OfficialStatus != status {
-			go sig.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
+			go nats.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
 		}
 	}
 }
@@ -335,10 +335,10 @@ func UpdateEndpointResultLocal(check cfg.Check, member cfg.Member, service cfg.S
 	exists, OfficialStatus := dat.GetOfficialEndpointStatus(check.Name, member.Details.Name, u.Domain, endpoint)
 
 	if !exists {
-		go sig.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
+		go nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
 	} else {
 		if OfficialStatus != status {
-			go sig.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
+			go nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
 		}
 	}
 }
