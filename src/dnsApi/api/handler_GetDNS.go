@@ -1,17 +1,16 @@
-package handlers
+package api
 
 import (
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	"ibp-geodns/src/mgmtApi/api/types"
 	"net/http"
 	"strings"
 )
 
 // dnsQuery_Lookup handles DNS lookup queries based on the provided parameters.
-func DnsQuery_Lookup(w http.ResponseWriter, r *http.Request, req types.Request) types.Response {
+func DnsQuery_Lookup(w http.ResponseWriter, r *http.Request, req Request) Response {
 	var records []cfg.DNSRecord
 
 	c := cfg.GetConfig()
@@ -82,10 +81,10 @@ func DnsQuery_Lookup(w http.ResponseWriter, r *http.Request, req types.Request) 
 
 	if len(records) == 0 {
 		// We need to return an empty record so the client knows there is no result
-		return types.Response{Result: []cfg.DNSRecord{}}
+		return Response{Result: []cfg.DNSRecord{}}
 	} else {
 		// Return compiled records
-		return types.Response{Result: records}
+		return Response{Result: records}
 	}
 }
 

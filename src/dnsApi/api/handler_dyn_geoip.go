@@ -1,4 +1,4 @@
-package handlers
+package api
 
 import (
 	"math"
@@ -26,7 +26,7 @@ func DynamicDNSEntries() {
 			for _, rpcUrl := range provider.RpcUrls {
 				url := max.ParseUrl(rpcUrl)
 				if _, exists := newDynamicServices[url.Domain]; !exists {
-					newDynamicServices[url.Domain] = types.ServiceConfigs{
+					newDynamicServices[url.Domain] = ServiceConfigs{
 						Name:          svcConfig.Name,
 						Active:        svcConfig.Active,
 						LevelRequired: svcConfig.LevelRequired,
@@ -74,7 +74,7 @@ func DynamicDNSEntries() {
 	ServiceRecords.Services = newDynamicServices
 }
 
-func ProcessDynamic(params types.Parameters, id int, domain string) []cfg.DNSRecord {
+func ProcessDynamic(params Parameters, id int, domain string) []cfg.DNSRecord {
 	var records []cfg.DNSRecord
 	var closestMember cfg.Member
 	minDistance := math.MaxFloat64

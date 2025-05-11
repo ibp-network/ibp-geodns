@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	ServiceRecords types.ServiceMap
-	StaticRecords  types.StaticMap
-	TLDRecords     types.TLDMap
+	ServiceRecords ServiceMap
+	StaticRecords  StaticMap
+	TLDRecords     TLDMap
 )
 
 // Init initializes the DNS server with the provided configuration.
