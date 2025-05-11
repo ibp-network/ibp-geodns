@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-func router(w http.ResponseWriter, r *http.Request) {
+func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 	var req Request
 	var res Response
 

@@ -74,7 +74,7 @@ func Listener() {
 
 	// DNS API for PowerDNS (unchanged)
 	dnsApi := http.NewServeMux()
-	dnsApi.HandleFunc("/dns", router)
+	dnsApi.HandleFunc("/dns", dnsApiRouter)
 
 	log.Log(log.Info, "Starting DNS API server on %s:%s",
 		c.Local.DnsApi.ListenAddress,
