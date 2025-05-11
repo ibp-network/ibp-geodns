@@ -24,22 +24,22 @@ type Config struct {
 
 // SystemConfig represents the configuration loaded from disk (config.json)
 type Local struct {
-	System             SystemConfig  `json:"System"`
-	MinimumOfflineTime int           `json:"MinimumOfflineTime"`
-	Maxmind            MaxmindConfig `json:"Maxmind"`
-	Signal             SignalConfig  `json:"Signal"`
-	Mysql              MysqlConfig   `json:"Mysql"`
-	DnsApi             ApiConfig     `json:"DnsApi"`
-	MgmtApi            ApiConfig     `json:"MgmtApi"`
-	Matrix             MatrixConfig  `json:"Matrix"`
-	Checks             []Check       `json:"Checks"`
+	System  SystemConfig  `json:"System"`
+	Maxmind MaxmindConfig `json:"Maxmind"`
+	Signal  SignalConfig  `json:"Signal"`
+	Mysql   MysqlConfig   `json:"Mysql"`
+	DnsApi  ApiConfig     `json:"DnsApi"`
+	MgmtApi ApiConfig     `json:"MgmtApi"`
+	Matrix  MatrixConfig  `json:"Matrix"`
+	Checks  []Check       `json:"Checks"`
 }
 
 type SystemConfig struct {
-	WorkDir          string        `json:"workDir"`
-	ConfigReloadTime time.Duration `json:"ConfigReloadTime"`
-	CacheSaveTime    time.Duration `json:"CacheSaveTime"`
-	ConfigUrls       ConfigUrls    `json:"ConfigUrls"`
+	WorkDir            string        `json:"workDir"`
+	ConfigReloadTime   time.Duration `json:"ConfigReloadTime"`
+	CacheSaveTime      time.Duration `json:"CacheSaveTime"`
+	MinimumOfflineTime int           `json:"MinimumOfflineTime"`
+	ConfigUrls         ConfigUrls    `json:"ConfigUrls"`
 }
 
 type ConfigUrls struct {
