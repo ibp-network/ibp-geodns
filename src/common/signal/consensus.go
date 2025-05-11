@@ -15,7 +15,7 @@ import (
 // Init loads config and sets up consensus system.
 func Init() {
 	c := cfg.GetConfig()
-	con := c.System.Nats
+	con := c.System.Signal
 
 	state.NodeID = con.NodeID
 	state.ThisNode = NodeInfo{

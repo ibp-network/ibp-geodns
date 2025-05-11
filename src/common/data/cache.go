@@ -65,7 +65,7 @@ func SaveCache(filePath string, data interface{}) error {
 // LoadAllCaches loads Official, Local, and Stats caches into the corresponding data structures.
 func LoadAllCaches() {
 	c := cfg.GetConfig()
-	workDir := c.System.WorkDir
+	workDir := c.System.System.WorkDir
 
 	officialFile := filepath.Join(workDir, "tmp", officialCacheFile)
 	localFile := filepath.Join(workDir, "tmp", localCacheFile)
@@ -93,7 +93,7 @@ func LoadAllCaches() {
 // SaveAllCaches saves Official, Local, and Stats caches.
 func SaveAllCaches() {
 	c := cfg.GetConfig()
-	workDir := c.System.WorkDir
+	workDir := c.System.System.WorkDir
 
 	officialFile := filepath.Join(workDir, "tmp", officialCacheFile)
 	localFile := filepath.Join(workDir, "tmp", localCacheFile)
@@ -121,7 +121,7 @@ func SaveAllCaches() {
 // startAutoUpdate initializes a periodic timer to save caches automatically.
 func startAutoUpdate() {
 	c := cfg.GetConfig()
-	cacheSaveInterval := c.System.CacheSaveTime
+	cacheSaveInterval := c.System.System.CacheSaveTime
 
 	autoUpdateTimer = time.NewTicker(cacheSaveInterval * time.Second)
 

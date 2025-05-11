@@ -6,15 +6,15 @@ import (
 )
 
 // Config holds the configuration data and internal fields
-type Config struct {
+type ConfigInit struct {
 	mu      sync.RWMutex
 	cfgFile string
-	data    ConfigData
+	data    Config
 }
 
 // ConfigData holds the actual configuration data without the mutex
-type ConfigData struct {
-	System          SystemConfig           `json:"System"`
+type Config struct {
+	System          Local                  `json:"System"`
 	StaticDNS       []DNSRecord            `json:"StaticDNS"`
 	Members         map[string]Member      `json:"Members"`
 	Services        map[string]Service     `json:"Services"`
@@ -23,24 +23,31 @@ type ConfigData struct {
 }
 
 // SystemConfig represents the configuration loaded from disk (config.json)
+type Local struct {
+	System             SystemConfig  `json:"System"`
+	MinimumOfflineTime int           `json:"MinimumOfflineTime"`
+	Maxmind            MaxmindConfig `json:"Maxmind"`
+	Signal             SignalConfig  `json:"Signal"`
+	Mysql              MysqlConfig   `json:"Mysql"`
+	DnsApi             ApiConfig     `json:"DnsApi"`
+	MgmtApi            ApiConfig     `json:"MgmtApi"`
+	Matrix             MatrixConfig  `json:"Matrix"`
+	Checks             []Check       `json:"Checks"`
+}
+
 type SystemConfig struct {
-	ConfigPath             string        `json:"-"`
-	WorkDir                string        `json:"workDir"`
-	StaticDNSConfig        string        `json:"StaticDNSConfig"`
-	MembersConfig          string        `json:"MembersConfig"`
-	ServicesConfig         string        `json:"ServicesConfig"`
-	IaasPricingConfig      string        `json:"IaasPricingConfig"`
-	ServicesRequestsConfig string        `json:"ServicesRequestsConfig"`
-	MinimumOfflineTime     int           `json:"MinimumOfflineTime"`
-	Maxmind                MaxmindConfig `json:"Maxmind"`
-	Nats                   NatsConfig    `json:"Nats"`
-	Mysql                  MysqlConfig   `json:"Mysql"`
-	DnsApi                 ApiConfig     `json:"DnsApi"`
-	MgmtApi                ApiConfig     `json:"MgmtApi"`
-	ConfigReloadTime       time.Duration `json:"ConfigReloadTime"`
-	CacheSaveTime          time.Duration `json:"CacheSaveTime"`
-	Matrix                 MatrixConfig  `json:"Matrix"`
-	Checks                 []Check       `json:"Checks"`
+	WorkDir          string        `json:"workDir"`
+	ConfigReloadTime time.Duration `json:"ConfigReloadTime"`
+	CacheSaveTime    time.Duration `json:"CacheSaveTime"`
+	ConfigUrls       ConfigUrls    `json:"ConfigUrls"`
+}
+
+type ConfigUrls struct {
+	StaticDNSConfig        string `json:"StaticDNSConfig"`
+	MembersConfig          string `json:"MembersConfig"`
+	ServicesConfig         string `json:"ServicesConfig"`
+	IaasPricingConfig      string `json:"IaasPricingConfig"`
+	ServicesRequestsConfig string `json:"ServicesRequestsConfig"`
 }
 
 // IaasPricing represents the pricing details for a region
@@ -176,7 +183,7 @@ type ServiceRequests struct {
 }
 
 // NodeInfo holds information about a cluster node.
-type NatsConfig struct {
+type SignalConfig struct {
 	NodeID string `json:"NodeID"`
 	User   string `json:"User"`
 	Pass   string `json:"Pass"`

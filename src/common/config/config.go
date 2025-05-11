@@ -12,13 +12,13 @@ import (
 )
 
 var (
-	cfg *Config
+	cfg *ConfigInit
 )
 
 // NewConfig creates a new Config instance and starts the update ticker
 func Init(cfgFile string) {
 	log.Log(log.Debug, "Config Package initializing...")
-	cfg = &Config{
+	cfg = &ConfigInit{
 		cfgFile: cfgFile,
 	}
 
@@ -35,11 +35,11 @@ func loadConfig(cfgFile string, initialLoad bool) {
 	loadSystemConfig(cfgFile, initialLoad)
 
 	// Load other configs from URLs
-	loadStaticDNSConfig(cfg.data.System.StaticDNSConfig, initialLoad)
-	loadMembersConfig(cfg.data.System.MembersConfig, initialLoad)
-	loadServicesConfig(cfg.data.System.ServicesConfig, initialLoad)
-	loadIaasPricing(cfg.data.System.IaasPricingConfig, initialLoad)
-	loadServiceRequestsConfig(cfg.data.System.ServicesRequestsConfig, initialLoad)
+	loadStaticDNSConfig(cfg.data.System.System.ConfigUrls.StaticDNSConfig, initialLoad)
+	loadMembersConfig(cfg.data.System.System.ConfigUrls.MembersConfig, initialLoad)
+	loadServicesConfig(cfg.data.System.System.ConfigUrls.ServicesConfig, initialLoad)
+	loadIaasPricing(cfg.data.System.System.ConfigUrls.IaasPricingConfig, initialLoad)
+	loadServiceRequestsConfig(cfg.data.System.System.ConfigUrls.ServicesRequestsConfig, initialLoad)
 }
 
 // loadSystemConfig loads the system config from disk
@@ -55,7 +55,7 @@ func loadSystemConfig(configPath string, initialLoad bool) {
 	}
 	defer file.Close()
 
-	var systemConfig SystemConfig
+	var systemConfig Local
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(&systemConfig); err != nil {
 		log.Log(log.Error, "Failed to decode system config: %v", err)
@@ -227,7 +227,7 @@ func downloadConfig(url string, initialLoad bool) []byte {
 func configUpdater(cfgFile string) {
 	c := GetConfig()
 
-	ticker := time.NewTicker(c.System.ConfigReloadTime * time.Second)
+	ticker := time.NewTicker(c.System.System.ConfigReloadTime * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -236,12 +236,12 @@ func configUpdater(cfgFile string) {
 }
 
 // GetConfig returns a deep copy of the current configuration data
-func GetConfig() ConfigData {
+func GetConfig() Config {
 	cfg.mu.RLock()
 	defer cfg.mu.RUnlock()
 
 	// Deep copy using JSON marshal and unmarshal
-	var dataCopy ConfigData
+	var dataCopy Config
 	dataBytes, err := json.Marshal(cfg.data)
 	if err != nil {
 		log.Log(log.Error, "Failed to marshal configuration data: %v", err)
