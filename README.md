@@ -84,6 +84,41 @@ The service supports the following health checks:
 - **SSL**: Checks the validity and expiry of SSL certificates.
 - **WSS**: Validates WebSocket Secure endpoints by sending and receiving JSON-RPC requests.
 
+## Management API Usage Endpoints
+
+Usage statistics can be retrieved from the management API. Each request is sent
+to the `/api` endpoint using a JSON body specifying the desired method. The
+date range is provided using `start` and `end` query parameters in `YYYY-MM-DD`
+format.
+
+### Example request
+
+```http
+POST /api?start=2024-05-01&end=2024-05-31
+{
+  "method": "byDomain"
+}
+```
+
+### Example response
+
+```json
+{
+  "result": [
+    {"Key": "example.com", "Requests": 120},
+    {"Key": "example.org", "Requests": 55}
+  ],
+  "Error": ""
+}
+```
+
+Supported methods are:
+
+- `byDomain` – group usage counts by domain name
+- `byMember` – group by member name
+- `byCountry` – group by requester country code
+- `byClassc` – group by requester Class‑C network
+
 ## Licensing
 
 - **GeoLite2 Data**: The GeoLite2 data created by MaxMind is licensed under the Creative Commons Attribution-ShareAlike 4.0 International License (`CC-BY-SA-4.0-LICENSE`).
