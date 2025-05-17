@@ -30,6 +30,8 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 		res = handle_GetAllDomains(req)
 	case "getDomainKeys":
 		res = handle_GetDomainKeys(req)
+	case "getMemberEvents":
+		res = handle_GetMemberEvents(req)
 	default:
 		writeDnsResponse(w, Response{Result: "Invalid Request"})
 		return

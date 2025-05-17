@@ -63,6 +63,12 @@ type Parameters struct {
 		Published bool   `json:"published"`
 		Content   string `json:"content"`
 	} `json:"key"`
+
+	// Additional fields for event queries
+	MemberName string `json:"memberName"`
+	Domain     string `json:"domain"`
+	StartTime  string `json:"startTime"`
+	EndTime    string `json:"endTime"`
 }
 
 // DomainInfo provides information about a domain.
