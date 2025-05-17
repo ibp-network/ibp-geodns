@@ -30,6 +30,9 @@
         "Pass": "password123",
         "DB": "powerdns"
     },
+    "Discord": {
+        "Token": "your_discord_bot_token"
+    },
     "DnsApi": {
         "ListenAddress": "0.0.0.0",
         "ListenPort": "6000"
@@ -57,7 +60,15 @@
             "CheckType": "site",
             "Timeout": 30,
             "CheckInterval": 120,
-            "ExtraOptions": {"PingCount": 15, "PingInterval": 100, "PingTimeout": 1600, "PingTTL": 254, "PingSize": 28, "MaxPacketLoss": 25, "MaxLatency": 800}
+            "ExtraOptions": {
+                "PingCount": 15,
+                "PingInterval": 100,
+                "PingTimeout": 1600,
+                "PingTTL": 254,
+                "PingSize": 28,
+                "MaxPacketLoss": 25,
+                "MaxLatency": 800
+            }
         },
         {
             "Name": "ssl",
@@ -65,7 +76,9 @@
             "CheckType": "domain",
             "Timeout": 60,
             "CheckInterval": 3600,
-            "ExtraOptions": {"ConnectTimeout": 6}
+            "ExtraOptions": {
+                "ConnectTimeout": 6
+            }
         },
         {
             "Name": "wss",
@@ -73,7 +86,9 @@
             "CheckType": "endpoint",
             "Timeout": 60,
             "CheckInterval": 1800,
-            "ExtraOptions": {"ConnectTimeout": 6}
+            "ExtraOptions": {
+                "ConnectTimeout": 6
+            }
         }
     ]
 }
