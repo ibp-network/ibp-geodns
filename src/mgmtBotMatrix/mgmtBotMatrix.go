@@ -7,6 +7,8 @@ import (
 	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
 	"ibp-geodns/src/mgmtBotMatrix/matrix"
+
+	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/event"
 )
 
