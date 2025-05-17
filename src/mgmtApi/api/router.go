@@ -20,13 +20,13 @@ func router(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch req.Method {
-	case "initialize":
+	case "billing":
 		res = handlers.ApiQuery_Billing(w, r, req)
-	case "lookup":
+	case "member":
 		res = handlers.ApiQuery_Member(w, r, req)
-	case "list":
+	case "status":
 		res = handlers.ApiQuery_Status(w, r, req)
-	case "getDomainInfo":
+	case "usage":
 		res = handlers.ApiQuery_Usage(w, r, req)
 	default:
 		writeDnsResponse(w, types.Response{Result: "Invalid Request"})
