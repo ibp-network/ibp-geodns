@@ -10,7 +10,7 @@ import (
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
 	nats "ibp-geodns/src/common/nats"
-	api "ibp-geodns/src/dnsApi/api"
+	api "ibp-geodns/src/mgmtApi/api"
 )
 
 var version = "0.2.0"

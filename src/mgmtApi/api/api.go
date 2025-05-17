@@ -13,17 +13,17 @@ func Init() {
 	// Load configuration
 	c := config.GetConfig()
 
-	// DNS API for PowerDNS (unchanged)
-	dnsApi := http.NewServeMux()
-	dnsApi.HandleFunc("/dns", router)
+	// Management API
+	mgmtMux := http.NewServeMux()
+	mgmtMux.HandleFunc("/api", router)
 
-	log.Log(log.Info, "Starting DNS API server on %s:%s",
-		c.Local.DnsApi.ListenAddress,
-		c.Local.DnsApi.ListenPort,
+	log.Log(log.Info, "Starting Mgmt API server on %s:%s",
+		c.Local.MgmtApi.ListenAddress,
+		c.Local.MgmtApi.ListenPort,
 	)
 
 	go http.ListenAndServe(
-		c.Local.DnsApi.ListenAddress+":"+c.Local.DnsApi.ListenPort,
-		dnsApi,
+		c.Local.MgmtApi.ListenAddress+":"+c.Local.MgmtApi.ListenPort,
+		mgmtMux,
 	)
 }
