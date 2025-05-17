@@ -3,9 +3,9 @@
 IBP GeoDNS package is made up of the following:
 - Common Components: Generic functionality re-used in multiple components
 - Power DNS API: RPC Monitor system that provides an api for remote-backend of powerdns
-- Management API: Rest API that enables various fucntionality, commands, and requests 
+- Management API: Rest API that enables various functionality, commands, and requests 
 - Discord Bot: Discord bot that enables various functionality, commands and requests
-- Matrix Bot: Matrix bot that enables vbarious functionality, commands and requests
+- Matrix Bot: Matrix bot that enables various functionality, commands and requests
 
 Installation:
 - Install golang 1.24.0 or better is installed
