@@ -85,3 +85,28 @@ func FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint
 	}
 	return &event, nil
 }
+
+// GetEvents retrieves events for a member within the specified time range.
+func GetEvents(memberName string, start, end time.Time) ([]EventRecord, error) {
+	query := `
+               SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data
+               FROM member_events
+               WHERE member_name = ? AND start_time >= ? AND start_time <= ?
+       `
+	rows, err := DB.Query(query, memberName, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query events: %w", err)
+	}
+	defer rows.Close()
+
+	var res []EventRecord
+	for rows.Next() {
+		var ev EventRecord
+		if err := rows.Scan(&ev.ID, &ev.MemberName, &ev.CheckType, &ev.CheckName, &ev.DomainName, &ev.Endpoint,
+			&ev.Status, &ev.StartTime, &ev.EndTime, &ev.ErrorText, &ev.AdditionalData); err != nil {
+			return nil, fmt.Errorf("scan error: %w", err)
+		}
+		res = append(res, ev)
+	}
+	return res, nil
+}

@@ -30,8 +30,14 @@ type LocalConfig struct {
 	Mysql   MysqlConfig   `json:"Mysql"`
 	DnsApi  ApiConfig     `json:"DnsApi"`
 	MgmtApi ApiConfig     `json:"MgmtApi"`
+	Discord DiscordConfig `json:"Discord"`
 	Matrix  MatrixConfig  `json:"Matrix"`
 	Checks  []Check       `json:"Checks"`
+}
+
+// DiscordConfig represents the Discord bot configuration
+type DiscordConfig struct {
+	Token string `json:"Token"`
 }
 
 type SystemConfig struct {
