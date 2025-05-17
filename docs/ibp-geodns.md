@@ -55,14 +55,42 @@ Install the configuration file in config/config.json and execute the binaries wi
 
 ## Management Discord Bot
 
-### Discord Handler
+The Discord bot listens for simple management commands within a Discord channel.
+It requires a bot token configured in `config.json` under the `Discord` section.
 
-### Signal Communication
+### Setup
 
+1. Create a Discord application and bot at <https://discord.com/developers/applications>.
+2. Copy the bot token and place it in your configuration:
 
+   ```json
+   "Discord": {
+       "Token": "your_discord_bot_token"
+   }
+   ```
+
+3. Build the bot using `make mgmtBotDiscord` and run it with:
+
+   ```sh
+   ./bin/mgmtBotDiscord -config config/config.json
+   ```
+
+When a user sends `status` in a channel the bot can read, it replies with `online`.
 
 ## Management Matrix Bot
 
-### Matrix Handler
+The Matrix bot provides similar functionality using the Matrix protocol. It logs
+in with credentials specified in the `Matrix` section of `config.json` and listens
+for messages in the configured room.
 
-### Signal Communications
+### Setup
+
+1. Ensure the `Matrix` settings in your configuration contain the homeserver URL,
+   username, password, and the target room ID.
+2. Build the bot with `make mgmtBotMatrix` and start it:
+
+   ```sh
+   ./bin/mgmtBotMatrix -config config/config.json
+   ```
+
+Sending `status` in the room will cause the bot to respond with `online`.
