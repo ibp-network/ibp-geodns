@@ -4,6 +4,8 @@ import (
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
 	"time"
+
+	"ibp-geodns/src/common/data/mysql"
 )
 
 var (
@@ -154,4 +156,47 @@ func MemberHit(memberName string, ReqIP string, ReqDomain string) {
 	memberStats.Requests++
 	memberStats.ClassCs[classC]++
 	memberStats.Countries[countryCode]++
+}
+
+// ProcessDailyStats moves statistics older than today into persistent usage records.
+func ProcessDailyStats() {
+	if Stats == nil {
+		return
+	}
+
+	today := time.Now().UTC().Format("2006-01-02")
+
+	Stats.Mu.Lock()
+	defer Stats.Mu.Unlock()
+
+	for dateStr, domains := range Stats.Data {
+		if dateStr >= today {
+			continue
+		}
+
+		date, err := time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			log.Log(log.Error, "invalid date key %s", dateStr)
+			continue
+		}
+
+		for domain, ds := range domains {
+			for classC, hits := range ds.ClientStats.ClassCs {
+				ipGuess := classC + ".1"
+				rec := mysql.UsageRecord{
+					Date:    date,
+					Domain:  domain,
+					ASN:     max.GetASN(ipGuess),
+					Subnet:  max.GetSubnet(ipGuess),
+					Country: max.GetCountryCode(ipGuess),
+					Hits:    hits,
+				}
+				if err := mysql.InsertOrUpdateUsage(rec); err != nil {
+					log.Log(log.Error, "usage insert error: %v", err)
+				}
+			}
+		}
+
+		delete(Stats.Data, dateStr)
+	}
 }

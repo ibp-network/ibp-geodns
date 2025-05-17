@@ -181,6 +181,54 @@ func GetClassC(ipStr string) string {
 	return fmt.Sprintf("%d.%d.%d", ipv4[0], ipv4[1], ipv4[2])
 }
 
+// GetASN looks up the ASN for the provided IP address using the ASN database.
+func GetASN(ipStr string) string {
+	if maxmindAsn == nil {
+		log.Log(log.Error, "ASN DB is not loaded")
+		return ""
+	}
+
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		log.Log(log.Error, "Invalid IP address: %s", ipStr)
+		return ""
+	}
+
+	var record struct {
+		ASN uint `maxminddb:"autonomous_system_number"`
+	}
+
+	if err := maxmindAsn.Lookup(ip, &record); err != nil {
+		log.Log(log.Error, "ASN lookup error for %s: %v", ipStr, err)
+		return ""
+	}
+
+	if record.ASN == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("AS%d", record.ASN)
+}
+
+// GetSubnet derives the /24 (IPv4) or /56 (IPv6) subnet for the provided IP.
+func GetSubnet(ipStr string) string {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		log.Log(log.Error, "Invalid IP address: %s", ipStr)
+		return ""
+	}
+
+	if ipv4 := ip.To4(); ipv4 != nil {
+		mask := net.CIDRMask(24, 32)
+		subnet := ipv4.Mask(mask)
+		return fmt.Sprintf("%s/24", net.IP(subnet).String())
+	}
+
+	mask := net.CIDRMask(56, 128)
+	subnet := ip.Mask(mask)
+	return fmt.Sprintf("%s/56", subnet.String())
+}
+
 // Close frees resources used by maxmind. (If needed)
 func Close() {
 	if maxmindCity != nil {

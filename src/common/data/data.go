@@ -4,6 +4,7 @@ import (
 	cfg "ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data/mysql"
 	log "ibp-geodns/src/common/logging"
+	"time"
 )
 
 func Init() {
@@ -11,6 +12,12 @@ func Init() {
 	LoadAllCaches()
 	go startAutoUpdate()
 	go mysql.Init()
+	go func() {
+		for {
+			ProcessDailyStats()
+			time.Sleep(24 * time.Hour)
+		}
+	}()
 }
 
 // MemberEnable sets the Override to 1 for the specified member name, stores it in MySQL, and triggers an event.
