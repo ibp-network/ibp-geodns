@@ -88,11 +88,10 @@ func FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint
 
 // GetEvents retrieves events for a member within the specified time range.
 func GetEvents(memberName string, start, end time.Time) ([]EventRecord, error) {
-	query := `
-               SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data
-               FROM member_events
-               WHERE member_name = ? AND start_time >= ? AND start_time <= ?
-       `
+	query := `SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data
+              FROM member_events
+              WHERE member_name = ? AND start_time >= ? AND start_time <= ?`
+  
 	rows, err := DB.Query(query, memberName, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query events: %w", err)
@@ -110,3 +109,42 @@ func GetEvents(memberName string, start, end time.Time) ([]EventRecord, error) {
 	}
 	return res, nil
 }
+
+
+// FetchEvents returns all events for the given member and optional domain within the specified time range.
+func FetchEvents(memberName, domainName string, start, end time.Time) ([]EventRecord, error) {
+	args := []interface{}{memberName, start, end}
+	query := `
+               SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data FROM member_events
+               WHERE member_name = ? AND start_time >= ? AND start_time <= ?`
+
+	if domainName != "" {
+		query += " AND domain_name = ?"
+		args = append(args, domainName)
+	}
+
+	query += " ORDER BY start_time"
+
+	rows, err := DB.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch events: %w", err)
+	}
+	defer rows.Close()
+
+	var events []EventRecord
+	for rows.Next() {
+		var e EventRecord
+		if err := rows.Scan(&e.ID, &e.MemberName, &e.CheckType, &e.CheckName, &e.DomainName, &e.Endpoint,
+			&e.Status, &e.StartTime, &e.EndTime, &e.ErrorText, &e.AdditionalData); err != nil {
+			return nil, fmt.Errorf("failed to scan event row: %w", err)
+		}
+		events = append(events, e)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return events, nil
+}
+

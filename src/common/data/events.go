@@ -80,7 +80,51 @@ func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, 
 	}
 }
 
-// GetDowntimeEvents returns events for a member within the given time range.
-func GetDowntimeEvents(memberName string, start, end time.Time) ([]mysql.EventRecord, error) {
-	return mysql.GetEvents(memberName, start, end)
+// GetMemberEvents retrieves events for a member and optional domain within a time range.
+func GetMemberEvents(memberName, domain string, start, end time.Time) ([]EventRecord, error) {
+	rows, err := mysql.FetchEvents(memberName, domain, start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	events := make([]EventRecord, 0, len(rows))
+	for _, r := range rows {
+		var dataMap map[string]interface{}
+		if r.AdditionalData.Valid && r.AdditionalData.String != "" {
+			_ = json.Unmarshal([]byte(r.AdditionalData.String), &dataMap)
+		}
+
+		var domainName, endpoint, errText string
+		if r.DomainName.Valid {
+			domainName = r.DomainName.String
+		}
+		if r.Endpoint.Valid {
+			endpoint = r.Endpoint.String
+		}
+		if r.ErrorText.Valid {
+			errText = r.ErrorText.String
+		}
+
+		var endTime time.Time
+		if r.EndTime.Valid {
+			endTime = r.EndTime.Time
+		}
+
+		events = append(events, EventRecord{
+			CheckType:  r.CheckType,
+			CheckName:  r.CheckName,
+			MemberName: r.MemberName,
+			DomainName: domainName,
+			Endpoint:   endpoint,
+			Status:     r.Status,
+			ErrorText:  errText,
+			Data:       dataMap,
+			StartTime:  r.StartTime,
+			EndTime:    endTime,
+			StartDate:  r.StartTime.Format("2006-01-02"),
+			EndDate:    endTime.Format("2006-01-02"),
+		})
+	}
+
+	return events, nil
 }
