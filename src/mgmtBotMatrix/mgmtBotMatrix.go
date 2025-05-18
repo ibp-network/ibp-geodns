@@ -7,9 +7,6 @@ import (
 	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
 	"ibp-geodns/src/mgmtBotMatrix/matrix"
-
-	"maunium.net/go/mautrix"
-	"maunium.net/go/mautrix/event"
 )
 
 var version = "0.1.0"
@@ -35,14 +32,6 @@ func main() {
 		log.Log(log.Fatal, "Failed to initialize Matrix bot: %v", err)
 		os.Exit(1)
 	}
-
-	syncer := bot.Client.Syncer.(*mautrix.DefaultSyncer)
-
-	// Register a basic event handler that does nothing.
-	syncer.OnEventType(event.EventMessage, mautrix.EventHandler(func(mautrix.EventSource, *event.Event) {
-		// no-op handler
-	}))
-
 
 	log.Log(log.Info, "Matrix bot is now running")
 	if err := bot.Client.Sync(); err != nil {
