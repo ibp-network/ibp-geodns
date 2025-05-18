@@ -37,7 +37,7 @@ func main() {
 	}
 
 	syncer := bot.Client.Syncer.(*mautrix.DefaultSyncer)
-	syncer.OnEventType(event.EventMessage, func(source mautrix.EventSource, ev *event.Event) {
+	syncer.OnEventType(event.EventMessage, func(_ mautrix.EventSource, ev *event.Event) {
 		if ev.RoomID != bot.RoomID {
 			return
 		}
