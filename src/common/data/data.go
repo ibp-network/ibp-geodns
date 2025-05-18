@@ -11,6 +11,7 @@ func Init() {
 	LoadAllCaches()
 	go startAutoUpdate()
 	go mysql.Init()
+	go startDailyUsageProcessor()
 }
 
 // MemberEnable sets the Override to 1 for the specified member name, stores it in MySQL, and triggers an event.
