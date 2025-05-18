@@ -37,10 +37,12 @@ func main() {
 	}
 
 	syncer := bot.Client.Syncer.(*mautrix.DefaultSyncer)
+
 	// Register a basic event handler that does nothing.
 	syncer.OnEventType(event.EventMessage, mautrix.EventHandler(func(mautrix.EventSource, *event.Event) {
 		// no-op handler
 	}))
+
 
 	log.Log(log.Info, "Matrix bot is now running")
 	if err := bot.Client.Sync(); err != nil {
