@@ -37,18 +37,10 @@ func main() {
 	}
 
 	syncer := bot.Client.Syncer.(*mautrix.DefaultSyncer)
-	syncer.OnEventType(event.EventMessage, func(ev *event.Event) {
-		if ev.RoomID != bot.RoomID {
-			return
-		}
-
-		msg := ev.Content.AsMessage()
-		if msg != nil && msg.Body == "status" {
-			if err := bot.SendMessage("online"); err != nil {
-				log.Log(log.Error, "failed to send message: %v", err)
-			}
-		}
-	})
+	// Register a basic event handler that does nothing.
+	syncer.OnEventType(event.EventMessage, mautrix.EventHandler(func(mautrix.EventSource, *event.Event) {
+		// no-op handler
+	}))
 
 	log.Log(log.Info, "Matrix bot is now running")
 	if err := bot.Client.Sync(); err != nil {
