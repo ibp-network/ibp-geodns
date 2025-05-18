@@ -128,8 +128,3 @@ func GetMemberEvents(memberName, domain string, start, end time.Time) ([]EventRe
 
 	return events, nil
 }
-
-// GetDowntimeEvents returns events for a member within the given time range.
-func GetDowntimeEvents(memberName string, start, end time.Time) ([]mysql.EventRecord, error) {
-	return mysql.GetEvents(memberName, start, end)
-}

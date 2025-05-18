@@ -88,11 +88,10 @@ func FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint
 
 // GetEvents retrieves events for a member within the specified time range.
 func GetEvents(memberName string, start, end time.Time) ([]EventRecord, error) {
-	query := `
-              SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data
+	query := `SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data
               FROM member_events
-              WHERE member_name = ? AND start_time >= ? AND start_time <= ?
-       `
+              WHERE member_name = ? AND start_time >= ? AND start_time <= ?`
+  
 	rows, err := DB.Query(query, memberName, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query events: %w", err)
@@ -110,6 +109,7 @@ func GetEvents(memberName string, start, end time.Time) ([]EventRecord, error) {
 	}
 	return res, nil
 }
+
 
 // FetchEvents returns all events for the given member and optional domain within the specified time range.
 func FetchEvents(memberName, domainName string, start, end time.Time) ([]EventRecord, error) {
@@ -147,3 +147,4 @@ func FetchEvents(memberName, domainName string, start, end time.Time) ([]EventRe
 
 	return events, nil
 }
+
