@@ -41,9 +41,6 @@ func main() {
 	// Initialize data layer, load caches
 	dat.Init()
 
-	// small pause to ensure caches loaded
-	time.Sleep(2 * time.Second)
-
 	// Launch NATS
 	nats.Init()
 
