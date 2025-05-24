@@ -13,7 +13,6 @@ import (
 	"ibp-geodns/src/dnsApi/api"
 )
 
-// Removed references to nats
 var version = "0.7.0"
 
 func main() {
@@ -32,11 +31,14 @@ func main() {
 	cfg.Init(*cfgFile)
 	max.Init()
 
-	// Start polling serviceMonitor for official results
-	startMonitorPoller()
-
 	// Launch DNS API
 	api.Init()
+
+	// Read from config: how often to poll serviceMonitor
+	c := cfg.GetConfig()
+	intervalSec := c.Local.DnsApi.RefreshIntervalSeconds
+	log.Log(log.Info, "Starting serviceMonitor poller every %d seconds", intervalSec)
+	startServiceMonitorPoller(intervalSec)
 
 	// Keep running
 	for {
@@ -44,16 +46,19 @@ func main() {
 	}
 }
 
-func startMonitorPoller() {
+func startServiceMonitorPoller(intervalSec int) {
+	updateDNSMonitorSnapshot()
+
+	ticker := time.NewTicker(time.Duration(intervalSec) * time.Second)
 	go func() {
 		for {
-			time.Sleep(15 * time.Second)
-			updateOfficialResultsSnapshot()
+			<-ticker.C
+			updateDNSMonitorSnapshot()
 		}
 	}()
 }
 
-func updateOfficialResultsSnapshot() {
+func updateDNSMonitorSnapshot() {
 	c := cfg.GetConfig()
 	url := fmt.Sprintf("http://%s:%s/results",
 		c.Local.MonitorApi.ListenAddress,
@@ -63,18 +68,19 @@ func updateOfficialResultsSnapshot() {
 	client := http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		log.Log(log.Warn, "Failed to fetch official results from serviceMonitor: %v", err)
+		log.Log(log.Warn, "dnsApi poller: cannot fetch results from %s: %v", url, err)
 		return
 	}
 	defer resp.Body.Close()
 
 	var tmp api.OfficialResults
-	err = api.DecodeJSONBody(resp.Body, &tmp)
-	if err != nil {
-		log.Log(log.Warn, "Failed to decode official results: %v", err)
+	decErr := api.DecodeJSONBody(resp.Body, &tmp)
+	if decErr != nil {
+		log.Log(log.Warn, "dnsApi poller: decode error: %v", decErr)
 		return
 	}
 
-	api.UpdateOfficialResultsSnapshot(tmp)
-	log.Log(log.Debug, "DNS backend updated local official results snapshot.")
+	// Store into local snapshot
+	api.SetLocalSnapshot(tmp)
+	log.Log(log.Debug, "dnsApi poller: updated local results snapshot.")
 }

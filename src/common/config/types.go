@@ -70,9 +70,10 @@ type IaasPricing struct {
 
 // ApiConfig for HTTP servers
 type ApiConfig struct {
-	ListenAddress string            `json:"ListenAddress"`
-	ListenPort    string            `json:"ListenPort"`
-	AuthKeys      map[string]string `json:"AuthKeys"`
+	ListenAddress          string            `json:"ListenAddress"`
+	ListenPort             string            `json:"ListenPort"`
+	AuthKeys               map[string]string `json:"AuthKeys"`
+	RefreshIntervalSeconds int               `json:"RefreshIntervalSeconds"` // new
 }
 
 // MatrixConfig for matrix bot

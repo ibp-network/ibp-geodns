@@ -11,6 +11,7 @@ type OfficialResults struct {
 	EndpointResults []MonitorResultEndpoint `json:"EndpointResults"`
 }
 
+// MonitorResultSite/Domain/Endpoint define the checks + results
 type MonitorResultSite struct {
 	CheckName string                 `json:"CheckName"`
 	Results   []MonitorResultGeneric `json:"Results"`
@@ -26,6 +27,8 @@ type MonitorResultEndpoint struct {
 	RpcUrl    string                 `json:"RpcUrl"`
 	Results   []MonitorResultGeneric `json:"Results"`
 }
+
+// MonitorResultGeneric holds each member result
 type MonitorResultGeneric struct {
 	MemberName string                 `json:"MemberName"`
 	Status     bool                   `json:"Status"`
@@ -33,21 +36,23 @@ type MonitorResultGeneric struct {
 	Data       map[string]interface{} `json:"Data"`
 }
 
+// Local snapshot + mutex
 var (
-	officialResultsMu       sync.RWMutex
-	officialResultsSnapshot OfficialResults
+	dnsMonitorMu       sync.RWMutex
+	dnsMonitorSnapshot OfficialResults
 )
 
-// UpdateOfficialResultsSnapshot replaces our local snapshot
-func UpdateOfficialResultsSnapshot(newSnap OfficialResults) {
-	officialResultsMu.Lock()
-	defer officialResultsMu.Unlock()
-	officialResultsSnapshot = newSnap
+// SetLocalSnapshot updates our local memory copy of the official results
+func SetLocalSnapshot(newSnap OfficialResults) {
+	dnsMonitorMu.Lock()
+	defer dnsMonitorMu.Unlock()
+	dnsMonitorSnapshot = newSnap
 }
 
-// GetOfficialResultsSnapshot safely returns a copy of the snapshot
-func GetOfficialResultsSnapshot() OfficialResults {
-	officialResultsMu.RLock()
-	defer officialResultsMu.RUnlock()
-	return officialResultsSnapshot
+// GetLocalSnapshot returns a copy of the local snapshot
+func GetLocalSnapshot() OfficialResults {
+	dnsMonitorMu.RLock()
+	defer dnsMonitorMu.RUnlock()
+	// You could do a deep copy if you prefer. For now, just return by value.
+	return dnsMonitorSnapshot
 }
