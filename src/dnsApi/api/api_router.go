@@ -2,30 +2,29 @@ package api
 
 import (
 	"encoding/json"
-	"net/http"
-
 	log "ibp-geodns/src/common/logging"
+	"net/http"
 )
 
-// dnsApiRouter is the main entrypoint for PDNS remote backend requests.
+// dnsApiRouter handles all JSON POST requests from PowerDNS or from curl
 func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
-	// Basic logging of the incoming request
-	log.Log(log.Info, "dnsApiRouter: received HTTP %s from %s", r.Method, r.RemoteAddr)
+	// Just for debugging, show that we got a request
+	log.Log(log.Debug, "dnsApiRouter: Received HTTP %s from %s", r.Method, r.RemoteAddr)
 
+	// Try decoding the JSON
 	var req Request
-	var res Response
-
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&req)
 	if err != nil {
-		log.Log(log.Warn, "dnsApiRouter: failed to parse JSON body: %v", err)
+		log.Log(log.Warn, "dnsApiRouter: JSON decode error: %v", err)
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 
-	// Log the method we received (e.g. "lookup", "getDomainInfo", etc.)
-	log.Log(log.Info, "dnsApiRouter: request.Method=%s, request.Parameters=%+v", req.Method, req.Parameters)
+	log.Log(log.Debug, "dnsApiRouter: req.Method=%s, req.Parameters=%+v", req.Method, req.Parameters)
 
+	// Dispatch by req.Method
+	var res Response
 	switch req.Method {
 	case "initialize":
 		res = handle_Init(req)
@@ -42,7 +41,7 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 	case "getMemberEvents":
 		res = handle_GetMemberEvents(req)
 	default:
-		log.Log(log.Warn, "dnsApiRouter: unknown method '%s'", req.Method)
+		log.Log(log.Warn, "dnsApiRouter: Unrecognized method: %s", req.Method)
 		res = Response{Result: "Invalid Request"}
 	}
 
@@ -50,10 +49,16 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeDnsResponse(w http.ResponseWriter, res Response) {
+	// Encode the response as JSON
 	w.Header().Set("Content-Type", "application/json")
-	encErr := json.NewEncoder(w).Encode(res)
-	if encErr != nil {
-		log.Log(log.Error, "dnsApiRouter: error encoding JSON response: %v", encErr)
+
+	// For debugging, show what we’re returning
+	// (WARNING: can be verbose, but helps debugging)
+	// log.Log(log.Debug, "dnsApiRouter: writing JSON response: %+v", res)
+
+	err := json.NewEncoder(w).Encode(res)
+	if err != nil {
+		log.Log(log.Error, "dnsApiRouter: Error encoding JSON response: %v", err)
 		http.Error(w, "Error encoding response", http.StatusInternalServerError)
 	}
 }

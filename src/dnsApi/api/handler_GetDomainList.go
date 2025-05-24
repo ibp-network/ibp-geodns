@@ -2,20 +2,29 @@ package api
 
 import (
 	cfg "ibp-geodns/src/common/config"
+	log "ibp-geodns/src/common/logging"
 )
 
 func handle_GetDomainList(req Request) Response {
+	params := req.Parameters
+	log.Log(log.Debug, "handle_GetDomainList: zonename=%s, domain_id=%s", params.Zonename, params.DomainID)
+
 	var records []cfg.DNSRecord
 	var id int
 
+	TLDRecords.mu.RLock()
 	for key, domain := range TLDRecords.records {
-		if extractTopLevelDomain(req.Parameters.Zonename) == domain {
+		if extractTopLevelDomain(params.Zonename) == domain {
 			id = key
 		}
 	}
+	TLDRecords.mu.RUnlock()
+
+	StaticRecords.mu.RLock()
+	defer StaticRecords.mu.RUnlock()
 
 	for _, record := range StaticRecords.records {
-		if extractTopLevelDomain(req.Parameters.Zonename) == extractTopLevelDomain(record.QName) {
+		if extractTopLevelDomain(params.Zonename) == extractTopLevelDomain(record.QName) {
 			records = append(records, cfg.DNSRecord{
 				DomainID: id,
 				QName:    record.QName,
@@ -27,5 +36,6 @@ func handle_GetDomainList(req Request) Response {
 		}
 	}
 
+	log.Log(log.Debug, "handle_GetDomainList: returning %d records for zonename=%s", len(records), params.Zonename)
 	return Response{Result: records}
 }

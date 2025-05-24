@@ -1,26 +1,29 @@
 package api
 
 import (
+	log "ibp-geodns/src/common/logging"
 	"time"
 )
 
 func handle_GetDomainInfo(req Request) Response {
+	params := req.Parameters
+	log.Log(log.Debug, "handle_GetDomainInfo: QName=%s", params.QName)
+
 	var records []DomainInfo
 	currentUnixTimestamp := int(time.Now().UTC().Unix())
 
-	for key, domain := range TLDRecords.records {
-		if extractTopLevelDomain(req.Parameters.QName) == domain {
-			// Define master server ips
-			Masters := []string{}
+	TLDRecords.mu.RLock()
+	defer TLDRecords.mu.RUnlock()
 
-			// Define the prefixes for the DNS servers
+	for key, domain := range TLDRecords.records {
+		if extractTopLevelDomain(params.QName) == domain {
+			// Build list of masters or name servers if you want
+			var Masters []string
 			dnsPrefixes := []string{"dns-01", "dns-02", "dns-03"}
 
-			// Iterate over the prefixes to construct the full domain names
+			StaticRecords.mu.RLock()
 			for _, prefix := range dnsPrefixes {
 				dnsName := prefix + "." + domain
-
-				// Search for the DNSRecord in staticEntries
 				for _, dnsRecord := range StaticRecords.records {
 					if dnsRecord.QName == dnsName {
 						Masters = append(Masters, dnsRecord.Content)
@@ -28,6 +31,7 @@ func handle_GetDomainInfo(req Request) Response {
 					}
 				}
 			}
+			StaticRecords.mu.RUnlock()
 
 			records = append(records, DomainInfo{
 				DomainID:       key,
@@ -41,5 +45,6 @@ func handle_GetDomainInfo(req Request) Response {
 		}
 	}
 
+	log.Log(log.Debug, "handle_GetDomainInfo: returning %d records for qname=%s", len(records), params.QName)
 	return Response{Result: records}
 }

@@ -2,24 +2,32 @@ package api
 
 import (
 	dat "ibp-geodns/src/common/data"
+	log "ibp-geodns/src/common/logging"
 	"time"
 )
 
-// handle_GetMemberEvents returns downtime events for a member within a time range.
 func handle_GetMemberEvents(req Request) Response {
-	start, err := time.Parse(time.RFC3339, req.Parameters.StartTime)
+	p := req.Parameters
+	log.Log(log.Debug, "handle_GetMemberEvents: memberName=%s, domain=%s, startTime=%s, endTime=%s",
+		p.MemberName, p.Domain, p.StartTime, p.EndTime)
+
+	start, err := time.Parse(time.RFC3339, p.StartTime)
 	if err != nil {
+		log.Log(log.Warn, "handle_GetMemberEvents: invalid startTime=%s", p.StartTime)
 		return Response{Result: "invalid startTime"}
 	}
-	end, err := time.Parse(time.RFC3339, req.Parameters.EndTime)
+	end, err := time.Parse(time.RFC3339, p.EndTime)
 	if err != nil {
+		log.Log(log.Warn, "handle_GetMemberEvents: invalid endTime=%s", p.EndTime)
 		return Response{Result: "invalid endTime"}
 	}
 
-	events, err := dat.GetMemberEvents(req.Parameters.MemberName, req.Parameters.Domain, start, end)
+	events, err := dat.GetMemberEvents(p.MemberName, p.Domain, start, end)
 	if err != nil {
+		log.Log(log.Error, "handle_GetMemberEvents: error retrieving events: %v", err)
 		return Response{Result: err.Error()}
 	}
 
+	log.Log(log.Debug, "handle_GetMemberEvents: returning %d events", len(events))
 	return Response{Result: events}
 }
