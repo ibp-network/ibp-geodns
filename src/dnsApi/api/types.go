@@ -1,29 +1,45 @@
 package api
 
 import (
-	cfg "ibp-geodns/src/common/config"
-	mon "ibp-geodns/src/dnsApi/monitor"
 	"sync"
+
+	cfg "ibp-geodns/src/common/config"
 )
 
-// Define the StaticEntries type with a mutex
+// StaticMap holds a list of static DNS records with a mutex
 type StaticMap struct {
 	mu      sync.RWMutex
 	records []cfg.DNSRecord
 }
 
+// Global static records container
+var StaticRecords = &StaticMap{
+	records: []cfg.DNSRecord{},
+}
+
+// TLDMap holds TLDs with a mutex
 type TLDMap struct {
 	mu      sync.RWMutex
 	records map[int]string
 }
 
-// ServicesMap wraps the global map of ServicesConfig with a mutex
+// Global TLD map
+var TLDRecords = &TLDMap{
+	records: make(map[int]string),
+}
+
+// ServiceMap holds dynamic service configs with a mutex
 type ServiceMap struct {
 	mu       sync.RWMutex
 	Services map[string]ServiceConfigs
 }
 
-// Services holds the service configuration and members for a domain
+// Global service map
+var ServiceRecords = &ServiceMap{
+	Services: make(map[string]ServiceConfigs),
+}
+
+// ServiceConfigs holds info about a particular service domain and its members
 type ServiceConfigs struct {
 	Name          string
 	Active        int
@@ -33,18 +49,16 @@ type ServiceConfigs struct {
 	Members       map[string]cfg.Member
 }
 
-// Request represents a DNS query request.
+// Request and Response are used for the DNS API
 type Request struct {
 	Method     string     `json:"method"`
 	Parameters Parameters `json:"parameters"`
 }
-
-// Response represents a DNS query response.
 type Response struct {
 	Result interface{} `json:"result"`
 }
 
-// Parameters holds the parameters for DNS queries.
+// Parameters for DNS queries
 type Parameters struct {
 	DomainID   string `json:"domain_id"`
 	Local      string `json:"local"`
@@ -64,14 +78,13 @@ type Parameters struct {
 		Content   string `json:"content"`
 	} `json:"key"`
 
-	// Additional fields for event queries
 	MemberName string `json:"memberName"`
 	Domain     string `json:"domain"`
 	StartTime  string `json:"startTime"`
 	EndTime    string `json:"endTime"`
 }
 
-// DomainInfo provides information about a domain.
+// DomainInfo is a helper struct used in some handlers
 type DomainInfo struct {
 	DomainID       int      `json:"id"`
 	Zone           string   `json:"zone"`
@@ -80,11 +93,4 @@ type DomainInfo struct {
 	Serial         int      `json:"serial"`
 	LastCheck      int      `json:"last_check"`
 	Kind           string   `json:"kind"`
-}
-
-type OfficialResults = struct {
-	SiteResults     []mon.SiteResult
-	DomainResults   []mon.DomainResult
-	EndpointResults []mon.EndpointResult
-	Mu              sync.RWMutex
 }

@@ -1,36 +1,21 @@
 package api
 
-import (
-	"strings"
+import "strings"
 
-	// We use the updated snapshot from dnsApi's global officialResultsSnapshot
-	// but we need a reference to it. We'll import from main if needed.
-
-	. "ibp-geodns/src/dnsApi"
-)
-
-// for officialResultsSnapshot, resultsMu
-
-// IsMemberOnlineForDomain checks the officialResultsSnapshot for a given member & domain
+// IsMemberOnlineForDomain checks the snapshot for a member's status
 func IsMemberOnlineForDomain(domain, memberName string) bool {
-	resultsMu.RLock()
-	defer resultsMu.RUnlock()
+	snap := GetOfficialResultsSnapshot()
 
-	sites := officialResultsSnapshot.SiteResults
-	domains := officialResultsSnapshot.DomainResults
-	endpoints := officialResultsSnapshot.EndpointResults
-
-	// Check site-level
-	for _, sr := range sites {
+	// site-level
+	for _, sr := range snap.SiteResults {
 		for _, r := range sr.Results {
 			if r.MemberName == memberName && !r.Status {
 				return false
 			}
 		}
 	}
-
-	// Check domain-level
-	for _, dr := range domains {
+	// domain-level
+	for _, dr := range snap.DomainResults {
 		if strings.EqualFold(dr.Domain, domain) {
 			for _, r := range dr.Results {
 				if r.MemberName == memberName && !r.Status {
@@ -39,9 +24,8 @@ func IsMemberOnlineForDomain(domain, memberName string) bool {
 			}
 		}
 	}
-
-	// Check endpoint-level
-	for _, er := range endpoints {
+	// endpoint-level
+	for _, er := range snap.EndpointResults {
 		if strings.EqualFold(er.Domain, domain) {
 			for _, r := range er.Results {
 				if r.MemberName == memberName && !r.Status {

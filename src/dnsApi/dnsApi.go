@@ -5,58 +5,45 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	api "ibp-geodns/src/dnsApi/api"
+	"ibp-geodns/src/dnsApi/api"
 )
 
-// We store a local snapshot of official results from the serviceMonitor
-var (
-	version                 = "0.4.0"
-	officialResultsSnapshot OfficialResults
-	resultsMu               sync.RWMutex
-)
+// Removed references to nats
+var version = "0.7.0"
 
-// OfficialResults struct for site/domain/endpoint statuses
-type OfficialResults struct {
-	SiteResults     []MonitorResultSite     `json:"SiteResults"`
-	DomainResults   []MonitorResultDomain   `json:"DomainResults"`
-	EndpointResults []MonitorResultEndpoint `json:"EndpointResults"`
+func main() {
+	log.SetLogLevel(log.Info)
+	log.Log(log.Info, "IBP-GeoDNS DNS backend v%s starting...", version)
+
+	cfgFile := flag.String("config", "config.json", "Path to configuration file")
+	flag.Parse()
+
+	if _, err := os.Stat(*cfgFile); os.IsNotExist(err) {
+		log.Log(log.Fatal, "Configuration file not found: %s", *cfgFile)
+		os.Exit(1)
+	}
+
+	// Load config and init MaxMind
+	cfg.Init(*cfgFile)
+	max.Init()
+
+	// Start polling serviceMonitor for official results
+	startMonitorPoller()
+
+	// Launch DNS API
+	api.Init()
+
+	// Keep running
+	for {
+		time.Sleep(60 * time.Second)
+	}
 }
 
-// MonitorResultSite replicate essential structure for site checks
-type MonitorResultSite struct {
-	CheckName string                 `json:"CheckName"`
-	Results   []MonitorResultGeneric `json:"Results"`
-}
-
-// MonitorResultDomain replicate domain checks
-type MonitorResultDomain struct {
-	CheckName string                 `json:"CheckName"`
-	Domain    string                 `json:"Domain"`
-	Results   []MonitorResultGeneric `json:"Results"`
-}
-
-// MonitorResultEndpoint replicate endpoint checks
-type MonitorResultEndpoint struct {
-	CheckName string                 `json:"CheckName"`
-	Domain    string                 `json:"Domain"`
-	RpcUrl    string                 `json:"RpcUrl"`
-	Results   []MonitorResultGeneric `json:"Results"`
-}
-
-type MonitorResultGeneric struct {
-	MemberName string                 `json:"MemberName"`
-	Status     bool                   `json:"Status"`
-	ErrorText  string                 `json:"ErrorText"`
-	Data       map[string]interface{} `json:"Data"`
-}
-
-// Poll the serviceMonitor for updated official results
 func startMonitorPoller() {
 	go func() {
 		for {
@@ -72,6 +59,7 @@ func updateOfficialResultsSnapshot() {
 		c.Local.MonitorApi.ListenAddress,
 		c.Local.MonitorApi.ListenPort,
 	)
+
 	client := http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
@@ -80,45 +68,13 @@ func updateOfficialResultsSnapshot() {
 	}
 	defer resp.Body.Close()
 
-	var tmp OfficialResults
+	var tmp api.OfficialResults
 	err = api.DecodeJSONBody(resp.Body, &tmp)
 	if err != nil {
 		log.Log(log.Warn, "Failed to decode official results: %v", err)
 		return
 	}
 
-	resultsMu.Lock()
-	officialResultsSnapshot = tmp
-	resultsMu.Unlock()
-	log.Log(log.Debug, "Updated local snapshot of official results.")
-}
-
-func main() {
-	log.SetLogLevel(log.Info)
-	log.Log(log.Info, "IBP-GeoDNS DNS backend v%s starting...", version)
-
-	cfgFile := flag.String("config", "config.json", "Path to the configuration file")
-	flag.Parse()
-
-	if _, err := os.Stat(*cfgFile); os.IsNotExist(err) {
-		log.Log(log.Fatal, "Configuration file not found: %s", *cfgFile)
-		os.Exit(1)
-	}
-
-	// Initialize config
-	cfg.Init(*cfgFile)
-
-	// Initialize MaxMind
-	max.Init()
-
-	// Start polling serviceMonitor
-	startMonitorPoller()
-
-	// Start the DNS API
-	api.Init()
-
-	// Keep running
-	for {
-		time.Sleep(60 * time.Second)
-	}
+	api.UpdateOfficialResultsSnapshot(tmp)
+	log.Log(log.Debug, "DNS backend updated local official results snapshot.")
 }

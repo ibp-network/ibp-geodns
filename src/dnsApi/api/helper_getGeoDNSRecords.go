@@ -8,63 +8,7 @@ import (
 	max "ibp-geodns/src/common/maxmind"
 )
 
-// DynamicDNSEntries remains the same
-func DynamicDNSEntries() {
-	c := cfg.GetConfig()
-
-	newDynamicServices := make(map[string]ServiceConfigs)
-
-	for _, service := range c.Services {
-		svcConfig := service.Configuration
-		for _, provider := range service.Providers {
-			for _, rpcUrl := range provider.RpcUrls {
-				url := max.ParseUrl(rpcUrl)
-				if _, exists := newDynamicServices[url.Domain]; !exists {
-					newDynamicServices[url.Domain] = ServiceConfigs{
-						Name:          svcConfig.Name,
-						Active:        svcConfig.Active,
-						LevelRequired: svcConfig.LevelRequired,
-						NetworkName:   svcConfig.NetworkName,
-						Members:       make(map[string]cfg.Member),
-					}
-				}
-			}
-		}
-	}
-
-	for _, member := range c.Members {
-		if member.Service.Active != 1 {
-			continue
-		}
-		for _, assignments := range member.ServiceAssignments {
-			for _, assignment := range assignments {
-				for _, service := range c.Services {
-					if assignment == service.Configuration.Name {
-						if member.Membership.Level < service.Configuration.LevelRequired {
-							continue
-						}
-						for domainName, serviceConfig := range newDynamicServices {
-							if serviceConfig.Name == service.Configuration.Name {
-								memberInfo := cfg.Member{
-									Details:    member.Details,
-									Membership: member.Membership,
-									Service:    member.Service,
-									Location:   member.Location,
-								}
-								newDynamicServices[domainName].Members[member.Details.Name] = memberInfo
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	ServiceRecords.mu.Lock()
-	defer ServiceRecords.mu.Unlock()
-	ServiceRecords.Services = newDynamicServices
-}
-
+// ProcessDynamic chooses the closest online member for the given domain
 func ProcessDynamic(params Parameters, id int, domain string) []cfg.DNSRecord {
 	var records []cfg.DNSRecord
 	var closestMember cfg.Member
@@ -74,18 +18,16 @@ func ProcessDynamic(params Parameters, id int, domain string) []cfg.DNSRecord {
 	ServiceRecords.mu.RLock()
 	defer ServiceRecords.mu.RUnlock()
 
-	for serviceDomain, service := range ServiceRecords.Services {
+	for serviceDomain, serviceConfig := range ServiceRecords.Services {
 		if serviceDomain == domain {
-			for _, member := range service.Members {
-				// override skip
+			for _, member := range serviceConfig.Members {
 				if member.Override {
 					continue
 				}
-				// check if online
 				if !IsValidIPv4(member.Service.ServiceIPv4) {
 					continue
 				}
-				// use the new officialResults approach
+				// check official results
 				if !IsMemberOnlineForDomain(domain, member.Details.Name) {
 					continue
 				}
@@ -123,9 +65,11 @@ func ProcessDynamic(params Parameters, id int, domain string) []cfg.DNSRecord {
 			}
 		}
 	}
+
 	return records
 }
 
+// IsValidIPv4 checks if a string is a valid IPv4 address
 func IsValidIPv4(ip string) bool {
 	parsedIP := net.ParseIP(ip)
 	return parsedIP != nil && parsedIP.To4() != nil

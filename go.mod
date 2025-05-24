@@ -12,6 +12,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/nats-io/nats.go v1.42.0
 	github.com/oschwald/maxminddb-golang v1.13.1
+	golang.org/x/net v0.40.0
 	maunium.net/go/mautrix v0.24.0
 )
 
@@ -30,7 +31,6 @@ require (
 	go.mau.fi/util v0.8.7 // indirect
 	golang.org/x/crypto v0.38.0 // indirect
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6 // indirect
-	golang.org/x/net v0.40.0 // indirect
 	golang.org/x/sync v0.14.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.25.0 // indirect

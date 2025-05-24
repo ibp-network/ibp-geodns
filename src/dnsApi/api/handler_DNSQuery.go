@@ -8,7 +8,6 @@ import (
 	max "ibp-geodns/src/common/maxmind"
 )
 
-// handle_DNSQuery processes the "lookup" queries
 func handle_DNSQuery(req Request) Response {
 	var records []cfg.DNSRecord
 	c := cfg.GetConfig()
@@ -16,16 +15,14 @@ func handle_DNSQuery(req Request) Response {
 
 	domain := strings.ToLower(strings.TrimSuffix(req.Parameters.QName, "."))
 
-	// Stats calls omitted. We no longer rely on local data.* usage for deciding official status.
-
+	// TLDRecords usage
 	TLDRecords.mu.RLock()
-	defer TLDRecords.mu.RUnlock()
-
 	for key, tld := range TLDRecords.records {
 		if extractTopLevelDomain(domain) == strings.ToLower(tld) {
 			id = key
 		}
 	}
+	TLDRecords.mu.RUnlock()
 
 	SOA := ProcessSOA(req.Parameters, id, domain)
 	records = appendUniqueRecords(records, SOA)
@@ -39,7 +36,6 @@ func handle_DNSQuery(req Request) Response {
 	ANY := ProcessANY(req.Parameters, id, domain)
 	records = appendUniqueRecords(records, ANY)
 
-	// Next, dynamic logic. Instead of checking local data results, we check the snapshot from serviceMonitor
 	Dynamic := ProcessDynamic(req.Parameters, id, domain)
 	records = appendUniqueRecords(records, Dynamic)
 
@@ -56,7 +52,7 @@ func handle_DNSQuery(req Request) Response {
 		for _, uniqueDomain := range uniqueDomains {
 			if domain == uniqueDomain {
 				if req.Parameters.QType == "A" || req.Parameters.QType == "ANY" {
-					log.Log(log.Warn, "DNSLookup: no dynamic record for domain %s, returning fallback A", domain)
+					log.Log(log.Warn, "DNSLookup: no dynamic record for domain %s, fallback A", domain)
 					records = append(records, cfg.DNSRecord{
 						DomainID: id,
 						QName:    domain,

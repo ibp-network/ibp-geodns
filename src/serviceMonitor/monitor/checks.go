@@ -10,7 +10,6 @@ import (
 	"sync"
 )
 
-// All checks are stored here
 var (
 	CheckRegistry = struct {
 		Site     map[string]CheckSiteFunc
@@ -24,13 +23,8 @@ var (
 	}
 )
 
-// CheckSiteFunc signature
 type CheckSiteFunc func(check cfg.Check, member cfg.Member)
-
-// CheckDomainFunc signature
 type CheckDomainFunc func(check cfg.Check, domain string, service cfg.Service, member cfg.Member)
-
-// CheckEndpointFunc signature
 type CheckEndpointFunc func(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member)
 
 func startChecks() {
@@ -66,14 +60,12 @@ func getSiteCheck(name string) (CheckSiteFunc, bool) {
 	fn, ok := CheckRegistry.Site[name]
 	return fn, ok
 }
-
 func getDomainCheck(name string) (CheckDomainFunc, bool) {
 	CheckRegistry.Mu.RLock()
 	defer CheckRegistry.Mu.RUnlock()
 	fn, ok := CheckRegistry.Domain[name]
 	return fn, ok
 }
-
 func getEndpointCheck(name string) (CheckEndpointFunc, bool) {
 	CheckRegistry.Mu.RLock()
 	defer CheckRegistry.Mu.RUnlock()
@@ -81,7 +73,7 @@ func getEndpointCheck(name string) (CheckEndpointFunc, bool) {
 	return fn, ok
 }
 
-// ------------------- Site checks
+// ----------------- Site checks
 
 func initSiteCheck() {
 	c := cfg.GetConfig()
@@ -137,22 +129,17 @@ func runSiteCheck(check cfg.Check, fn CheckSiteFunc) {
 }
 
 func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
-	updateLocalSiteResults(check, member, status, errorMsg, dataMap)
-}
-
-// We update local site results, then we propose a new status if there's a discrepancy with official
-func updateLocalSiteResults(check cfg.Check, member cfg.Member, status bool, errorText string, data map[string]interface{}) {
 	exists, offStatus := getOfficialSiteStatus(check.Name, member.Details.Name)
 	if !exists {
-		nats.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorText, data)
+		nats.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
 		return
 	}
 	if offStatus != status {
-		nats.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorText, data)
+		nats.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
 	}
 }
 
-// --------------- Domain checks
+// -------------- Domain checks
 
 func initDomainCheck() {
 	c := cfg.GetConfig()
@@ -228,18 +215,18 @@ func domainCheckWrapper(check cfg.Check, fn CheckDomainFunc, domain string, serv
 	}
 }
 
-func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service, member cfg.Member, status bool, errorText string, data map[string]interface{}) {
+func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
 	exists, offStatus := getOfficialDomainStatus(check.Name, member.Details.Name, domain)
 	if !exists {
-		nats.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorText, data)
+		nats.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
 		return
 	}
 	if offStatus != status {
-		nats.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorText, data)
+		nats.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
 	}
 }
 
-// --------------- Endpoint checks
+// -------------- Endpoint checks
 
 func initEndpointCheck() {
 	c := cfg.GetConfig()
@@ -310,15 +297,14 @@ func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string
 	}
 }
 
-func UpdateEndpointResultLocal(check cfg.Check, member cfg.Member, service cfg.Service, endpoint string, status bool, errorText string, data map[string]interface{}) {
+func UpdateEndpointResultLocal(check cfg.Check, member cfg.Member, service cfg.Service, endpoint string, status bool, errorMsg string, dataMap map[string]interface{}) {
 	u := max.ParseUrl(endpoint)
-
 	exists, offStatus := getOfficialEndpointStatus(check.Name, member.Details.Name, u.Domain, endpoint)
 	if !exists {
-		nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorText, data)
+		nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
 		return
 	}
 	if offStatus != status {
-		nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorText, data)
+		nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
 	}
 }
