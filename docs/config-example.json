@@ -1,7 +1,7 @@
 {
     "System": {
-        "NodeType": "client",
         "WorkDir": "D:\\Sync\\Projects\\stake.plus\\code\\ibp-geodns-v2\\",
+        "LogLevel": "Debug",
         "ConfigUrls": {
             "StaticDNSConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/geodns-static.json",
             "MembersConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/members_professional.json",
@@ -17,7 +17,7 @@
         "AccountID": "",
         "LicenseKey": ""
     },
-    "Signal": {
+    "Nats": {
         "NodeID": "DNS-01",
         "Url": "nats://127.0.0.1:5222",
         "User": "DNS01",
@@ -34,12 +34,15 @@
         "Token": "your_discord_bot_token"
     },
     "MonitorApi": {
-        "ListenAddress": "127.0.0.1",
+        "ListenAddress": "0.0.0.0",
         "ListenPort": "6101"
     },
     "DnsApi": {
-        "ListenAddress": "127.0.0.1",
-        "ListenPort": "6100"
+        "ListenAddress": "0.0.0.0",
+        "ListenPort": "6100",
+        "MonitorAddress": "127.0.0.1",
+        "MonitorPort": "6101",
+        "RefreshIntervalSeconds": 30
     },
     "MgmtApi": {
         "ListenAddress": "0.0.0.0",

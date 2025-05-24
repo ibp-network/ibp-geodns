@@ -17,7 +17,7 @@ import (
 var version = "1.0.0"
 
 func main() {
-	log.SetLogLevel(log.Debug)
+	log.SetLogLevel(log.Info)
 	log.Log(log.Info, "IBP-GeoDNS serviceMonitor v%s starting...", version)
 
 	cfgFile := flag.String("config", "config.json", "Path to the configuration file")
