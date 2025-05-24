@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 )
 
 // logger is the internal logger instance
@@ -35,4 +36,22 @@ func Log(level LogLevel, format string, v ...interface{}) {
 // Fmt formats an error message similarly to fmt.Errorf
 func Fmt(format string, v ...interface{}) error {
 	return fmt.Errorf(format, v...)
+}
+
+func ParseLogLevel(levelStr string) LogLevel {
+	switch strings.ToLower(levelStr) {
+	case "debug":
+		return Debug
+	case "info":
+		return Info
+	case "warn":
+		return Warn
+	case "error":
+		return Error
+	case "fatal":
+		return Fatal
+	default:
+		// Default to Info if unknown string
+		return Info
+	}
 }

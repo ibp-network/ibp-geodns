@@ -27,15 +27,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Load config file and set log level fromt he config file
+	c := cfg.GetConfig()
+	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
+
 	// Load config and init MaxMind
 	cfg.Init(*cfgFile)
+
 	max.Init()
 
 	// Launch DNS API
 	api.Init()
 
 	// Read from config: how often to poll serviceMonitor
-	c := cfg.GetConfig()
+
 	intervalSec := c.Local.DnsApi.RefreshIntervalSeconds
 	log.Log(log.Info, "Starting serviceMonitor poller every %d seconds", intervalSec)
 	startServiceMonitorPoller(intervalSec)

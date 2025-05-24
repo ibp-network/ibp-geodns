@@ -12,6 +12,12 @@ func Init() {
 
 	c := cfg.GetConfig()
 
+	//    e.g. StaticDNSEntries() is your existing function that sets StaticRecords
+	StaticDNSEntries()
+
+	// 2) Now that we have static records, gather TLDs
+	populateTLDRecords()
+
 	// The DNS service for PowerDNS
 	dnsApi := http.NewServeMux()
 	dnsApi.HandleFunc("/dns", dnsApiRouter)
