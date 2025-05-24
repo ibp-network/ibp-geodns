@@ -24,14 +24,13 @@ type Config struct {
 
 // LocalConfig is loaded from disk (config.json)
 type LocalConfig struct {
-	System  SystemConfig  `json:"System"`
-	Maxmind MaxmindConfig `json:"Maxmind"`
-	Nats    NatsConfig    `json:"Nats"`
-	Mysql   MysqlConfig   `json:"Mysql"`
-	DnsApi  ApiConfig     `json:"DnsApi"`
-	// Added new MonitorApi field
-	MonitorApi ApiConfig `json:"MonitorApi"`
-	MgmtApi    ApiConfig `json:"MgmtApi"`
+	System     SystemConfig  `json:"System"`
+	Maxmind    MaxmindConfig `json:"Maxmind"`
+	Nats       NatsConfig    `json:"Nats"`
+	Mysql      MysqlConfig   `json:"Mysql"`
+	DnsApi     ApiConfig     `json:"DnsApi"`
+	MonitorApi ApiConfig     `json:"MonitorApi"`
+	MgmtApi    ApiConfig     `json:"MgmtApi"`
 	Discord    DiscordConfig
 	Matrix     MatrixConfig
 	Checks     []Check `json:"Checks"`
@@ -72,6 +71,8 @@ type IaasPricing struct {
 type ApiConfig struct {
 	ListenAddress          string            `json:"ListenAddress"`
 	ListenPort             string            `json:"ListenPort"`
+	MonitorAddress         string            `json:"MonitorAddress"`
+	MonitorPort            string            `json:"MonitorPort"`
 	AuthKeys               map[string]string `json:"AuthKeys"`
 	RefreshIntervalSeconds int               `json:"RefreshIntervalSeconds"` // new
 }
