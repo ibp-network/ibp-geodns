@@ -14,14 +14,12 @@ if [ -z "$RAW_JSON" ]; then
   exit 1
 fi
 
-# Validate JSON quickly
 if ! echo "$RAW_JSON" | jq . >/dev/null 2>&1; then
   echo "ERROR: Invalid JSON in response."
   echo "$RAW_JSON"
   exit 1
 fi
 
-# If there's a top-level "Result", unwrap it
 IS_WRAPPED="$(echo "$RAW_JSON" | jq 'has("Result")')"
 if [ "$IS_WRAPPED" = "true" ]; then
   PARSED_JSON="$(echo "$RAW_JSON" | jq '.Result')"
@@ -37,9 +35,6 @@ TMP_DOMAIN="$(mktemp -t sm_domain.XXXXXX)"
 TMP_ENDPOINT="$(mktemp -t sm_endpt.XXXXXX)"
 TMP_MERGED="$(mktemp -t sm_merged.XXXXXX)"
 
-##############################################################################
-# Flatten site results into an array
-##############################################################################
 jq '
   [
     (.SiteResults // [])[]
@@ -66,9 +61,6 @@ jq '
   ]
 ' "$TMP_PARSED" > "$TMP_SITE"
 
-##############################################################################
-# Flatten domain results into an array
-##############################################################################
 jq '
   [
     (.DomainResults // [])[]
@@ -96,9 +88,6 @@ jq '
   ]
 ' "$TMP_PARSED" > "$TMP_DOMAIN"
 
-##############################################################################
-# Flatten endpoint results into an array
-##############################################################################
 jq '
   [
     (.EndpointResults // [])[]
@@ -127,7 +116,6 @@ jq '
   ]
 ' "$TMP_PARSED" > "$TMP_ENDPOINT"
 
-# Merge the three arrays into one big array
 jq -s '[ .[0][] , .[1][] , .[2][] ]' "$TMP_SITE" "$TMP_DOMAIN" "$TMP_ENDPOINT" > "$TMP_MERGED"
 
 echo "==================================================="
@@ -135,12 +123,10 @@ echo " SERVICE MONITOR RESULTS (Grouped by Member)"
 echo "==================================================="
 
 jq -r '
-  # We have a single array of objects. Filter for valid objects that have .MemberName.
   map(select(type=="object" and has("MemberName") and (.MemberName|type=="string")))
   | group_by(.MemberName)[] as $group
   | "Member: " + ($group[0].MemberName // "???")
   + (
-      # Site checks
       (
         $group
         | map(select(.Type=="site"))
@@ -159,7 +145,6 @@ jq -r '
           end
       )
       +
-      # Domain checks
       (
         $group
         | map(select(.Type=="domain"))
@@ -180,7 +165,6 @@ jq -r '
           end
       )
       +
-      # Endpoint checks
       (
         $group
         | map(select(.Type=="endpoint"))
