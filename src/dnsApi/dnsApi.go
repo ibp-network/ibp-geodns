@@ -16,7 +16,7 @@ import (
 var version = "0.7.0"
 
 func main() {
-	log.SetLogLevel(log.Info)
+	log.SetLogLevel(log.Debug)
 	log.Log(log.Info, "IBP-GeoDNS DNS backend v%s starting...", version)
 
 	cfgFile := flag.String("config", "config.json", "Path to configuration file")
