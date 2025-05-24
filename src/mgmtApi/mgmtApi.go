@@ -9,7 +9,6 @@ import (
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	nats "ibp-geodns/src/common/nats"
 	api "ibp-geodns/src/mgmtApi/api"
 )
 
@@ -42,9 +41,6 @@ func main() {
 
 	// Sleep while we load caches
 	time.Sleep(2 * time.Second)
-
-	// Launch NATS Internode Communication
-	nats.Init()
 
 	// Launch API Listener
 	api.Init()

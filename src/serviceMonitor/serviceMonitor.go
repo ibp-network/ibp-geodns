@@ -9,9 +9,9 @@ import (
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	nats "ibp-geodns/src/common/nats"
 	"ibp-geodns/src/serviceMonitor/api"
 	"ibp-geodns/src/serviceMonitor/monitor"
+	nats "ibp-geodns/src/serviceMonitor/nats"
 )
 
 var version = "1.0.0"

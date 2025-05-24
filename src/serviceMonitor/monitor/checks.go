@@ -7,7 +7,7 @@ import (
 	dat "ibp-geodns/src/common/data" // Use data for official status checks
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	nats "ibp-geodns/src/common/nats"
+	nats "ibp-geodns/src/serviceMonitor/nats"
 	"sync"
 )
 
