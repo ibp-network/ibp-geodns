@@ -1,118 +1,113 @@
 #!/usr/bin/env bash
 #
-# Demo script to pull official results from serviceMonitor and print 4 sections:
-#   1) Site checks
-#   2) Domain checks
-#   3) Endpoint checks
-#   4) By Member
+# Pull official results from serviceMonitor, print four sections:
+#   1) Sites
+#   2) Domains
+#   3) Endpoints
+#   4) By Member (the trickiest part)
 #
-# Usage:
-#   ./test_monitor_results.sh [monitor_address] [monitor_port]
+# Approach for "By Member":
+#   - Extract site, domain, endpoint items each to a separate file as arrays
+#   - Merge them with `jq -s '.[0] + .[1] + .[2]'`
+#   - Then group by .MemberName
 
 MONITOR_ADDR="${1:-127.0.0.1}"
 MONITOR_PORT="${2:-6101}"
 
 echo "Pulling official results from serviceMonitor at ${MONITOR_ADDR}:${MONITOR_PORT}..."
 
-JSON="$(curl -s http://${MONITOR_ADDR}:${MONITOR_PORT}/results)"
-if [ -z "$JSON" ]; then
-  echo "ERROR: No JSON data received."
+RAW_JSON="$(curl -s http://${MONITOR_ADDR}:${MONITOR_PORT}/results)"
+if [ -z "$RAW_JSON" ]; then
+  echo "ERROR: No JSON data."
   exit 1
 fi
 
-# Check JSON validity
-if ! echo "$JSON" | jq . >/dev/null 2>&1; then
-  echo "ERROR: Invalid JSON received:"
-  echo "$JSON"
+# Basic JSON check
+if ! echo "$RAW_JSON" | jq . >/dev/null 2>&1; then
+  echo "ERROR: invalid JSON"
+  echo "$RAW_JSON"
   exit 1
 fi
 
-TMPFILE="$(mktemp -t sm_results.XXXXXX)"
-echo "$JSON" > "$TMPFILE"
+TMP_RAW="$(mktemp -t sm_results.XXXXXX)"
+echo "$RAW_JSON" > "$TMP_RAW"
 
 echo "==================================================="
-echo "   SERVICE MONITOR RESULTS"
+echo " SERVICE MONITOR RESULTS"
 echo "==================================================="
 
-##################################################
+########################################
 # 1) SITES
-##################################################
+########################################
 echo
 echo "---------- SITES ----------"
 echo
-# We'll keep it simple: For each item in .SiteResults, print the check name
-# then each member with status / error
 jq -r '
   (.SiteResults // [])[]
-  | .Check.Name as $chk
-  | " \($chk) => "
+  | .Check.Name as $check
+  | " " + ($check // "?") + " => "
     + (
-      ( .Results // [] )
+      (.Results // [])
       | map(
-          "Member: "
-          + (.Member.Details.Name // "???")
+          "Member: " + (.Member.Details.Name // "??")
           + " Status: \(.Status)"
-          + ( if (.ErrorText // "") != "" then " (Err: \(.ErrorText))" else "" end )
+          + (if (.ErrorText // "") != "" then " (Err: \(.ErrorText))" else "" end)
         )
       | join(" | ")
     )
-' "$TMPFILE"
+' "$TMP_RAW"
 
-##################################################
+########################################
 # 2) DOMAINS
-##################################################
+########################################
 echo
 echo "---------- DOMAINS ----------"
 echo
-# Group by domain, then list each check's name, members, status
 jq -r '
   (.DomainResults // [])
   | group_by(.Domain)[]
-  | "Domain: " + (.[0].Domain // "???")
-  , (
+  | "Domain: " + (.[0].Domain // "?"),
+    (
       map(
-        .Check.Name as $checkName
-        | "  Check: " + ($checkName // "???")
-          + " => "
+        .Check.Name as $ch
+        | "  Check: " + ($ch // "?") + " => "
           + (
-            ( .Results // [] )
+            (.Results // [])
             | map(
-                "Member: " + (.Member.Details.Name // "???")
+                "Member: " + (.Member.Details.Name // "??")
                 + " Status: \(.Status)"
-                + ( if (.ErrorText // "") != "" then " (Err: \(.ErrorText))" else "" end )
+                + (if (.ErrorText // "") != "" then " (Err: \(.ErrorText))" else "" end)
               )
             | join(" | ")
           )
       )
       | join("\n")
     )
-' "$TMPFILE"
+' "$TMP_RAW"
 
-##################################################
+########################################
 # 3) ENDPOINTS
-##################################################
+########################################
 echo
 echo "---------- ENDPOINTS ----------"
 echo
-# Group by domain, then group by rpcUrl
 jq -r '
   (.EndpointResults // [])
   | group_by(.Domain)[]
-  | "Domain: " + (.[0].Domain // "???")
-  , (
+  | "Domain: " + (.[0].Domain // "?"),
+    (
       group_by(.RpcUrl)[]
-      | "  RPC: " + (.[0].RpcUrl // "???")
-      , (
+      | "  RPC: " + (.[0].RpcUrl // "?"),
+        (
           map(
-            .Check.Name as $chk
-            | "    Check: " + ($chk // "???")
-              + " => "
+            .Check.Name as $ch
+            | "    Check: " + ($ch // "?") + " => "
               + (
-                ( .Results // [] )
+                (.Results // [])
                 | map(
-                    "Member: " + (.Member.Details.Name // "???")
+                    "Member: " + (.Member.Details.Name // "??")
                     + " Status: \(.Status)"
-                    + ( if (.ErrorText // "") != "" then " (Err: \(.ErrorText))" else "" end )
+                    + (if (.ErrorText // "") != "" then " (Err: \(.ErrorText))" else "" end)
                   )
                 | join(" | ")
               )
@@ -120,109 +115,127 @@ jq -r '
           | join("\n")
         )
     )
-' "$TMPFILE"
+' "$TMP_RAW"
 
-##################################################
+########################################
 # 4) BY MEMBER
-##################################################
+########################################
+# We'll produce 3 separate arrays: site.json, domain.json, endpoint.json
+# Then unify them into one single array array_unified.json
+# Then group that final array by .MemberName
+
 echo
 echo "---------- BY MEMBER ----------"
 echo
-# We'll unify site/domain/endpoint data, then group by MemberName
-# to list everything for each member.
 
+TMP_SITE="$(mktemp -t sm_site.XXXXXX)"
+TMP_DOMAIN="$(mktemp -t sm_domain.XXXXXX)"
+TMP_ENDPOINT="$(mktemp -t sm_endpt.XXXXXX)"
+TMP_UNIFIED="$(mktemp -t sm_unified.XXXXXX)"
+
+# Extract site items
+jq '
+  (.SiteResults // [])[] as $site
+  | $site.Check.Name as $checkName
+  | ($site.Results // [])[]
+  | {
+      "MemberName": (.Member.Details.Name // "??"),
+      "Type": "site",
+      "Domain": null,
+      "RpcUrl": null,
+      "CheckName": $checkName,
+      "Status": .Status,
+      "ErrorText": .ErrorText
+    }
+' "$TMP_RAW" > "$TMP_SITE"
+
+# Extract domain items
+jq '
+  (.DomainResults // [])[] as $domRes
+  | $domRes.Check.Name as $checkName
+  | $domRes.Domain as $dom
+  | ($domRes.Results // [])[]
+  | {
+      "MemberName": (.Member.Details.Name // "??"),
+      "Type": "domain",
+      "Domain": $dom,
+      "RpcUrl": null,
+      "CheckName": $checkName,
+      "Status": .Status,
+      "ErrorText": .ErrorText
+    }
+' "$TMP_RAW" > "$TMP_DOMAIN"
+
+# Extract endpoint items
+jq '
+  (.EndpointResults // [])[] as $endRes
+  | $endRes.Check.Name as $checkName
+  | $endRes.Domain as $dom
+  | $endRes.RpcUrl as $rpc
+  | ($endRes.Results // [])[]
+  | {
+      "MemberName": (.Member.Details.Name // "??"),
+      "Type": "endpoint",
+      "Domain": $dom,
+      "RpcUrl": $rpc,
+      "CheckName": $checkName,
+      "Status": .Status,
+      "ErrorText": .ErrorText
+    }
+' "$TMP_RAW" > "$TMP_ENDPOINT"
+
+# Now unify them as a single JSON array
+jq -s '.[0] + .[1] + .[2]' "$TMP_SITE" "$TMP_DOMAIN" "$TMP_ENDPOINT" > "$TMP_UNIFIED"
+
+# Confirm it is valid & is an array
+if ! jq type "$TMP_UNIFIED" >/dev/null 2>&1; then
+  echo "ERROR: $TMP_UNIFIED not valid JSON"
+  cat "$TMP_UNIFIED"
+  rm -f "$TMP_SITE" "$TMP_DOMAIN" "$TMP_ENDPOINT" "$TMP_UNIFIED" "$TMP_RAW"
+  exit 1
+fi
+
+# Group by MemberName
 jq -r '
-  def siteItems:
-    (.SiteResults // [])[] as $s
-    | $s.Check.Name as $chName
-    | ($s.Results // [])[]
-    | {
-        MemberName: (.Member.Details.Name // "???"),
-        Type: "site",
-        Domain: null,
-        RpcUrl: null,
-        CheckName: $chName,
-        Status: .Status,
-        ErrorText: .ErrorText
-      };
-
-  def domainItems:
-    (.DomainResults // [])[] as $d
-    | $d.Check.Name as $chName
-    | $d.Domain as $dom
-    | ($d.Results // [])[]
-    | {
-        MemberName: (.Member.Details.Name // "???"),
-        Type: "domain",
-        Domain: $dom,
-        RpcUrl: null,
-        CheckName: $chName,
-        Status: .Status,
-        ErrorText: .ErrorText
-      };
-
-  def endpointItems:
-    (.EndpointResults // [])[] as $e
-    | $e.Check.Name as $chName
-    | $e.Domain as $dom
-    | $e.RpcUrl as $rpc
-    | ($e.Results // [])[]
-    | {
-        MemberName: (.Member.Details.Name // "???"),
-        Type: "endpoint",
-        Domain: $dom,
-        RpcUrl: $rpc,
-        CheckName: $chName,
-        Status: .Status,
-        ErrorText: .ErrorText
-      };
-
-  [
-    siteItems,
-    domainItems,
-    endpointItems
-  ]
-  | add
-  | group_by(.MemberName)[]
-  | "Member: " + (.[0].MemberName // "???")
-  , (
+  group_by(.MemberName)[]
+  | "Member: " + (.[0].MemberName // "???"),
+    (
       group_by(.Type)[]
       | if .[0].Type == "site" then
-          "  [Site Checks]" ,
+          "  [Site Checks]",
           (
             map(
-              "    Check: " + (.CheckName // "???") + " => " + ("\( .Status )")
-              + if (.ErrorText // "") != "" then " (Err: \(.ErrorText))" else "" end
+              "    Check: " + (.CheckName // "???") + " => \(.Status)"
+              + (if (.ErrorText // "") != "" then " (Err: \(.ErrorText))" else "" end)
             )
             | join("\n")
           )
         elif .[0].Type == "domain" then
-          "  [Domain Checks]" ,
+          "  [Domain Checks]",
           (
             map(
-              "    Domain: " + (.Domain // "???") + " | Check: " + (.CheckName // "???")
-              + " => " + ("\( .Status )")
-              + if (.ErrorText // "") != "" then " (Err: \(.ErrorText))" else "" end
+              "    Domain: " + (.Domain // "???")
+              + " | Check: " + (.CheckName // "???") + " => \(.Status)"
+              + (if (.ErrorText // "") != "" then " (Err: \(.ErrorText))" else "" end)
             )
             | join("\n")
           )
         else
-          "  [Endpoint Checks]" ,
+          "  [Endpoint Checks]",
           (
             map(
-              "    Domain: " + (.Domain // "???") + " | RpcUrl: " + (.RpcUrl // "???")
-              + " | Check: " + (.CheckName // "???")
-              + " => " + ("\( .Status )")
-              + if (.ErrorText // "") != "" then " (Err: \(.ErrorText))" else "" end
+              "    Domain: " + (.Domain // "???")
+              + " | RpcUrl: " + (.RpcUrl // "???")
+              + " | Check: " + (.CheckName // "???") + " => \(.Status)"
+              + (if (.ErrorText // "") != "" then " (Err: \(.ErrorText))" else "" end)
             )
             | join("\n")
           )
         end
-      )
-      | join("\n")
-  )
-' "$TMPFILE"
+      | .
+    )
+' "$TMP_UNIFIED"
 
-rm -f "$TMPFILE"
+rm -f "$TMP_SITE" "$TMP_DOMAIN" "$TMP_ENDPOINT" "$TMP_UNIFIED" "$TMP_RAW"
 echo
 echo "Done."
