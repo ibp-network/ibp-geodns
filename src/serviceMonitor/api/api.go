@@ -5,17 +5,16 @@ import (
 	"net/http"
 
 	cfg "ibp-geodns/src/common/config"
+	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
-	"ibp-geodns/src/serviceMonitor/monitor"
 )
 
-// Init starts an HTTP server for retrieving or resetting official results
+// Init starts the internal API to serve or reset official results
 func Init() {
 	c := cfg.GetConfig()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/results", handleResults)
-	mux.HandleFunc("/reset", handleReset)
 
 	log.Log(log.Info, "Starting serviceMonitor API on %s:%s",
 		c.Local.MonitorApi.ListenAddress,
@@ -29,13 +28,20 @@ func Init() {
 }
 
 func handleResults(w http.ResponseWriter, r *http.Request) {
-	results := monitor.GetOfficialResults()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(results)
-}
+	// Query the official results from data
+	sites, domains, endpoints := dat.GetOfficialResults()
 
-func handleReset(w http.ResponseWriter, r *http.Request) {
-	monitor.ResetOfficialResults()
+	// We'll define a small struct to return these in JSON
+	out := struct {
+		SiteResults     interface{} `json:"SiteResults"`
+		DomainResults   interface{} `json:"DomainResults"`
+		EndpointResults interface{} `json:"EndpointResults"`
+	}{
+		SiteResults:     sites,
+		DomainResults:   domains,
+		EndpointResults: endpoints,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"reset": true}`))
+	json.NewEncoder(w).Encode(out)
 }

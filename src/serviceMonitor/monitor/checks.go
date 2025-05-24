@@ -4,6 +4,7 @@ import (
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
+	dat "ibp-geodns/src/common/data" // Use data for official status checks
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
 	nats "ibp-geodns/src/common/nats"
@@ -128,13 +129,14 @@ func runSiteCheck(check cfg.Check, fn CheckSiteFunc) {
 	}
 }
 
+// Compare local check result with official result, propose if mismatch
 func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
-	exists, offStatus := getOfficialSiteStatus(check.Name, member.Details.Name)
-	if !exists {
+	found, officialStatus := dat.GetOfficialSiteStatus(check.Name, member.Details.Name)
+	if !found {
 		nats.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
 		return
 	}
-	if offStatus != status {
+	if officialStatus != status {
 		nats.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
 	}
 }
@@ -216,12 +218,12 @@ func domainCheckWrapper(check cfg.Check, fn CheckDomainFunc, domain string, serv
 }
 
 func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
-	exists, offStatus := getOfficialDomainStatus(check.Name, member.Details.Name, domain)
-	if !exists {
+	found, officialStatus := dat.GetOfficialDomainStatus(check.Name, member.Details.Name, domain)
+	if !found {
 		nats.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
 		return
 	}
-	if offStatus != status {
+	if officialStatus != status {
 		nats.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
 	}
 }
@@ -299,12 +301,12 @@ func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string
 
 func UpdateEndpointResultLocal(check cfg.Check, member cfg.Member, service cfg.Service, endpoint string, status bool, errorMsg string, dataMap map[string]interface{}) {
 	u := max.ParseUrl(endpoint)
-	exists, offStatus := getOfficialEndpointStatus(check.Name, member.Details.Name, u.Domain, endpoint)
-	if !exists {
+	found, officialStatus := dat.GetOfficialEndpointStatus(check.Name, member.Details.Name, u.Domain, endpoint)
+	if !found {
 		nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
 		return
 	}
-	if offStatus != status {
+	if officialStatus != status {
 		nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
 	}
 }
