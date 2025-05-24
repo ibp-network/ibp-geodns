@@ -27,13 +27,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Load config and init MaxMind
+	cfg.Init(*cfgFile)
+
 	// Load config file and set log level fromt he config file
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
 
-	// Load config and init MaxMind
-	cfg.Init(*cfgFile)
-
+	// Load maxmind data
 	max.Init()
 
 	// Launch DNS API

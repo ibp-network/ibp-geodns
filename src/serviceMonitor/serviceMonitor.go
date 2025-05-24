@@ -28,12 +28,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize config
+	cfg.Init(*cfgFile)
+
 	// Load config file and set log level fromt he config file
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
-
-	// Initialize config
-	cfg.Init(*cfgFile)
 
 	// Initialize MaxMind
 	max.Init()
