@@ -1,37 +1,32 @@
 package api
 
 import (
+	"strings"
+
 	cfg "ibp-geodns/src/common/config"
-	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	"strings"
 )
 
-// dnsQuery_Lookup handles DNS lookup queries based on the provided parameters.
+// handle_DNSQuery processes the "lookup" queries
 func handle_DNSQuery(req Request) Response {
 	var records []cfg.DNSRecord
-
 	c := cfg.GetConfig()
 	var id int
 
 	domain := strings.ToLower(strings.TrimSuffix(req.Parameters.QName, "."))
 
-	// Store Client Stats
-	go dat.ClientHit(req.Parameters.Remote, domain)
+	// Stats calls omitted. We no longer rely on local data.* usage for deciding official status.
 
-	// Initiate TopLevelDomains mutex read lock
 	TLDRecords.mu.RLock()
 	defer TLDRecords.mu.RUnlock()
 
-	// Fetch domain id based on domain's index in array.
 	for key, tld := range TLDRecords.records {
 		if extractTopLevelDomain(domain) == strings.ToLower(tld) {
 			id = key
 		}
 	}
 
-	// Collect records, ensuring no duplicates
 	SOA := ProcessSOA(req.Parameters, id, domain)
 	records = appendUniqueRecords(records, SOA)
 
@@ -44,14 +39,12 @@ func handle_DNSQuery(req Request) Response {
 	ANY := ProcessANY(req.Parameters, id, domain)
 	records = appendUniqueRecords(records, ANY)
 
+	// Next, dynamic logic. Instead of checking local data results, we check the snapshot from serviceMonitor
 	Dynamic := ProcessDynamic(req.Parameters, id, domain)
 	records = appendUniqueRecords(records, Dynamic)
 
-	// Default record if requested domain is valid
 	if len(records) == 0 {
 		var uniqueDomains []string
-		uniqueDomains = make([]string, 0)
-
 		for _, service := range c.Services {
 			for _, provider := range service.Providers {
 				for _, url := range provider.RpcUrls {
@@ -60,11 +53,10 @@ func handle_DNSQuery(req Request) Response {
 				}
 			}
 		}
-
 		for _, uniqueDomain := range uniqueDomains {
 			if domain == uniqueDomain {
 				if req.Parameters.QType == "A" || req.Parameters.QType == "ANY" {
-					log.Log(log.Warn, "DNSLookup: No records found for domain %s, returning default result", domain)
+					log.Log(log.Warn, "DNSLookup: no dynamic record for domain %s, returning fallback A", domain)
 					records = append(records, cfg.DNSRecord{
 						DomainID: id,
 						QName:    domain,
@@ -79,28 +71,7 @@ func handle_DNSQuery(req Request) Response {
 	}
 
 	if len(records) == 0 {
-		// We need to return an empty record so the client knows there is no result
 		return Response{Result: []cfg.DNSRecord{}}
-	} else {
-		// Return compiled records
-		return Response{Result: records}
 	}
-}
-
-func appendUniqueRecords(records []cfg.DNSRecord, newRecords []cfg.DNSRecord) []cfg.DNSRecord {
-	for _, newRecord := range newRecords {
-		if !containsRecord(records, newRecord) {
-			records = append(records, newRecord)
-		}
-	}
-	return records
-}
-
-func containsRecord(records []cfg.DNSRecord, record cfg.DNSRecord) bool {
-	for _, r := range records {
-		if r.QName == record.QName && r.QType == record.QType && r.Content == record.Content {
-			return true
-		}
-	}
-	return false
+	return Response{Result: records}
 }

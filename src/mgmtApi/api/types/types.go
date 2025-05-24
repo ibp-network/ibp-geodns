@@ -2,7 +2,7 @@ package types
 
 import (
 	cfg "ibp-geodns/src/common/config"
-	mon "ibp-geodns/src/dnsApi/monitor"
+	mon "ibp-geodns/src/serviceMonitor/monitor"
 	"sync"
 )
 

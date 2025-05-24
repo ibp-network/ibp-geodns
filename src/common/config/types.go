@@ -5,14 +5,14 @@ import (
 	"time"
 )
 
-// Config holds the configuration data and internal fields
+// ConfigInit holds the main config pointer with a mutex
 type ConfigInit struct {
 	mu      sync.RWMutex
 	cfgFile string
 	data    Config
 }
 
-// ConfigData holds the actual configuration data without the mutex
+// Config holds all top-level configuration sections
 type Config struct {
 	Local           LocalConfig            `json:"System"`
 	StaticDNS       []DNSRecord            `json:"StaticDNS"`
@@ -22,24 +22,27 @@ type Config struct {
 	ServiceRequests ServiceRequests        `json:"ServiceRequests"`
 }
 
-// SystemConfig represents the configuration loaded from disk (config.json)
+// LocalConfig is loaded from disk (config.json)
 type LocalConfig struct {
 	System  SystemConfig  `json:"System"`
 	Maxmind MaxmindConfig `json:"Maxmind"`
 	Signal  SignalConfig  `json:"Signal"`
 	Mysql   MysqlConfig   `json:"Mysql"`
 	DnsApi  ApiConfig     `json:"DnsApi"`
-	MgmtApi ApiConfig     `json:"MgmtApi"`
-	Discord DiscordConfig `json:"Discord"`
-	Matrix  MatrixConfig  `json:"Matrix"`
-	Checks  []Check       `json:"Checks"`
+	// Added new MonitorApi field
+	MonitorApi ApiConfig `json:"MonitorApi"`
+	MgmtApi    ApiConfig `json:"MgmtApi"`
+	Discord    DiscordConfig
+	Matrix     MatrixConfig
+	Checks     []Check `json:"Checks"`
 }
 
-// DiscordConfig represents the Discord bot configuration
+// DiscordConfig holds Discord bot credentials
 type DiscordConfig struct {
 	Token string `json:"Token"`
 }
 
+// SystemConfig for base paths and intervals
 type SystemConfig struct {
 	WorkDir            string        `json:"workDir"`
 	ConfigReloadTime   time.Duration `json:"ConfigReloadTime"`
@@ -48,6 +51,7 @@ type SystemConfig struct {
 	ConfigUrls         ConfigUrls    `json:"ConfigUrls"`
 }
 
+// ConfigUrls for external JSON fetch
 type ConfigUrls struct {
 	StaticDNSConfig        string `json:"StaticDNSConfig"`
 	MembersConfig          string `json:"MembersConfig"`
@@ -56,7 +60,7 @@ type ConfigUrls struct {
 	ServicesRequestsConfig string `json:"ServicesRequestsConfig"`
 }
 
-// IaasPricing represents the pricing details for a region
+// IaasPricing holds region-based pricing
 type IaasPricing struct {
 	Cores     float64 `json:"cores"`
 	Memory    float64 `json:"memory"`
@@ -64,14 +68,14 @@ type IaasPricing struct {
 	Bandwidth float64 `json:"bandwidth"`
 }
 
-// APIServerConfig represents the API server configuration
+// ApiConfig for HTTP servers
 type ApiConfig struct {
 	ListenAddress string            `json:"ListenAddress"`
 	ListenPort    string            `json:"ListenPort"`
 	AuthKeys      map[string]string `json:"AuthKeys"`
 }
 
-// MatrixConfig represents the Matrix configuration
+// MatrixConfig for matrix bot
 type MatrixConfig struct {
 	HomeServerURL string `json:"HomeServerURL"`
 	Username      string `json:"Username"`
@@ -79,7 +83,7 @@ type MatrixConfig struct {
 	RoomID        string `json:"RoomID"`
 }
 
-// Check represents individual check configurations
+// Check defines a monitor check
 type Check struct {
 	Name          string                 `json:"Name"`
 	Enabled       int                    `json:"Enabled"`
@@ -89,7 +93,7 @@ type Check struct {
 	ExtraOptions  map[string]interface{} `json:"ExtraOptions"`
 }
 
-// StaticDNSRecord represents a record in the static DNS configuration
+// DNSRecord for static DNS config
 type DNSRecord struct {
 	QName    string `json:"qname"`
 	QType    string `json:"qtype"`
@@ -99,7 +103,7 @@ type DNSRecord struct {
 	DomainID int    `json:"domain_id"`
 }
 
-// Member represents a member in the members configuration
+// Member structure
 type Member struct {
 	Details            MemberDetails `json:"Details"`
 	Membership         Membership    `json:"Membership"`
@@ -110,21 +114,21 @@ type Member struct {
 	Location           Location            `json:"Location"`
 }
 
-// MemberDetails represents the details of a member
+// MemberDetails for display info
 type MemberDetails struct {
 	Name    string `json:"Name"`
 	Website string `json:"Website"`
 	Logo    string `json:"Logo"`
 }
 
-// Membership represents the membership information of a member
+// Membership level info
 type Membership struct {
 	Level      int `json:"MemberLevel"`
 	Joined     int `json:"Joined"`
 	LastRankup int `json:"LastRankup"`
 }
 
-// ServiceInfo represents the service information of a member
+// ServiceInfo for a member's main Service
 type ServiceInfo struct {
 	Active      int    `json:"Active"`
 	ServiceIPv4 string `json:"ServiceIPv4"`
@@ -132,26 +136,26 @@ type ServiceInfo struct {
 	MonitorUrl  string `json:"MonitorUrl"`
 }
 
-// Location represents the geographical location of a member
+// Location represents lat/long for geo
 type Location struct {
 	Region    string  `json:"Region"`
 	Latitude  float64 `json:"Latitude"`
 	Longitude float64 `json:"Longitude"`
 }
 
-// Service represents a service in the services configuration
+// Service definition
 type Service struct {
 	Configuration ServiceConfiguration       `json:"Configuration"`
 	Resources     Resources                  `json:"Resources"`
 	Providers     map[string]ServiceProvider `json:"Providers"`
 }
 
-// ServiceProvider represents a service provider's information
+// ServiceProvider data
 type ServiceProvider struct {
 	RpcUrls []string `json:"RpcUrls"`
 }
 
-// ServiceConfiguration represents the configuration of a service
+// ServiceConfiguration data
 type ServiceConfiguration struct {
 	Name          string `json:"Name"`
 	ServiceType   string `json:"ServiceType"`
@@ -160,6 +164,7 @@ type ServiceConfiguration struct {
 	NetworkName   string `json:"NetworkName"`
 }
 
+// Resources define service usage
 type Resources struct {
 	Nodes     int     `json:"nodes"`
 	Cores     float64 `json:"cores"`
@@ -168,7 +173,18 @@ type Resources struct {
 	Bandwidth float64 `json:"bandwidth"`
 }
 
-// Define the structure of "dns" and "wss" data
+// ServiceRequests for monthly usage
+type ServiceRequests struct {
+	Requests map[string]map[string]MonthlyData
+}
+
+// MonthlyData for DNS / WSS
+type MonthlyData struct {
+	DNS RequestStats `json:"dns"`
+	WSS RequestStats `json:"wss"`
+}
+
+// RequestStats track usage
 type RequestStats struct {
 	Requests        int `json:"requests"`
 	UniqueIPs       int `json:"uniqueIPs"`
@@ -176,18 +192,7 @@ type RequestStats struct {
 	UniqueCountries int `json:"uniqueCountries"`
 }
 
-// Define the structure of each month, containing "dns" and "wss"
-type MonthlyData struct {
-	DNS RequestStats `json:"dns"`
-	WSS RequestStats `json:"wss"`
-}
-
-// Define the overall structure, mapping service names to monthly data
-type ServiceRequests struct {
-	Requests map[string]map[string]MonthlyData
-}
-
-// NodeInfo holds information about a cluster node.
+// SignalConfig for NATS
 type SignalConfig struct {
 	NodeID string `json:"NodeID"`
 	User   string `json:"User"`
@@ -195,14 +200,14 @@ type SignalConfig struct {
 	Url    string `json:"Url"`
 }
 
-// NodeInfo holds information about a cluster node.
+// MaxmindConfig keys
 type MaxmindConfig struct {
 	MaxmindDBPath string `json:"MaxmindDBPath"`
 	AccountID     string `json:"AccountID"`
 	LicenseKey    string `json:"LicenseKey"`
 }
 
-// NodeInfo holds information about a cluster node.
+// MysqlConfig for DB
 type MysqlConfig struct {
 	Host string `json:"Host"`
 	Port string `json:"Port"`

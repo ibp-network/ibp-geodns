@@ -2,75 +2,17 @@ package api
 
 import (
 	"net/http"
-	"time"
 
 	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
 )
 
-var (
-	ServiceRecords = &ServiceMap{Services: make(map[string]ServiceConfigs)}
-	StaticRecords  = &StaticMap{records: []cfg.DNSRecord{}}
-	TLDRecords     = &TLDMap{records: make(map[int]string)}
-)
-
-// Init initializes the DNS server with the provided configuration.
 func Init() {
 	log.Log(log.Info, "DNS Package initializing...")
 
-	// Load staticEntries
-	StaticDNSEntries()
-
-	// Load unique topLevelDomains
-	GenerateTLDs()
-
-	// Load Dynamic Entries
-	DynamicDNSEntries()
-
-	// Start configuration updater
-	go configUpdater()
-
-	// Launch API Listener
-	go Listener()
-}
-
-func configUpdater() {
-	initialDelay := 2 * time.Second
-	time.AfterFunc(initialDelay, configTimer)
-}
-
-func configTimer() {
 	c := cfg.GetConfig()
 
-	// Launch initial config update
-	// Update Static Entries
-	go StaticDNSEntries()
-	// Update topLevelDomains
-	go GenerateTLDs()
-	// Load Dynamic Entries
-	go DynamicDNSEntries()
-
-	ticker := time.NewTicker(c.Local.System.ConfigReloadTime * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		log.Log(log.Info, "Updating DNS configs")
-		// Update Static Entries
-		go StaticDNSEntries()
-		// Update topLevelDomains
-		go GenerateTLDs()
-		// Load Dynamic Entries
-		go DynamicDNSEntries()
-	}
-}
-
-func Listener() {
-	log.Log(log.Info, "API Package initializing...")
-
-	// Load configuration
-	c := cfg.GetConfig()
-
-	// DNS API for PowerDNS (unchanged)
+	// The DNS service for PowerDNS
 	dnsApi := http.NewServeMux()
 	dnsApi.HandleFunc("/dns", dnsApiRouter)
 

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
+	log "ibp-geodns/src/common/logging"
 
 	"github.com/go-ping/ping"
 )
@@ -14,7 +15,6 @@ func init() {
 }
 
 func PingCheck(check cfg.Check, member cfg.Member) {
-	// Prepare ping parameters
 	pingCount := getIntOption(check.ExtraOptions, "PingCount", 3)
 	pingInterval := time.Duration(getIntOption(check.ExtraOptions, "PingInterval", 100)) * time.Millisecond
 	pingTimeout := time.Duration(getIntOption(check.ExtraOptions, "PingTimeout", 1000)) * time.Millisecond
@@ -25,10 +25,9 @@ func PingCheck(check cfg.Check, member cfg.Member) {
 
 	pinger, err := ping.NewPinger(member.Service.ServiceIPv4)
 	if err != nil {
-		go UpdateSiteResultLocal(check, member, false, err.Error(), nil)
+		UpdateSiteResultLocal(check, member, false, err.Error(), nil)
 		return
 	}
-
 	pinger.Count = pingCount
 	pinger.Interval = pingInterval
 	pinger.Timeout = pingTimeout * time.Duration(pingCount)
@@ -38,33 +37,24 @@ func PingCheck(check cfg.Check, member cfg.Member) {
 
 	err = pinger.Run()
 	if err != nil {
-		go UpdateSiteResultLocal(check, member, false, err.Error(), nil)
+		UpdateSiteResultLocal(check, member, false, err.Error(), nil)
 		return
 	}
-
 	stats := pinger.Statistics()
 
-	// Process statistics
 	success := stats.PacketsRecv > 0 && stats.PacketLoss <= maxPacketLoss && stats.AvgRtt.Milliseconds() <= maxLatency
-
 	var msg string
 	if !success {
-		msg = fmt.Sprintf("Error: Average RTT latency of '%d'ms and packet loss '%.0f%%'", stats.AvgRtt.Milliseconds(), stats.PacketLoss)
-	} else {
-		msg = ""
+		msg = fmt.Sprintf("PingCheck: avgRtt=%dms, loss=%.0f%%", stats.AvgRtt.Milliseconds(), stats.PacketLoss)
+	}
+	dataMap := map[string]interface{}{
+		"PacketLoss": stats.PacketLoss,
+		"MinRtt":     stats.MinRtt.Milliseconds(),
+		"AvgRtt":     stats.AvgRtt.Milliseconds(),
+		"MaxRtt":     stats.MaxRtt.Milliseconds(),
+		"StdDevRtt":  stats.StdDevRtt.Milliseconds(),
 	}
 
-	go UpdateSiteResultLocal(
-		check,
-		member,
-		success,
-		msg,
-		map[string]interface{}{
-			"PacketLoss": stats.PacketLoss,
-			"MinRtt":     stats.MinRtt.Milliseconds(),
-			"AvgRtt":     stats.AvgRtt.Milliseconds(),
-			"MaxRtt":     stats.MaxRtt.Milliseconds(),
-			"StdDevRtt":  stats.StdDevRtt.Milliseconds(),
-		},
-	)
+	UpdateSiteResultLocal(check, member, success, msg, dataMap)
+	log.Log(log.Debug, "Ping check completed for %s success=%v", member.Details.Name, success)
 }

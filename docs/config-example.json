@@ -33,13 +33,17 @@
     "Discord": {
         "Token": "your_discord_bot_token"
     },
+    "MonitorApi": {
+        "ListenAddress": "127.0.0.1",
+        "ListenPort": "6101"
+    },
     "DnsApi": {
-        "ListenAddress": "0.0.0.0",
-        "ListenPort": "6000"
+        "ListenAddress": "127.0.0.1",
+        "ListenPort": "6100"
     },
     "MgmtApi": {
         "ListenAddress": "0.0.0.0",
-        "ListenPort": "6000",
+        "ListenPort": "6110",
         "AuthKeys": {
             "user1": "password123",
             "user2": "password123",
