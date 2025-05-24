@@ -16,6 +16,6 @@ func Connect() error {
 	}
 
 	var err error
-	nc, err = nats.Connect(c.Local.Signal.Url, nats.UserInfo(c.Local.Signal.User, c.Local.Signal.Pass))
+	nc, err = nats.Connect(c.Local.Nats.Url, nats.UserInfo(c.Local.Nats.User, c.Local.Nats.Pass))
 	return err
 }

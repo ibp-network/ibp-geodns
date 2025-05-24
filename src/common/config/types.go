@@ -26,7 +26,7 @@ type Config struct {
 type LocalConfig struct {
 	System  SystemConfig  `json:"System"`
 	Maxmind MaxmindConfig `json:"Maxmind"`
-	Signal  SignalConfig  `json:"Signal"`
+	Nats    NatsConfig    `json:"Nats"`
 	Mysql   MysqlConfig   `json:"Mysql"`
 	DnsApi  ApiConfig     `json:"DnsApi"`
 	// Added new MonitorApi field
@@ -194,7 +194,7 @@ type RequestStats struct {
 }
 
 // SignalConfig for NATS
-type SignalConfig struct {
+type NatsConfig struct {
 	NodeID string `json:"NodeID"`
 	User   string `json:"User"`
 	Pass   string `json:"Pass"`

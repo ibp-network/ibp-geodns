@@ -19,7 +19,7 @@ var (
 
 func Init() {
 	c := cfg.GetConfig()
-	con := c.Local.Signal
+	con := c.Local.Nats
 
 	state.NodeID = con.NodeID
 	state.ThisNode = NodeInfo{
