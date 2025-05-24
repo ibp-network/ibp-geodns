@@ -34,7 +34,7 @@ func Init() {
 	state.SubjectVote = "consensus.vote"
 	state.SubjectFinalize = "consensus.finalize"
 	state.SubjectCluster = "consensus.cluster"
-	state.ProposalTimeout = 4 * time.Second
+	state.ProposalTimeout = 12 * time.Second
 	state.NatsUrl = con.Url
 
 	err := Connect()

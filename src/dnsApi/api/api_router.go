@@ -13,7 +13,6 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 	err := decoder.Decode(&req)
 	if err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
-		writeDnsResponse(w, Response{Result: "Invalid Request"})
 		return
 	}
 
@@ -33,8 +32,7 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 	case "getMemberEvents":
 		res = handle_GetMemberEvents(req)
 	default:
-		writeDnsResponse(w, Response{Result: "Invalid Request"})
-		return
+		res = Response{Result: "Invalid Request"}
 	}
 
 	writeDnsResponse(w, res)
