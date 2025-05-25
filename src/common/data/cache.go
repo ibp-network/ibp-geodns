@@ -120,9 +120,10 @@ func LoadAllCaches() {
 	}
 }
 
-// SaveAllCaches selectively saves Official, Local, and/or Stats caches
-// depending on allowLocalOfficial & allowStats.
 func SaveAllCaches() {
+	// ADDED:
+	log.Log(log.Debug, "[SaveAllCaches] Entry: Attempting to save caches...")
+
 	muCacheOptions.Lock()
 	useLocal := allowLocalOfficial
 	useStats := allowStats
@@ -135,29 +136,42 @@ func SaveAllCaches() {
 	localFile := filepath.Join(workDir, "tmp", localCacheFile)
 	statsFile := filepath.Join(workDir, "tmp", statsCacheFile)
 
-	// If we are using local/official caches, save them.
+	// If we are using local/official caches
 	if useLocal {
 		Official.Mu.Lock()
-		defer Official.Mu.Unlock()
-		if err := SaveCache(officialFile, &Official); err != nil {
-			log.Log(log.Error, "Failed to save Official results cache: %v", err)
+		// ADDED:
+		log.Log(log.Debug, "[SaveAllCaches] official: %d siteResults, %d domainResults, %d endpointResults",
+			len(Official.SiteResults), len(Official.DomainResults), len(Official.EndpointResults))
+		err := SaveCache(officialFile, &Official)
+		Official.Mu.Unlock()
+		if err != nil {
+			log.Log(log.Error, "[SaveAllCaches] Official save error: %v", err)
 		}
 
 		Local.Mu.Lock()
-		defer Local.Mu.Unlock()
-		if err := SaveCache(localFile, &Local); err != nil {
-			log.Log(log.Error, "Failed to save Local results cache: %v", err)
+		// ADDED:
+		log.Log(log.Debug, "[SaveAllCaches] local: %d siteResults, %d domainResults, %d endpointResults",
+			len(Local.SiteResults), len(Local.DomainResults), len(Local.EndpointResults))
+		err = SaveCache(localFile, &Local)
+		Local.Mu.Unlock()
+		if err != nil {
+			log.Log(log.Error, "[SaveAllCaches] Local save error: %v", err)
 		}
 	}
 
-	// If we are using stats, save stats cache.
+	// If we are using stats
 	if useStats {
 		Stats.Mu.Lock()
-		defer Stats.Mu.Unlock()
-		if err := SaveCache(statsFile, &Stats.Data); err != nil {
-			log.Log(log.Error, "Failed to save Stats cache: %v", err)
+		// ADDED:
+		log.Log(log.Debug, "[SaveAllCaches] stats: date entries = %d", len(Stats.Data))
+		err := SaveCache(statsFile, &Stats.Data)
+		Stats.Mu.Unlock()
+		if err != nil {
+			log.Log(log.Error, "[SaveAllCaches] Stats save error: %v", err)
 		}
 	}
+
+	log.Log(log.Debug, "[SaveAllCaches] Exit: Done saving caches.")
 }
 
 // startAutoUpdate runs a ticker to auto-save caches. Only caches
