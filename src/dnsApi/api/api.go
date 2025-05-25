@@ -18,6 +18,9 @@ func Init() {
 	// 2) Now that we have static records, gather TLDs
 	populateTLDRecords()
 
+	// *** New Step: Rebuild dynamic ServiceRecords
+	RebuildServiceRecords()
+
 	// The DNS service for PowerDNS
 	dnsApi := http.NewServeMux()
 	dnsApi.HandleFunc("/dns", dnsApiRouter)
