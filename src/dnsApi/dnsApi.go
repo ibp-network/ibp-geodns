@@ -39,7 +39,7 @@ func main() {
 	// 3) Initialize data usage stats but NOT local/official caches
 	dat.Init(dat.InitOptions{
 		UseLocalOfficialCaches: false,
-		UseUsageStats:          true, // We want usage stats in the dnsApi
+		UseUsageStats:          true,
 	})
 
 	// 4) Initialize MaxMind
