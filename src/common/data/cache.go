@@ -46,14 +46,14 @@ func LoadCache(filePath string, out interface{}) error {
 			log.Log(log.Warn, "Cache file not found: %s", filePath)
 			return nil
 		}
-		log.Log(log.Error, "Failed to open cache file: %v", err)
+		log.Log(log.Error, "Failed to open cache file '%s': %v", filePath, err)
 		return err
 	}
 	defer file.Close()
 
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(out); err != nil {
-		log.Log(log.Error, "Failed to decode cache file: %v", err)
+		log.Log(log.Error, "Failed to decode cache file '%s': %v", filePath, err)
 		return err
 	}
 
@@ -69,20 +69,20 @@ func SaveCache(filePath string, data interface{}) error {
 	// Ensure the directory exists before creating the file.
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		log.Log(log.Error, "Failed to create directory %s: %v", dir, err)
+		log.Log(log.Error, "Failed to create directory '%s': %v", dir, err)
 		return err
 	}
 
 	file, err := os.Create(filePath)
 	if err != nil {
-		log.Log(log.Error, "Failed to create cache file: %v", err)
+		log.Log(log.Error, "Failed to create cache file '%s': %v", filePath, err)
 		return err
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	if err := encoder.Encode(data); err != nil {
-		log.Log(log.Error, "Failed to encode data to cache file: %v", err)
+		log.Log(log.Error, "Failed to encode data to cache file '%s': %v", filePath, err)
 		return err
 	}
 
@@ -105,33 +105,33 @@ func LoadAllCaches() {
 	localFile := filepath.Join(workDir, "tmp", localCacheFile)
 	statsFile := filepath.Join(workDir, "tmp", statsCacheFile)
 
-	// If we are using local/official caches, load them.
 	if useLocal {
+		log.Log(log.Debug, "[LoadAllCaches] Loading official cache from %s", officialFile)
 		Official.Mu.Lock()
 		if err := LoadCache(officialFile, &Official); err != nil {
-			log.Log(log.Error, "Failed to load Official results cache: %v", err)
+			log.Log(log.Error, "[LoadAllCaches] Official load error: %v", err)
 		}
 		Official.Mu.Unlock()
 
+		log.Log(log.Debug, "[LoadAllCaches] Loading local cache from %s", localFile)
 		Local.Mu.Lock()
 		if err := LoadCache(localFile, &Local); err != nil {
-			log.Log(log.Error, "Failed to load Local results cache: %v", err)
+			log.Log(log.Error, "[LoadAllCaches] Local load error: %v", err)
 		}
 		Local.Mu.Unlock()
 	}
 
-	// If we are using stats, load stats cache.
 	if useStats {
+		log.Log(log.Debug, "[LoadAllCaches] Loading stats cache from %s", statsFile)
 		Stats.Mu.Lock()
 		if err := LoadCache(statsFile, &Stats.Data); err != nil {
-			log.Log(log.Error, "Failed to load Stats cache: %v", err)
+			log.Log(log.Error, "[LoadAllCaches] Stats load error: %v", err)
 		}
 		Stats.Mu.Unlock()
 	}
 }
 
 func SaveAllCaches() {
-	// ADDED:
 	log.Log(log.Debug, "[SaveAllCaches] Entry: Attempting to save caches...")
 
 	muCacheOptions.Lock()
@@ -146,11 +146,13 @@ func SaveAllCaches() {
 	localFile := filepath.Join(workDir, "tmp", localCacheFile)
 	statsFile := filepath.Join(workDir, "tmp", statsCacheFile)
 
-	// If we are using local/official caches
 	if useLocal {
 		Official.Mu.Lock()
-		log.Log(log.Debug, "[SaveAllCaches] official: %d siteResults, %d domainResults, %d endpointResults",
-			len(Official.SiteResults), len(Official.DomainResults), len(Official.EndpointResults))
+		log.Log(log.Debug,
+			"[SaveAllCaches] official: %d siteResults, %d domainResults, %d endpointResults",
+			len(Official.SiteResults),
+			len(Official.DomainResults),
+			len(Official.EndpointResults))
 		err := SaveCache(officialFile, &Official)
 		Official.Mu.Unlock()
 		if err != nil {
@@ -158,8 +160,11 @@ func SaveAllCaches() {
 		}
 
 		Local.Mu.Lock()
-		log.Log(log.Debug, "[SaveAllCaches] local: %d siteResults, %d domainResults, %d endpointResults",
-			len(Local.SiteResults), len(Local.DomainResults), len(Local.EndpointResults))
+		log.Log(log.Debug,
+			"[SaveAllCaches] local: %d siteResults, %d domainResults, %d endpointResults",
+			len(Local.SiteResults),
+			len(Local.DomainResults),
+			len(Local.EndpointResults))
 		err = SaveCache(localFile, &Local)
 		Local.Mu.Unlock()
 		if err != nil {
@@ -167,7 +172,6 @@ func SaveAllCaches() {
 		}
 	}
 
-	// If we are using stats
 	if useStats {
 		Stats.Mu.Lock()
 		log.Log(log.Debug, "[SaveAllCaches] stats: date entries = %d", len(Stats.Data))
