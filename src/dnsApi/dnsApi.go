@@ -17,8 +17,11 @@ import (
 var version = "0.7.0"
 
 func main() {
-	// Set initial log level to Info or Debug if you want
-	log.SetLogLevel(log.Info)
+	// -----------------------------------------------------------
+	// Removed the early log.SetLogLevel(log.Info) call so we rely
+	// on the actual config's "LogLevel" = "Debug".
+	// -----------------------------------------------------------
+
 	log.Log(log.Info, "IBP-GeoDNS DNS backend v%s starting...", version)
 
 	cfgFile := flag.String("config", "config.json", "Path to configuration file")
@@ -32,9 +35,10 @@ func main() {
 	// 1) Load config
 	cfg.Init(*cfgFile)
 
-	// 2) Now that config is loaded, parse the configured log level
+	// 2) Now parse the configured log level from the newly loaded config
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
+	log.Log(log.Info, "DNS API is running with log level: %s", c.Local.System.LogLevel)
 
 	// 3) Initialize data usage stats but NOT local/official caches
 	dat.Init(dat.InitOptions{

@@ -17,7 +17,11 @@ import (
 var version = "1.0.0"
 
 func main() {
-	log.SetLogLevel(log.Info)
+	// -----------------------------------------------------------
+	// Also removed the early log.SetLogLevel(log.Info) call here
+	// so we pick up "Debug" from config.
+	// -----------------------------------------------------------
+
 	log.Log(log.Info, "IBP-GeoDNS serviceMonitor v%s starting...", version)
 
 	cfgFile := flag.String("config", "config.json", "Path to the configuration file")
@@ -31,9 +35,10 @@ func main() {
 	// 1) Initialize config
 	cfg.Init(*cfgFile)
 
-	// 2) Parse configured log level
+	// 2) Parse configured log level from config
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
+	log.Log(log.Info, "serviceMonitor is running with log level: %s", c.Local.System.LogLevel)
 
 	// 3) Initialize data with local/official caching but NO usage stats
 	dat.Init(dat.InitOptions{
@@ -44,19 +49,16 @@ func main() {
 	// 4) Initialize MaxMind
 	max.Init()
 
-	// 5) Initialize data layer, load caches, etc. (We already did above + optional)
-	//    We typically do official & local caches here, so it's done.
-
-	// 6) Launch NATS
+	// 5) Launch NATS
 	nats.Init()
 
-	// 7) Start monitor checks
+	// 6) Start monitor checks
 	monitor.Init()
 
-	// 8) Start the internal API to serve official results
+	// 7) Start the internal API to serve official results
 	api.Init()
 
-	// 9) Keep alive
+	// 8) Keep alive
 	for {
 		time.Sleep(60 * time.Second)
 	}
