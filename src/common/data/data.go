@@ -19,6 +19,10 @@ func Init(opts InitOptions) {
 	// Always initialize MySQL (for events, usage records, etc).
 	go mysql.Init()
 
+	// (1) Set the global flags for saving caches:
+	//     *This is the critical missing line so that SaveAllCaches() sees them.*
+	SetCacheOptions(opts.UseLocalOfficialCaches, opts.UseUsageStats)
+
 	// Initialize the global Stats struct
 	Stats = &StatMap{Data: make(map[string]map[string]*DailyStats)}
 
@@ -30,22 +34,28 @@ func Init(opts InitOptions) {
 
 		SaveAllCaches() // <-- new: force an immediate save so it re-creates the cache files now
 
-		go startAutoUpdate() // auto-save official & local caches
+		// auto-save official & local caches
+		go startAutoUpdate()
 	}
 
 	// If usage is needed, we do usage-specific init.
 	if opts.UseUsageStats {
 		log.Log(log.Debug, "[data.Init] Enabling usage stats + daily usage processor")
+		// load stats
 		LoadAllCaches()
 
-		SaveAllCaches() // <-- new: same idea for the stats cache
+		// force an immediate save for stats too
+		SaveAllCaches()
 
-		go startAutoUpdate() // auto-save stats
+		// auto-save stats as well
+		go startAutoUpdate()
+
+		// start the daily usage aggregator
 		go startDailyUsageProcessor()
 	}
 }
 
-// MemberEnable sets the Override to 1...
+// MemberEnable sets the Override to false...
 func MemberEnable(name string) {
 	member, exists := cfg.GetMember(name)
 	if !exists {
@@ -58,7 +68,7 @@ func MemberEnable(name string) {
 	RecordEvent("site", "MemberEnable", name, "", "", true, "Member has disabled override.", nil)
 }
 
-// MemberDisable sets the Override to 0...
+// MemberDisable sets the Override to true...
 func MemberDisable(name string) {
 	member, exists := cfg.GetMember(name)
 	if !exists {
@@ -75,6 +85,7 @@ func MemberDisable(name string) {
 func IsMemberOnlineForDomain(domain, memberName string) bool {
 	sites, domains, endpoints := GetOfficialResults()
 
+	// Check site-level results
 	for _, sr := range sites {
 		for _, r := range sr.Results {
 			if r.Member.Details.Name == memberName && !r.Status {
@@ -83,6 +94,7 @@ func IsMemberOnlineForDomain(domain, memberName string) bool {
 		}
 	}
 
+	// Check domain-level
 	for _, dr := range domains {
 		if dr.Domain == domain {
 			for _, r := range dr.Results {
@@ -93,6 +105,7 @@ func IsMemberOnlineForDomain(domain, memberName string) bool {
 		}
 	}
 
+	// Check endpoint-level
 	for _, er := range endpoints {
 		if er.Domain == domain {
 			for _, r := range er.Results {
