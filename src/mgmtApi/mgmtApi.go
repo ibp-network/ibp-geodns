@@ -6,7 +6,6 @@ import (
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
-	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
 	api "ibp-geodns/src/mgmtApi/api"
@@ -35,9 +34,6 @@ func main() {
 
 	// Update maxmind, initialize geoip database
 	max.Init()
-
-	// Start data helper, Load caches
-	dat.Init()
 
 	// Sleep while we load caches
 	time.Sleep(2 * time.Second)

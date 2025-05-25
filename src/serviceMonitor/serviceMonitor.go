@@ -9,7 +9,7 @@ import (
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	"ibp-geodns/src/serviceMonitor/api"
+	api "ibp-geodns/src/serviceMonitor/api"
 	"ibp-geodns/src/serviceMonitor/monitor"
 	nats "ibp-geodns/src/serviceMonitor/nats"
 )
@@ -28,29 +28,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize config
+	// 1) Initialize config
 	cfg.Init(*cfgFile)
 
-	// Load config file and set log level fromt he config file
+	// 2) Parse configured log level
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
 
-	// Initialize MaxMind
+	// 3) Initialize data with local/official caching but NO usage stats
+	dat.Init(dat.InitOptions{
+		UseLocalOfficialCaches: true,
+		UseUsageStats:          false,
+	})
+
+	// 4) Initialize MaxMind
 	max.Init()
 
-	// Initialize data layer, load caches
-	dat.Init()
+	// 5) Initialize data layer, load caches, etc. (We already did above + optional)
+	//    We typically do official & local caches here, so it's done.
 
-	// Launch NATS
+	// 6) Launch NATS
 	nats.Init()
 
-	// Start the monitor checks
+	// 7) Start monitor checks
 	monitor.Init()
 
-	// Start the internal API to serve official results or reset
+	// 8) Start the internal API to serve official results
 	api.Init()
 
-	// Keep alive
+	// 9) Keep alive
 	for {
 		time.Sleep(60 * time.Second)
 	}
