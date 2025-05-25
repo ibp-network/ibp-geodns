@@ -20,16 +20,19 @@ type LocalResults struct {
 	Mu              sync.RWMutex
 }
 
+// We add IsIPv6 to the Result struct
 type Result struct {
 	Member    cfg.Member
 	Status    bool
 	Checktime time.Time
 	ErrorText string
 	Data      map[string]interface{}
+	IsIPv6    bool // new
 }
 
 type SiteResult struct {
 	Check   cfg.Check
+	IsIPv6  bool // new
 	Results []Result
 }
 
@@ -37,6 +40,7 @@ type DomainResult struct {
 	Check   cfg.Check
 	Service cfg.Service
 	Domain  string
+	IsIPv6  bool
 	Results []Result
 }
 
@@ -48,6 +52,7 @@ type EndpointResult struct {
 	Domain   string
 	Port     string
 	Path     string
+	IsIPv6   bool
 	Results  []Result
 }
 

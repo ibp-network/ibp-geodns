@@ -4,27 +4,34 @@ import (
 	"strings"
 
 	cfg "ibp-geodns/src/common/config"
-	log "ibp-geodns/src/common/logging"
-	max "ibp-geodns/src/common/maxmind"
-
-	// ADD:
 	dat "ibp-geodns/src/common/data"
+	log "ibp-geodns/src/common/logging"
+	"net"
 )
 
+// handle_DNSQuery processes incoming lookup requests from PowerDNS
 func handle_DNSQuery(req Request) Response {
 	params := req.Parameters
 	qname := strings.ToLower(strings.TrimSuffix(params.QName, "."))
 	qtype := params.QType
 
-	log.Log(log.Debug, "handle_DNSQuery: qname=%s, qtype=%s, remote=%s",
-		qname, qtype, params.Remote)
+	log.Log(log.Debug, "handle_DNSQuery: qname=%s, qtype=%s, remote=%s", qname, qtype, params.Remote)
 
-	// ------------------------------------------------------------------
-	// 1) Record usage: we have a new DNS query from IP = params.Remote
-	//    So let's call ClientHit(RemoteIP, Domain)
-	// ------------------------------------------------------------------
-	// If your domain is e.g. `mythos.dotters.network`, pass that as-is
-	dat.ClientHit(params.Remote, qname)
+	// Detect if the client is IPv6 or IPv4
+	remoteIP := net.ParseIP(params.Remote)
+	isIPv6Client := false
+	if remoteIP != nil && remoteIP.To4() == nil {
+		isIPv6Client = true
+	}
+
+	//
+	// 1) Record usage. We separate IPv4 vs. IPv6.
+	//
+	if isIPv6Client {
+		dat.ClientHitV6(params.Remote, qname) // new function for IPv6 stats
+	} else {
+		dat.ClientHit(params.Remote, qname) // existing IPv4 stats
+	}
 
 	var records []cfg.DNSRecord
 	var id int
@@ -40,82 +47,65 @@ func handle_DNSQuery(req Request) Response {
 
 	// Gather from the different "process" steps
 	SOA := ProcessSOA(params, id, qname)
-	if len(SOA) > 0 {
-		log.Log(log.Debug, "handle_DNSQuery: Found %d SOA records for qname=%s", len(SOA), qname)
-	}
 	records = appendUniqueRecords(records, SOA)
 
 	ACME := ProcessACME(params, id, qname)
-	if len(ACME) > 0 {
-		log.Log(log.Debug, "handle_DNSQuery: Found %d ACME records", len(ACME))
-	}
 	records = appendUniqueRecords(records, ACME)
 
 	NS := ProcessNS(params, id, qname)
-	if len(NS) > 0 {
-		log.Log(log.Debug, "handle_DNSQuery: Found %d NS records", len(NS))
-	}
 	records = appendUniqueRecords(records, NS)
 
 	ANY := ProcessANY(params, id, qname)
-	if len(ANY) > 0 {
-		log.Log(log.Debug, "handle_DNSQuery: Found %d ANY records", len(ANY))
-	}
 	records = appendUniqueRecords(records, ANY)
 
-	// ------------------------------------------------------------------
-	// 2) "Dynamic" might pick a single chosen member
-	//    We'll modify ProcessDynamic(...) to return the chosenMemberName.
-	// ------------------------------------------------------------------
-	chosenRecords, chosenMemberName := ProcessDynamic(params, id, qname)
+	//
+	// 2) Dynamic: pick IPv4 or IPv6 addresses, depending on QType.
+	//
+	var chosenRecords []cfg.DNSRecord
+	var chosenMemberName string
+
+	switch qtype {
+	case "A":
+		// Handle IPv4 dynamic
+		chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, false) // false = use IPv4
+	case "AAAA":
+		// Handle IPv6 dynamic
+		chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, true) // true = use IPv6
+	case "ANY":
+		// Possibly return both IPv4 + IPv6
+		v4Recs, v4Member := ProcessDynamic(params, id, qname, false)
+		v6Recs, v6Member := ProcessDynamic(params, id, qname, true)
+		// Combine
+		chosenRecords = append(v4Recs, v6Recs...)
+		// If both are valid, pick whichever for "member usage" or do both
+		if v6Member != "" {
+			chosenMemberName = v6Member
+		} else {
+			chosenMemberName = v4Member
+		}
+	}
+
 	if len(chosenRecords) > 0 {
 		log.Log(log.Debug, "handle_DNSQuery: Found %d dynamic records", len(chosenRecords))
 	}
 	records = appendUniqueRecords(records, chosenRecords)
 
-	// If a chosenMember was returned from dynamic, record usage
+	// If we assigned a member for v4 or v6, record usage as well
 	if chosenMemberName != "" {
-		// This means we assigned the DNS request to that member
-		dat.MemberHit(chosenMemberName, params.Remote, qname)
-	}
-
-	// If still no records
-	if len(records) == 0 {
-		// fallback check
-		var uniqueDomains []string
-		c := cfg.GetConfig()
-		for _, service := range c.Services {
-			for _, provider := range service.Providers {
-				for _, url := range provider.RpcUrls {
-					u := max.ParseUrl(url)
-					uniqueDomains = append(uniqueDomains, u.Domain)
-				}
-			}
-		}
-		for _, uniqueDomain := range uniqueDomains {
-			if qname == uniqueDomain {
-				if qtype == "A" || qtype == "ANY" {
-					log.Log(log.Warn, "DNSLookup: no dynamic record for domain %s, fallback A", qname)
-					records = append(records, cfg.DNSRecord{
-						DomainID: id,
-						QName:    qname,
-						QType:    "A",
-						Content:  "192.96.202.175",
-						TTL:      30,
-						Auth:     true,
-					})
-				}
-			}
+		if isIPv6Client {
+			dat.MemberHitV6(chosenMemberName, params.Remote, qname)
+		} else {
+			dat.MemberHit(chosenMemberName, params.Remote, qname)
 		}
 	}
 
 	if len(records) == 0 {
 		log.Log(log.Warn,
-			"handle_DNSQuery: returning 0 records for qname=%s qtype=%s => PDNS may REFUSE or NXDOMAIN",
-			qname, qtype)
+			"handle_DNSQuery: returning 0 records for qname=%s qtype=%s => NXDOMAIN or REFUSE",
+			qname, qtype,
+		)
 		return Response{Result: []cfg.DNSRecord{}}
 	}
 
-	// Return whatever we have
 	return Response{Result: records}
 }

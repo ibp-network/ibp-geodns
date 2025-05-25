@@ -6,36 +6,59 @@ import (
 	"strings"
 
 	cfg "ibp-geodns/src/common/config"
+	dat "ibp-geodns/src/common/data"
 	max "ibp-geodns/src/common/maxmind"
 )
 
 // ProcessDynamic chooses the closest online member for the given domain
-// and returns (records, chosenMemberName). It uses the IsMemberOnlineForDomain()
-// function, which references the official results snapshot.
-func ProcessDynamic(params Parameters, id int, domain string) ([]cfg.DNSRecord, string) {
+// and returns (records, chosenMemberName). The `useIPv6` param indicates whether
+// we want to pick IPv6 addresses (AAAA) or IPv4 addresses (A).
+func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]cfg.DNSRecord, string) {
 	var records []cfg.DNSRecord
 	chosenMemberName := ""
 
 	var closestMember cfg.Member
 	minDistance := math.MaxFloat64
+
 	clientLat, clientLon := max.GetClientCoordinates(params.Remote)
 
 	ServiceRecords.mu.RLock()
 	defer ServiceRecords.mu.RUnlock()
 
 	for serviceDomain, serviceConfig := range ServiceRecords.Services {
-		// For domain matches exactly
 		if strings.EqualFold(serviceDomain, domain) {
+			// Evaluate each assigned member
 			for _, member := range serviceConfig.Members {
+				// Must not be forcibly overridden offline
 				if member.Override {
 					continue
 				}
-				if !IsValidIPv4(member.Service.ServiceIPv4) {
-					continue
+
+				// Check if we want IPv4 or IPv6
+				addrToUse := ""
+				if useIPv6 {
+					if member.Service.ServiceIPv6 == "" {
+						continue
+					}
+					// Official checks for IPv6
+					if !IsMemberOnlineForDomainV6(domain, member.Details.Name) {
+						continue
+					}
+					addrToUse = member.Service.ServiceIPv6
+				} else {
+					if member.Service.ServiceIPv4 == "" {
+						continue
+					}
+					// Official checks for IPv4
+					if !IsMemberOnlineForDomain(domain, member.Details.Name) {
+						continue
+					}
+					addrToUse = member.Service.ServiceIPv4
 				}
 
-				// check official results
-				if !IsMemberOnlineForDomain(domain, member.Details.Name) {
+				// Validate IP
+				testIP := net.ParseIP(addrToUse)
+				if testIP == nil {
 					continue
 				}
 
@@ -45,38 +68,50 @@ func ProcessDynamic(params Parameters, id int, domain string) ([]cfg.DNSRecord, 
 					closestMember = member
 				}
 			}
+
+			// If we have found a best match
 			if closestMember.Details.Name != "" {
 				chosenMemberName = closestMember.Details.Name
-
-				if params.QType == "A" || params.QType == "ANY" {
-					if closestMember.Service.ServiceIPv4 != "" {
-						records = append(records, cfg.DNSRecord{
-							DomainID: id,
-							QName:    domain,
-							QType:    "A",
-							Content:  closestMember.Service.ServiceIPv4,
-							TTL:      30,
-							Auth:     true,
-						})
+				if useIPv6 {
+					// AAAA
+					rec := cfg.DNSRecord{
+						DomainID: id,
+						QName:    domain,
+						QType:    "AAAA",
+						Content:  closestMember.Service.ServiceIPv6,
+						TTL:      30,
+						Auth:     true,
 					}
-				}
-				if params.QType == "AAAA" || params.QType == "ANY" {
-					if closestMember.Service.ServiceIPv6 != "" {
-						records = append(records, cfg.DNSRecord{
-							DomainID: id,
-							QName:    domain,
-							QType:    "AAAA",
-							Content:  closestMember.Service.ServiceIPv6,
-							TTL:      30,
-							Auth:     true,
-						})
+					records = append(records, rec)
+				} else {
+					// A
+					rec := cfg.DNSRecord{
+						DomainID: id,
+						QName:    domain,
+						QType:    "A",
+						Content:  closestMember.Service.ServiceIPv4,
+						TTL:      30,
+						Auth:     true,
 					}
+					records = append(records, rec)
 				}
 			}
 		}
 	}
 
 	return records, chosenMemberName
+}
+
+// IsMemberOnlineForDomainV6 is a simplified version that checks official
+// results specifically for IPv6. We store them separately from the IPv4 checks.
+func IsMemberOnlineForDomainV6(domain, memberName string) bool {
+	// For a production approach: we’d do a separate “IsMemberOnlineForDomain”
+	// that checks results with “IsIPv6=true”. Below is an example placeholder:
+	// The function is analogous to IsMemberOnlineForDomain, but filtered on v6.
+
+	// We do a minimal approach: if official results for "endpoint" or "domain"
+	// were stored with isIPv6, we'd check that. For demonstration, call a dummy:
+	return dat.IsMemberOnlineForDomainIPv6(domain, memberName)
 }
 
 // IsValidIPv4 checks if a string is a valid IPv4 address

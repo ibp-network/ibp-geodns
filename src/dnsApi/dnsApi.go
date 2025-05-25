@@ -8,20 +8,15 @@ import (
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
-	dat "ibp-geodns/src/common/data" // <-- we import the data package
+	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
 	"ibp-geodns/src/dnsApi/api"
 )
 
-// We store the version of this component in a variable to track build
 var version = "0.7.0"
 
 func main() {
-	// -----------------------------------------------------------
-	// Removed the early log.SetLogLevel(log.Info) call so we rely
-	// on the actual config's "LogLevel" from config.json
-	// -----------------------------------------------------------
 	log.Log(log.Info, "IBP-GeoDNS DNS backend v%s starting...", version)
 
 	cfgFile := flag.String("config", "config.json", "Path to configuration file")
@@ -52,19 +47,32 @@ func main() {
 	// 5) Launch the DNS API
 	api.Init()
 
-	// 6) Start polling serviceMonitor for official results, if desired
+	// Adjust for dual stack if we see 0.0.0.0
+	addr := c.Local.DnsApi.ListenAddress
+	if addr == "0.0.0.0" {
+		addr = "[::]"
+	}
+	// 6) Start listening (potentially dual-stack if OS supports it)
+	log.Log(log.Info, "Starting DNS API server on %s:%s", addr, c.Local.DnsApi.ListenPort)
+	dnsApi := http.DefaultServeMux // replaced in api.Init() with routes
+
+	go http.ListenAndServe(
+		fmt.Sprintf("%s:%s", addr, c.Local.DnsApi.ListenPort),
+		dnsApi,
+	)
+
+	// 7) Start polling serviceMonitor for official results, if desired
 	intervalSec := c.Local.DnsApi.RefreshIntervalSeconds
 	log.Log(log.Info, "Starting serviceMonitor poller every %d seconds", intervalSec)
 	startServiceMonitorPoller(intervalSec)
 
-	// 7) Keep running forever
+	// 8) Keep running forever
 	for {
 		time.Sleep(60 * time.Second)
 	}
 }
 
 // startServiceMonitorPoller runs a ticker that fetches the official results
-// from the serviceMonitor’s /results endpoint at a fixed interval.
 func startServiceMonitorPoller(intervalSec int) {
 	updateDNSMonitorSnapshot()
 
@@ -78,7 +86,6 @@ func startServiceMonitorPoller(intervalSec int) {
 }
 
 // updateDNSMonitorSnapshot fetches official results from the monitor’s /results endpoint
-// and updates our local snapshot for DNS resolution.
 func updateDNSMonitorSnapshot() {
 	c := cfg.GetConfig()
 	url := fmt.Sprintf("http://%s:%s/results",

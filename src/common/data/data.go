@@ -118,3 +118,48 @@ func IsMemberOnlineForDomain(domain, memberName string) bool {
 
 	return true
 }
+
+// IsMemberOnlineForDomainIPv6 checks official results for IPv6
+func IsMemberOnlineForDomainIPv6(domain, memberName string) bool {
+	sites, domains, endpoints := GetOfficialResults()
+
+	// Site-level
+	for _, sr := range sites {
+		if !sr.IsIPv6 {
+			continue
+		}
+		for _, r := range sr.Results {
+			if r.Member.Details.Name == memberName && !r.Status {
+				return false
+			}
+		}
+	}
+	// Domain-level
+	for _, dr := range domains {
+		if !dr.IsIPv6 {
+			continue
+		}
+		if dr.Domain == domain {
+			for _, r := range dr.Results {
+				if r.Member.Details.Name == memberName && !r.Status {
+					return false
+				}
+			}
+		}
+	}
+	// Endpoint-level
+	for _, er := range endpoints {
+		if !er.IsIPv6 {
+			continue
+		}
+		if er.Domain == domain {
+			for _, r := range er.Results {
+				if r.Member.Details.Name == memberName && !r.Status {
+					return false
+				}
+			}
+		}
+	}
+
+	return true
+}

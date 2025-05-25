@@ -10,11 +10,31 @@ import (
 	"github.com/go-ping/ping"
 )
 
+// Modified to handle optional IPv6
 func init() {
 	RegisterSiteCheck("ping", PingCheck)
 }
 
+// PingCheck runs an IPv4 ping if ServiceIPv4 is present, and an IPv6 ping if ServiceIPv6 is present.
 func PingCheck(check cfg.Check, member cfg.Member) {
+	// IPv4
+	if member.Service.ServiceIPv4 != "" {
+		runPingSingle(check, member, false)
+	}
+	// IPv6
+	if member.Service.ServiceIPv6 != "" {
+		runPingSingle(check, member, true)
+	}
+}
+
+func runPingSingle(check cfg.Check, member cfg.Member, isIPv6 bool) {
+	var ipToPing string
+	if isIPv6 {
+		ipToPing = member.Service.ServiceIPv6
+	} else {
+		ipToPing = member.Service.ServiceIPv4
+	}
+
 	pingCount := getIntOption(check.ExtraOptions, "PingCount", 3)
 	pingInterval := time.Duration(getIntOption(check.ExtraOptions, "PingInterval", 100)) * time.Millisecond
 	pingTimeout := time.Duration(getIntOption(check.ExtraOptions, "PingTimeout", 1000)) * time.Millisecond
@@ -23,11 +43,17 @@ func PingCheck(check cfg.Check, member cfg.Member) {
 	maxPacketLoss := getFloatOption(check.ExtraOptions, "MaxPacketLoss", 5.0)
 	maxLatency := int64(getIntOption(check.ExtraOptions, "MaxLatency", 800))
 
-	pinger, err := ping.NewPinger(member.Service.ServiceIPv4)
+	pinger, err := ping.NewPinger(ipToPing)
 	if err != nil {
-		UpdateSiteResultLocal(check, member, false, err.Error(), nil)
+		UpdateSiteResultLocal(check, member, false,
+			fmt.Sprintf("Ping error init: %v", err),
+			nil, isIPv6)
 		return
 	}
+	if isIPv6 {
+		pinger.SetNetwork("ip6")
+	}
+
 	pinger.Count = pingCount
 	pinger.Interval = pingInterval
 	pinger.Timeout = pingTimeout * time.Duration(pingCount)
@@ -37,7 +63,7 @@ func PingCheck(check cfg.Check, member cfg.Member) {
 
 	err = pinger.Run()
 	if err != nil {
-		UpdateSiteResultLocal(check, member, false, err.Error(), nil)
+		UpdateSiteResultLocal(check, member, false, err.Error(), nil, isIPv6)
 		return
 	}
 	stats := pinger.Statistics()
@@ -55,6 +81,6 @@ func PingCheck(check cfg.Check, member cfg.Member) {
 		"StdDevRtt":  stats.StdDevRtt.Milliseconds(),
 	}
 
-	UpdateSiteResultLocal(check, member, success, msg, dataMap)
-	log.Log(log.Debug, "Ping check completed for %s success=%v", member.Details.Name, success)
+	UpdateSiteResultLocal(check, member, success, msg, dataMap, isIPv6)
+	log.Log(log.Debug, "Ping check completed for %s isIPv6=%v success=%v", member.Details.Name, isIPv6, success)
 }

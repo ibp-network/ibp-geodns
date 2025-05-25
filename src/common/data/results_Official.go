@@ -6,12 +6,6 @@ import (
 	"time"
 )
 
-/*
- *
- *  Functions for storing and handling official results & status
- *
- */
-
 var Official = OfficialResults{
 	SiteResults:     make([]SiteResult, 0),
 	DomainResults:   make([]DomainResult, 0),

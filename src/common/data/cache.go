@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
@@ -13,7 +12,6 @@ import (
 
 // We track which caches the system actually wants to use.
 var (
-	autoUpdateTimer    *time.Ticker
 	allowLocalOfficial bool // if true, load/save official + local caches
 	allowStats         bool // if true, load/save stats cache
 	muCacheOptions     sync.Mutex
@@ -183,19 +181,4 @@ func SaveAllCaches() {
 	}
 
 	log.Log(log.Debug, "[SaveAllCaches] Exit: Done saving caches.")
-}
-
-// startAutoUpdate runs a ticker to auto-save caches. Only caches
-// that are enabled will be saved each interval.
-func startAutoUpdate() {
-	c := cfg.GetConfig()
-	cacheSaveInterval := c.Local.System.CacheSaveTime
-
-	autoUpdateTimer = time.NewTicker(cacheSaveInterval * time.Second)
-	go func() {
-		for range autoUpdateTimer.C {
-			log.Log(log.Info, "Auto-saving caches...")
-			SaveAllCaches()
-		}
-	}()
 }

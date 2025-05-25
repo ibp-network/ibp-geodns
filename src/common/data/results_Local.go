@@ -6,12 +6,6 @@ import (
 	"time"
 )
 
-/*
- *
- *  Functions for storing and handling site results & status
- *
- */
-
 var Local = LocalResults{
 	SiteResults:     make([]SiteResult, 0),
 	DomainResults:   make([]DomainResult, 0),
@@ -19,7 +13,6 @@ var Local = LocalResults{
 	Mu:              sync.RWMutex{},
 }
 
-// Local Results Functions
 func SetLocalSiteResults(results []SiteResult) {
 	Local.Mu.Lock()
 	defer Local.Mu.Unlock()
@@ -44,14 +37,14 @@ func GetLocalResults() (sites []SiteResult, domains []DomainResult, endpoints []
 	return Local.SiteResults, Local.DomainResults, Local.EndpointResults
 }
 
-// Update Local Results
-func UpdateLocalSiteResult(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
+// UpdateLocalSiteResult is extended to accept isIPv6
+func UpdateLocalSiteResult(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
 	Local.Mu.Lock()
 	defer Local.Mu.Unlock()
 
 	sIndex := -1
 	for i, sr := range Local.SiteResults {
-		if sr.Check.Name == check.Name {
+		if sr.Check.Name == check.Name && sr.IsIPv6 == isIPv6 {
 			sIndex = i
 			break
 		}
@@ -63,16 +56,19 @@ func UpdateLocalSiteResult(check cfg.Check, member cfg.Member, status bool, erro
 		Checktime: time.Now().UTC(),
 		ErrorText: errorMsg,
 		Data:      dataMap,
+		IsIPv6:    isIPv6,
 	}
 
 	if sIndex == -1 {
-		Local.SiteResults = append(Local.SiteResults, SiteResult{
+		// Create a new site entry
+		site := SiteResult{
 			Check:   check,
+			IsIPv6:  isIPv6,
 			Results: []Result{newResult},
-		})
+		}
+		Local.SiteResults = append(Local.SiteResults, site)
 	} else {
 		sr := &Local.SiteResults[sIndex]
-
 		rIndex := -1
 		for i, res := range sr.Results {
 			if res.Member.Details.Name == member.Details.Name {
