@@ -43,7 +43,7 @@ type DiscordConfig struct {
 
 // SystemConfig for base paths and intervals
 type SystemConfig struct {
-	WorkDir            string        `json:"workDir"`
+	WorkDir            string        `json:"WorkDir"`
 	LogLevel           string        `json:"LogLevel"`
 	ConfigReloadTime   time.Duration `json:"ConfigReloadTime"`
 	CacheSaveTime      time.Duration `json:"CacheSaveTime"`
