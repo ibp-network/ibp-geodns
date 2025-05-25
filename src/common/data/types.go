@@ -63,15 +63,21 @@ type DailyStats struct {
 }
 
 type ClientStats struct {
-	ClassCs   map[string]int `json:"ClassCs"`
-	Countries map[string]int `json:"Countries"`
-	Requests  int            `json:"Requests"`
+	ClassCs      map[string]int `json:"ClassCs"`
+	Countries    map[string]int `json:"Countries"`
+	Networks     map[string]int `json:"Networks"`
+	CountryNames map[string]int `json:"CountryNames"`
+	Asns         map[string]int `json:"Asns"`
+	Requests     int            `json:"Requests"`
 }
 
 type MemberStats struct {
-	ClassCs   map[string]int `json:"ClassCs"`
-	Countries map[string]int `json:"Countries"`
-	Requests  int            `json:"Requests"`
+	ClassCs      map[string]int `json:"ClassCs"`
+	Countries    map[string]int `json:"Countries"`
+	Networks     map[string]int `json:"Networks"`
+	CountryNames map[string]int `json:"CountryNames"`
+	Asns         map[string]int `json:"Asns"`
+	Requests     int            `json:"Requests"`
 }
 
 type Billing struct {

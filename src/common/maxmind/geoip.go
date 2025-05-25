@@ -166,6 +166,37 @@ func GetCountryCode(ipStr string) string {
 	return record.Country.IsoCode
 }
 
+// GetCountryName retrieves the full country name (if available) from the CityLite database
+func GetCountryName(ipStr string) string {
+	if maxmindCity == nil {
+		log.Log(log.Error, "CityLite DB not loaded, cannot fetch country name.")
+		return ""
+	}
+
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		log.Log(log.Error, "Invalid IP address: %s", ipStr)
+		return ""
+	}
+
+	var record struct {
+		Country struct {
+			Names map[string]string `maxminddb:"names"`
+		} `maxminddb:"country"`
+	}
+
+	if err := maxmindCity.Lookup(ip, &record); err != nil {
+		log.Log(log.Error, "Failed city/country lookup for IP %s: %v", ipStr, err)
+		return ""
+	}
+
+	// The "names" map can have multiple localizations; try "en" or fallback
+	if name, ok := record.Country.Names["en"]; ok {
+		return name
+	}
+	return ""
+}
+
 // GetClassC strips an IPv4 address to the first 3 octets: e.g. 192.168.1
 func GetClassC(ipStr string) string {
 	ip := net.ParseIP(ipStr)
@@ -179,6 +210,38 @@ func GetClassC(ipStr string) string {
 		return ""
 	}
 	return fmt.Sprintf("%d.%d.%d", ipv4[0], ipv4[1], ipv4[2])
+}
+
+// GetAsnAndNetwork retrieves the ASN number and the associated organization name from the AsnLite database.
+func GetAsnAndNetwork(ipStr string) (string, string) {
+	if maxmindAsn == nil {
+		// Possibly return empty if the AsnLite DB not loaded
+		return "", ""
+	}
+
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		log.Log(log.Error, "Invalid IP address in GetAsnAndNetwork: %s", ipStr)
+		return "", ""
+	}
+
+	var record struct {
+		AutonomousSystemNumber       uint   `maxminddb:"autonomous_system_number"`
+		AutonomousSystemOrganization string `maxminddb:"autonomous_system_organization"`
+	}
+
+	if err := maxmindAsn.Lookup(ip, &record); err != nil {
+		log.Log(log.Error, "Failed asn lookup for IP %s: %v", ipStr, err)
+		return "", ""
+	}
+
+	if record.AutonomousSystemNumber == 0 {
+		// Means not found, or private IP
+		return "", ""
+	}
+
+	asn := fmt.Sprintf("AS%d", record.AutonomousSystemNumber)
+	return asn, record.AutonomousSystemOrganization
 }
 
 // Close frees resources used by maxmind. (If needed)
