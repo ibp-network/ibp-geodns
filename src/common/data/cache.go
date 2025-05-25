@@ -63,10 +63,10 @@ func LoadCache(filePath string, out interface{}) error {
 
 // SaveCache saves the given data to a cache file.
 func SaveCache(filePath string, data interface{}) error {
-	// Let the user see that we are about to create/overwrite the cache file
+	// First, log at DEBUG so we see exactly which file we’re about to write.
 	log.Log(log.Debug, "[SaveCache] Attempting to create or overwrite cache file: %s", filePath)
 
-	// Ensure the directory exists before creating the file
+	// Ensure the directory exists before creating the file.
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		log.Log(log.Error, "Failed to create directory %s: %v", dir, err)
@@ -149,7 +149,6 @@ func SaveAllCaches() {
 	// If we are using local/official caches
 	if useLocal {
 		Official.Mu.Lock()
-		// ADDED:
 		log.Log(log.Debug, "[SaveAllCaches] official: %d siteResults, %d domainResults, %d endpointResults",
 			len(Official.SiteResults), len(Official.DomainResults), len(Official.EndpointResults))
 		err := SaveCache(officialFile, &Official)
@@ -159,7 +158,6 @@ func SaveAllCaches() {
 		}
 
 		Local.Mu.Lock()
-		// ADDED:
 		log.Log(log.Debug, "[SaveAllCaches] local: %d siteResults, %d domainResults, %d endpointResults",
 			len(Local.SiteResults), len(Local.DomainResults), len(Local.EndpointResults))
 		err = SaveCache(localFile, &Local)
@@ -172,7 +170,6 @@ func SaveAllCaches() {
 	// If we are using stats
 	if useStats {
 		Stats.Mu.Lock()
-		// ADDED:
 		log.Log(log.Debug, "[SaveAllCaches] stats: date entries = %d", len(Stats.Data))
 		err := SaveCache(statsFile, &Stats.Data)
 		Stats.Mu.Unlock()
