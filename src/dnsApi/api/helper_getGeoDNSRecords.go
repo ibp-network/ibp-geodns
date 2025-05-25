@@ -3,14 +3,18 @@ package api
 import (
 	"math"
 	"net"
+	"strings"
 
 	cfg "ibp-geodns/src/common/config"
 	max "ibp-geodns/src/common/maxmind"
 )
 
 // ProcessDynamic chooses the closest online member for the given domain
-func ProcessDynamic(params Parameters, id int, domain string) []cfg.DNSRecord {
+// and returns (records, chosenMemberName).
+func ProcessDynamic(params Parameters, id int, domain string) ([]cfg.DNSRecord, string) {
 	var records []cfg.DNSRecord
+	chosenMemberName := ""
+
 	var closestMember cfg.Member
 	minDistance := math.MaxFloat64
 	clientLat, clientLon := max.GetClientCoordinates(params.Remote)
@@ -19,7 +23,8 @@ func ProcessDynamic(params Parameters, id int, domain string) []cfg.DNSRecord {
 	defer ServiceRecords.mu.RUnlock()
 
 	for serviceDomain, serviceConfig := range ServiceRecords.Services {
-		if serviceDomain == domain {
+		// For domain matches exactly
+		if strings.EqualFold(serviceDomain, domain) {
 			for _, member := range serviceConfig.Members {
 				if member.Override {
 					continue
@@ -38,6 +43,8 @@ func ProcessDynamic(params Parameters, id int, domain string) []cfg.DNSRecord {
 				}
 			}
 			if closestMember.Details.Name != "" {
+				chosenMemberName = closestMember.Details.Name
+
 				if params.QType == "A" || params.QType == "ANY" {
 					if closestMember.Service.ServiceIPv4 != "" {
 						records = append(records, cfg.DNSRecord{
@@ -66,7 +73,7 @@ func ProcessDynamic(params Parameters, id int, domain string) []cfg.DNSRecord {
 		}
 	}
 
-	return records
+	return records, chosenMemberName
 }
 
 // IsValidIPv4 checks if a string is a valid IPv4 address

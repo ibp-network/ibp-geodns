@@ -6,6 +6,9 @@ import (
 	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
+
+	// ADD:
+	dat "ibp-geodns/src/common/data"
 )
 
 func handle_DNSQuery(req Request) Response {
@@ -15,6 +18,13 @@ func handle_DNSQuery(req Request) Response {
 
 	log.Log(log.Debug, "handle_DNSQuery: qname=%s, qtype=%s, remote=%s",
 		qname, qtype, params.Remote)
+
+	// ------------------------------------------------------------------
+	// 1) Record usage: we have a new DNS query from IP = params.Remote
+	//    So let's call ClientHit(RemoteIP, Domain)
+	// ------------------------------------------------------------------
+	// If your domain is e.g. `mythos.dotters.network`, pass that as-is
+	dat.ClientHit(params.Remote, qname)
 
 	var records []cfg.DNSRecord
 	var id int
@@ -29,7 +39,6 @@ func handle_DNSQuery(req Request) Response {
 	TLDRecords.mu.RUnlock()
 
 	// Gather from the different "process" steps
-	// Just add logs so we can see whether we get anything
 	SOA := ProcessSOA(params, id, qname)
 	if len(SOA) > 0 {
 		log.Log(log.Debug, "handle_DNSQuery: Found %d SOA records for qname=%s", len(SOA), qname)
@@ -54,11 +63,21 @@ func handle_DNSQuery(req Request) Response {
 	}
 	records = appendUniqueRecords(records, ANY)
 
-	Dynamic := ProcessDynamic(params, id, qname)
-	if len(Dynamic) > 0 {
-		log.Log(log.Debug, "handle_DNSQuery: Found %d dynamic records", len(Dynamic))
+	// ------------------------------------------------------------------
+	// 2) "Dynamic" might pick a single chosen member
+	//    We'll modify ProcessDynamic(...) to return the chosenMemberName.
+	// ------------------------------------------------------------------
+	chosenRecords, chosenMemberName := ProcessDynamic(params, id, qname)
+	if len(chosenRecords) > 0 {
+		log.Log(log.Debug, "handle_DNSQuery: Found %d dynamic records", len(chosenRecords))
 	}
-	records = appendUniqueRecords(records, Dynamic)
+	records = appendUniqueRecords(records, chosenRecords)
+
+	// If a chosenMember was returned from dynamic, record usage
+	if chosenMemberName != "" {
+		// This means we assigned the DNS request to that member
+		dat.MemberHit(chosenMemberName, params.Remote, qname)
+	}
 
 	// If still no records
 	if len(records) == 0 {
@@ -91,7 +110,9 @@ func handle_DNSQuery(req Request) Response {
 	}
 
 	if len(records) == 0 {
-		log.Log(log.Warn, "handle_DNSQuery: returning 0 records for qname=%s qtype=%s => PDNS may REFUSE or NXDOMAIN", qname, qtype)
+		log.Log(log.Warn,
+			"handle_DNSQuery: returning 0 records for qname=%s qtype=%s => PDNS may REFUSE or NXDOMAIN",
+			qname, qtype)
 		return Response{Result: []cfg.DNSRecord{}}
 	}
 
