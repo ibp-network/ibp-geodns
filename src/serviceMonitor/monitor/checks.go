@@ -4,13 +4,14 @@ import (
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
-	dat "ibp-geodns/src/common/data" // Use data for official status checks
+	dat "ibp-geodns/src/common/data" // We want to store local results into data.Local
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
 	nats "ibp-geodns/src/serviceMonitor/nats"
 	"sync"
 )
 
+// Registry of checks
 var (
 	CheckRegistry = struct {
 		Site     map[string]CheckSiteFunc
@@ -28,6 +29,9 @@ type CheckSiteFunc func(check cfg.Check, member cfg.Member)
 type CheckDomainFunc func(check cfg.Check, domain string, service cfg.Service, member cfg.Member)
 type CheckEndpointFunc func(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member)
 
+// ------------------------------------------------------------------
+// Initialization
+// ------------------------------------------------------------------
 func startChecks() {
 	go initSiteCheck()
 	go initDomainCheck()
@@ -40,19 +44,16 @@ func RegisterSiteCheck(name string, checkFunc CheckSiteFunc) {
 	CheckRegistry.Site[name] = checkFunc
 	log.Log(log.Info, "Registered site check '%s'", name)
 }
-
 func RegisterDomainCheck(name string, checkFunc CheckDomainFunc) {
 	CheckRegistry.Mu.Lock()
 	defer CheckRegistry.Mu.Unlock()
 	CheckRegistry.Domain[name] = checkFunc
 	log.Log(log.Info, "Registered domain check '%s'", name)
 }
-
 func RegisterEndpointCheck(name string, checkFunc CheckEndpointFunc) {
 	CheckRegistry.Mu.Lock()
 	defer CheckRegistry.Mu.Unlock()
 	CheckRegistry.Endpoint[name] = checkFunc
-	log.Log(log.Info, "Registered endpoint check '%s'", name)
 }
 
 func getSiteCheck(name string) (CheckSiteFunc, bool) {
@@ -74,8 +75,9 @@ func getEndpointCheck(name string) (CheckEndpointFunc, bool) {
 	return fn, ok
 }
 
-// ----------------- Site checks
-
+// ------------------------------------------------------------------
+// SITE checks
+// ------------------------------------------------------------------
 func initSiteCheck() {
 	c := cfg.GetConfig()
 	for _, check := range c.Local.Checks {
@@ -129,10 +131,17 @@ func runSiteCheck(check cfg.Check, fn CheckSiteFunc) {
 	}
 }
 
-// Compare local check result with official result, propose if mismatch
+// ------------------------------------------------------------------
+// UpdateSiteResultLocal - we unify by also storing into data.Local now
+// ------------------------------------------------------------------
 func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
+	// 1) Actually store in data.Local (so it gets saved to local.cache.json)
+	dat.UpdateLocalSiteResult(check, member, status, errorMsg, dataMap)
+
+	// 2) Compare with official status
 	found, officialStatus := dat.GetOfficialSiteStatus(check.Name, member.Details.Name)
 	if !found {
+		// If official had no record, propose a new status
 		nats.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
 		return
 	}
@@ -141,8 +150,9 @@ func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, erro
 	}
 }
 
-// -------------- Domain checks
-
+// ------------------------------------------------------------------
+// DOMAIN checks
+// ------------------------------------------------------------------
 func initDomainCheck() {
 	c := cfg.GetConfig()
 	for _, check := range c.Local.Checks {
@@ -173,7 +183,9 @@ func runDomainCheck(check cfg.Check, fn CheckDomainFunc) {
 		for _, member := range c.Members {
 			if member.Membership.Level >= svc.Configuration.LevelRequired &&
 				member.Service.Active == 1 && !member.Override {
+
 				domainsSet := make(map[string]struct{})
+				// gather domains from the assigned service
 				for _, assignments := range member.ServiceAssignments {
 					for _, assignment := range assignments {
 						if assignment == svcName {
@@ -186,6 +198,7 @@ func runDomainCheck(check cfg.Check, fn CheckDomainFunc) {
 						}
 					}
 				}
+				// run the check for each domain
 				for dom := range domainsSet {
 					go domainCheckWrapper(check, fn, dom, svc, member)
 					time.Sleep(10 * time.Millisecond)
@@ -217,7 +230,13 @@ func domainCheckWrapper(check cfg.Check, fn CheckDomainFunc, domain string, serv
 	}
 }
 
-func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
+func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service,
+	member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
+
+	// 1) Store in data.Local
+	dat.UpdateLocalDomainResult(check, member, service, domain, status, errorMsg, dataMap)
+
+	// 2) Compare with official
 	found, officialStatus := dat.GetOfficialDomainStatus(check.Name, member.Details.Name, domain)
 	if !found {
 		nats.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
@@ -228,8 +247,9 @@ func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service
 	}
 }
 
-// -------------- Endpoint checks
-
+// ------------------------------------------------------------------
+// ENDPOINT checks
+// ------------------------------------------------------------------
 func initEndpointCheck() {
 	c := cfg.GetConfig()
 	for _, check := range c.Local.Checks {
@@ -260,6 +280,7 @@ func runEndpointCheck(check cfg.Check, fn CheckEndpointFunc) {
 		for _, member := range c.Members {
 			if member.Membership.Level >= svc.Configuration.LevelRequired &&
 				member.Service.Active == 1 && !member.Override {
+
 				for _, assignments := range member.ServiceAssignments {
 					for _, assignment := range assignments {
 						if assignment == svcName {
@@ -277,7 +298,9 @@ func runEndpointCheck(check cfg.Check, fn CheckEndpointFunc) {
 	}
 }
 
-func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string, service cfg.Service, member cfg.Member) {
+func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string,
+	service cfg.Service, member cfg.Member) {
+
 	done := make(chan struct{})
 	timer := time.NewTimer(time.Duration(check.Timeout) * time.Second)
 
@@ -299,14 +322,21 @@ func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string
 	}
 }
 
-func UpdateEndpointResultLocal(check cfg.Check, member cfg.Member, service cfg.Service, endpoint string, status bool, errorMsg string, dataMap map[string]interface{}) {
-	u := max.ParseUrl(endpoint)
-	found, officialStatus := dat.GetOfficialEndpointStatus(check.Name, member.Details.Name, u.Domain, endpoint)
+func UpdateEndpointResultLocal(check cfg.Check, member cfg.Member, service cfg.Service,
+	endpoint string, status bool, errorMsg string, dataMap map[string]interface{}) {
+
+	// 1) store to data.Local
+	parsed := max.ParseUrl(endpoint)
+	domain := parsed.Domain
+	dat.UpdateLocalEndpointResult(check, member, service, domain, endpoint, status, errorMsg, dataMap)
+
+	// 2) Compare with official
+	found, officialStatus := dat.GetOfficialEndpointStatus(check.Name, member.Details.Name, domain, endpoint)
 	if !found {
-		nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
+		nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap)
 		return
 	}
 	if officialStatus != status {
-		nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, u.Domain, endpoint, status, errorMsg, dataMap)
+		nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap)
 	}
 }

@@ -2,7 +2,6 @@ package types
 
 import (
 	cfg "ibp-geodns/src/common/config"
-	mon "ibp-geodns/src/serviceMonitor/monitor"
 	"sync"
 )
 
@@ -78,10 +77,7 @@ type DomainInfo struct {
 }
 
 type OfficialResults = struct {
-	SiteResults     []mon.SiteResult
-	DomainResults   []mon.DomainResult
-	EndpointResults []mon.EndpointResult
-	Mu              sync.RWMutex
+	Mu sync.RWMutex
 }
 
 // Response represents a DNS query response.
