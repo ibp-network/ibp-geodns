@@ -17,7 +17,7 @@ SEP     := /
 .PHONY: all clean deps mgmtBotMatrix mgmtBotDiscord mgmtApi dnsApi serviceMonitor
 
 # Default: clean → update deps → build everything
-all: clean deps mgmtBotMatrix mgmtBotDiscord dnsApi serviceMonitor
+all: clean deps dnsApi serviceMonitor
 
 # Pull in module deps + upgrades
 deps:
@@ -29,12 +29,6 @@ $(BIN_DIR):
 	$(MKDIRBIN)
 
 # Build rules, appending $(EXT) if on Windows
-mgmtBotMatrix: $(BIN_DIR)
-	go build -o $(BIN_DIR)$(SEP)mgmtBotMatrix$(EXT) src/mgmtBotMatrix/mgmtBotMatrix.go
-
-mgmtBotDiscord: $(BIN_DIR)
-	go build -o $(BIN_DIR)$(SEP)mgmtBotDiscord$(EXT) src/mgmtBotDiscord/mgmtBotDiscord.go
-
 dnsApi: $(BIN_DIR)
 	go build -o $(BIN_DIR)$(SEP)dnsApi$(EXT) src/dnsApi/dnsApi.go
 
