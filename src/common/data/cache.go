@@ -63,6 +63,13 @@ func LoadCache(filePath string, out interface{}) error {
 
 // SaveCache saves the given data to a cache file.
 func SaveCache(filePath string, data interface{}) error {
+	// Ensure the directory exists before creating the file
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Log(log.Error, "Failed to create directory %s: %v", dir, err)
+		return err
+	}
+
 	file, err := os.Create(filePath)
 	if err != nil {
 		log.Log(log.Error, "Failed to create cache file: %v", err)
