@@ -14,14 +14,14 @@ import (
 	"ibp-geodns/src/dnsApi/api"
 )
 
+// We store the version of this component in a variable to track build
 var version = "0.7.0"
 
 func main() {
 	// -----------------------------------------------------------
 	// Removed the early log.SetLogLevel(log.Info) call so we rely
-	// on the actual config's "LogLevel" = "Debug".
+	// on the actual config's "LogLevel" from config.json
 	// -----------------------------------------------------------
-
 	log.Log(log.Info, "IBP-GeoDNS DNS backend v%s starting...", version)
 
 	cfgFile := flag.String("config", "config.json", "Path to configuration file")
@@ -57,12 +57,14 @@ func main() {
 	log.Log(log.Info, "Starting serviceMonitor poller every %d seconds", intervalSec)
 	startServiceMonitorPoller(intervalSec)
 
-	// 7) Keep running
+	// 7) Keep running forever
 	for {
 		time.Sleep(60 * time.Second)
 	}
 }
 
+// startServiceMonitorPoller runs a ticker that fetches the official results
+// from the serviceMonitor’s /results endpoint at a fixed interval.
 func startServiceMonitorPoller(intervalSec int) {
 	updateDNSMonitorSnapshot()
 
@@ -75,6 +77,8 @@ func startServiceMonitorPoller(intervalSec int) {
 	}()
 }
 
+// updateDNSMonitorSnapshot fetches official results from the monitor’s /results endpoint
+// and updates our local snapshot for DNS resolution.
 func updateDNSMonitorSnapshot() {
 	c := cfg.GetConfig()
 	url := fmt.Sprintf("http://%s:%s/results",
@@ -97,7 +101,7 @@ func updateDNSMonitorSnapshot() {
 		return
 	}
 
-	// Store into local snapshot
-	api.SetLocalSnapshot(tmp)
-	log.Log(log.Debug, "dnsApi poller: updated local results snapshot.")
+	// Store into official snapshot
+	api.SetOfficialSnapshot(tmp)
+	log.Log(log.Debug, "dnsApi poller: updated official results snapshot.")
 }

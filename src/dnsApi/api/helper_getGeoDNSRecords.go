@@ -10,7 +10,8 @@ import (
 )
 
 // ProcessDynamic chooses the closest online member for the given domain
-// and returns (records, chosenMemberName).
+// and returns (records, chosenMemberName). It uses the IsMemberOnlineForDomain()
+// function, which references the official results snapshot.
 func ProcessDynamic(params Parameters, id int, domain string) ([]cfg.DNSRecord, string) {
 	var records []cfg.DNSRecord
 	chosenMemberName := ""
@@ -32,10 +33,12 @@ func ProcessDynamic(params Parameters, id int, domain string) ([]cfg.DNSRecord, 
 				if !IsValidIPv4(member.Service.ServiceIPv4) {
 					continue
 				}
+
 				// check official results
 				if !IsMemberOnlineForDomain(domain, member.Details.Name) {
 					continue
 				}
+
 				dist := max.Distance(clientLat, clientLon, member.Location.Latitude, member.Location.Longitude)
 				if dist < minDistance {
 					minDistance = dist

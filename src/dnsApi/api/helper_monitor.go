@@ -2,12 +2,12 @@ package api
 
 import "strings"
 
-// IsMemberOnlineForDomain checks the local snapshot for a member's status on site/domain/endpoint
+// IsMemberOnlineForDomain checks the *official* snapshot for a member’s site/domain/endpoint status
 func IsMemberOnlineForDomain(domain, memberName string) bool {
-	// Grab a copy of the local snapshot
-	snap := GetLocalSnapshot()
+	// Retrieve the official results snapshot
+	snap := GetOfficialSnapshot()
 
-	// Check all site-level results
+	// Check site-level
 	for _, sr := range snap.SiteResults {
 		for _, r := range sr.Results {
 			if r.MemberName == memberName && !r.Status {
@@ -37,5 +37,6 @@ func IsMemberOnlineForDomain(domain, memberName string) bool {
 			}
 		}
 	}
+
 	return true
 }

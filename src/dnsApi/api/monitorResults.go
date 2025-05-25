@@ -4,7 +4,8 @@ import (
 	"sync"
 )
 
-// OfficialResults is our local copy of the serviceMonitor's official results
+// OfficialResults is our local copy of the serviceMonitor’s official results
+// after they reach consensus. This is used by the DNS API to serve queries.
 type OfficialResults struct {
 	SiteResults     []MonitorResultSite     `json:"SiteResults"`
 	DomainResults   []MonitorResultDomain   `json:"DomainResults"`
@@ -16,11 +17,13 @@ type MonitorResultSite struct {
 	CheckName string                 `json:"CheckName"`
 	Results   []MonitorResultGeneric `json:"Results"`
 }
+
 type MonitorResultDomain struct {
 	CheckName string                 `json:"CheckName"`
 	Domain    string                 `json:"Domain"`
 	Results   []MonitorResultGeneric `json:"Results"`
 }
+
 type MonitorResultEndpoint struct {
 	CheckName string                 `json:"CheckName"`
 	Domain    string                 `json:"Domain"`
@@ -36,23 +39,23 @@ type MonitorResultGeneric struct {
 	Data       map[string]interface{} `json:"Data"`
 }
 
-// Local snapshot + mutex
+// We rename the underlying variables to reflect they are official results
 var (
-	dnsMonitorMu       sync.RWMutex
-	dnsMonitorSnapshot OfficialResults
+	officialResultsMu       sync.RWMutex
+	officialResultsSnapshot OfficialResults
 )
 
-// SetLocalSnapshot updates our local memory copy of the official results
-func SetLocalSnapshot(newSnap OfficialResults) {
-	dnsMonitorMu.Lock()
-	defer dnsMonitorMu.Unlock()
-	dnsMonitorSnapshot = newSnap
+// SetOfficialSnapshot updates our local memory copy of the official results
+func SetOfficialSnapshot(newSnap OfficialResults) {
+	officialResultsMu.Lock()
+	defer officialResultsMu.Unlock()
+	officialResultsSnapshot = newSnap
 }
 
-// GetLocalSnapshot returns a copy of the local snapshot
-func GetLocalSnapshot() OfficialResults {
-	dnsMonitorMu.RLock()
-	defer dnsMonitorMu.RUnlock()
-	// You could do a deep copy if you prefer. For now, just return by value.
-	return dnsMonitorSnapshot
+// GetOfficialSnapshot returns a copy of the official results snapshot
+func GetOfficialSnapshot() OfficialResults {
+	officialResultsMu.RLock()
+	defer officialResultsMu.RUnlock()
+	// For safety, do a shallow copy by value
+	return officialResultsSnapshot
 }

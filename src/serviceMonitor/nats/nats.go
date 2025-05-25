@@ -2,21 +2,22 @@ package nats
 
 import (
 	cfg "ibp-geodns/src/common/config"
-	"os"
+	log "ibp-geodns/src/common/logging"
 	"sync"
 	"time"
-
-	log "ibp-geodns/src/common/logging"
 
 	"github.com/nats-io/nats.go"
 )
 
+// We store global state about the node, proposals, etc.
 var (
 	nc     *nats.Conn
 	natsMu sync.Mutex
 	state  NodeState
 )
 
+// Init sets up the NATS connection, subscribes to relevant subjects,
+// and starts a garbage-collection plus connection monitor goroutine.
 func Init() {
 	c := cfg.GetConfig()
 	con := c.Local.Nats
@@ -34,20 +35,57 @@ func Init() {
 	state.SubjectVote = "consensus.vote"
 	state.SubjectFinalize = "consensus.finalize"
 	state.SubjectCluster = "consensus.cluster"
+
+	// We set a default proposal timeout
 	state.ProposalTimeout = 12 * time.Second
 	state.NatsUrl = con.Url
 
+	// Attempt initial connection
 	err := Connect()
 	if err != nil {
 		log.Log(log.Fatal, "Nats connection error: %+v", err)
-		os.Exit(1)
 	}
 
+	// Subscribe to relevant topics
 	err = Subscribe()
 	if err != nil {
 		log.Log(log.Fatal, "Nats subscription error: %+v", err)
-		os.Exit(1)
 	}
 
+	// Start garbage collection of proposals
 	go StartGarbageCollection()
+
+	// Start a connection monitor
+	startConnectionMonitor()
+}
+
+// startConnectionMonitor periodically logs the current NATS connection status.
+// Because we configure NATS to automatically reconnect, this mostly helps us
+// debug or detect if the connection is stuck or closed.
+func startConnectionMonitor() {
+	go func() {
+		for {
+			time.Sleep(10 * time.Second)
+			natsMu.Lock()
+			if nc == nil {
+				log.Log(log.Warn, "[NATS] Connection handle is nil.")
+				natsMu.Unlock()
+				continue
+			}
+			status := nc.Status()
+			natsMu.Unlock()
+
+			switch status {
+			case nats.CONNECTED:
+				// Debug logging to confirm we remain connected
+				log.Log(log.Debug, "[NATS] Status: CONNECTED")
+			case nats.RECONNECTING:
+				log.Log(log.Warn, "[NATS] Status: RECONNECTING...")
+			case nats.CLOSED:
+				log.Log(log.Error, "[NATS] Status: CLOSED")
+			default:
+				log.Log(log.Warn, "[NATS] Status: %v", status)
+			}
+		}
+	}()
 }

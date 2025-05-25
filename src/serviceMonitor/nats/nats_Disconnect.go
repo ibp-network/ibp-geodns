@@ -1,5 +1,6 @@
 package nats
 
+// Disconnect closes the NATS connection, if needed.
 func Disconnect() {
 	natsMu.Lock()
 	defer natsMu.Unlock()
