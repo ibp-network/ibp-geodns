@@ -36,6 +36,8 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 		res = handle_GetDomainInfo(req)
 	case "getAllDomains":
 		res = handle_GetAllDomains(req)
+	case "getAllDomainMetadata":
+		res = handle_GetAllDomainMetadata(req)
 	case "getDomainKeys":
 		res = handle_GetDomainKeys(req)
 	case "getMemberEvents":
