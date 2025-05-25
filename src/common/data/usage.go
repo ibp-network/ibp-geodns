@@ -39,9 +39,9 @@ func UpsertUsageDetailed(rec UsageRecordDetailed) error {
             network_name,
             country_name,
             hits
-        ) 
-	        VALUES (?,?,?,?,?,?,?,?) 
-	        ON DUPLICATE KEY UPDATE hits = hits + VALUES(hits)
+        )
+	    VALUES (?,?,?,?,?,?,?,?)
+	    ON DUPLICATE KEY UPDATE hits = hits + VALUES(hits)
 	`
 	_, err := mysql.DB.Exec(query,
 		rec.Date,
@@ -104,7 +104,7 @@ func ProcessDailyUsage(date string) {
 				Date:        date,
 				Domain:      domain,
 				MemberName:  sql.NullString{}, // no member
-				CountryCode: "",               // no country code
+				CountryCode: "",
 				Asn:         sql.NullString{String: asnVal, Valid: asnVal != ""},
 				NetworkName: sql.NullString{String: "", Valid: false},
 				CountryName: sql.NullString{String: "", Valid: false},
@@ -208,7 +208,7 @@ func ProcessDailyUsage(date string) {
 }
 
 // ------------------------------------------------------------------------
-// Add the missing startDailyUsageProcessor() to fix "undefined" reference
+// Add the missing startDailyUsageProcessor() to fix "undefined" references
 // ------------------------------------------------------------------------
 func startDailyUsageProcessor() {
 	go func() {

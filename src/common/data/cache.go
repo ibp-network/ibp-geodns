@@ -98,25 +98,25 @@ func LoadAllCaches() {
 	// If we are using local/official caches, load them.
 	if useLocal {
 		Official.Mu.Lock()
-		defer Official.Mu.Unlock()
 		if err := LoadCache(officialFile, &Official); err != nil {
 			log.Log(log.Error, "Failed to load Official results cache: %v", err)
 		}
+		Official.Mu.Unlock()
 
 		Local.Mu.Lock()
-		defer Local.Mu.Unlock()
 		if err := LoadCache(localFile, &Local); err != nil {
 			log.Log(log.Error, "Failed to load Local results cache: %v", err)
 		}
+		Local.Mu.Unlock()
 	}
 
 	// If we are using stats, load stats cache.
 	if useStats {
 		Stats.Mu.Lock()
-		defer Stats.Mu.Unlock()
 		if err := LoadCache(statsFile, &Stats.Data); err != nil {
 			log.Log(log.Error, "Failed to load Stats cache: %v", err)
 		}
+		Stats.Mu.Unlock()
 	}
 }
 
