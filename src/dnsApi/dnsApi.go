@@ -8,51 +8,57 @@ import (
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
+	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
 	"ibp-geodns/src/dnsApi/api"
 )
 
-var version = "0.7.0"
+var version = "0.8.0"
 
 func main() {
-	log.SetLogLevel(log.Info)
-	log.Log(log.Info, "IBP-GeoDNS DNS backend v%s starting...", version)
-
+	// 1) Read command-line flags for config.
 	cfgFile := flag.String("config", "config.json", "Path to configuration file")
 	flag.Parse()
 
+	// 2) Check file existence
 	if _, err := os.Stat(*cfgFile); os.IsNotExist(err) {
 		log.Log(log.Fatal, "Configuration file not found: %s", *cfgFile)
 		os.Exit(1)
 	}
 
-	// Load config and init MaxMind
+	// 3) Initialize the config
 	cfg.Init(*cfgFile)
-
-	// Load config file and set log level fromt he config file
 	c := cfg.GetConfig()
+	// 3a) Set log level from config
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
 
-	// Load maxmind data
+	// 4) Initialize the data layer so that:
+	//    - The Stats map is created
+	//    - The auto-update ticker for caches starts
+	//    - MySQL usage is connected
+	dat.Init()
+
+	// 5) Initialize MaxMind
 	max.Init()
 
-	// Launch DNS API
+	// 6) Start the DNS API (which also loads static records, TLD map, etc.)
 	api.Init()
 
-	// Read from config: how often to poll serviceMonitor
-
+	// 7) Start poller to fetch official results from the serviceMonitor
 	intervalSec := c.Local.DnsApi.RefreshIntervalSeconds
-	log.Log(log.Info, "Starting serviceMonitor poller every %d seconds", intervalSec)
+	log.Log(log.Info, "DNSAPI v%s starting... Monitoring poll interval = %d seconds", version, intervalSec)
 	startServiceMonitorPoller(intervalSec)
 
-	// Keep running
+	// 8) Keep running
 	for {
 		time.Sleep(60 * time.Second)
 	}
 }
 
+// startServiceMonitorPoller fetches official results from serviceMonitor
 func startServiceMonitorPoller(intervalSec int) {
+	// One immediate fetch
 	updateDNSMonitorSnapshot()
 
 	ticker := time.NewTicker(time.Duration(intervalSec) * time.Second)
@@ -86,7 +92,6 @@ func updateDNSMonitorSnapshot() {
 		return
 	}
 
-	// Store into local snapshot
 	api.SetLocalSnapshot(tmp)
 	log.Log(log.Debug, "dnsApi poller: updated local results snapshot.")
 }

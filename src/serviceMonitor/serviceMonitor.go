@@ -6,7 +6,6 @@ import (
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
-	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
 	"ibp-geodns/src/serviceMonitor/api"
@@ -37,9 +36,6 @@ func main() {
 
 	// Initialize MaxMind
 	max.Init()
-
-	// Initialize data layer, load caches
-	dat.Init()
 
 	// Launch NATS
 	nats.Init()
