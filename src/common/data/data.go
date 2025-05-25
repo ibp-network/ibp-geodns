@@ -4,6 +4,7 @@ import (
 	cfg "ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data/mysql"
 	log "ibp-geodns/src/common/logging"
+	"time"
 )
 
 // InitOptions allows selective initialization of data subsystems.
@@ -162,4 +163,37 @@ func IsMemberOnlineForDomainIPv6(domain, memberName string) bool {
 	}
 
 	return true
+}
+
+// ---------------------------------------------------------------------------
+// ADD THE MISSING FUNCTIONS HERE:
+// ---------------------------------------------------------------------------
+
+// startAutoUpdate periodically calls SaveAllCaches() so we keep disk caches updated.
+func startAutoUpdate() {
+	ticker := time.NewTicker(90 * time.Second) // or use config's CacheSaveTime
+	go func() {
+		for range ticker.C {
+			SaveAllCaches()
+		}
+	}()
+}
+
+// startDailyUsageProcessor processes daily usage once per day at ~00:05 UTC
+func startDailyUsageProcessor() {
+	go func() {
+		for {
+			now := time.Now().UTC()
+			// We'll run the daily usage processing at 00:05 UTC each day
+			next := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 5, 0, 0, time.UTC)
+			time.Sleep(time.Until(next))
+
+			// Example: process "yesterday" usage
+			y := now.AddDate(0, 0, -1).Format("2006-01-02")
+			log.Log(log.Info, "startDailyUsageProcessor: processing daily usage for %s", y)
+			// If you want to implement that logic, you'd call something like:
+			// ProcessDailyUsage(y)
+			// (For now, this is just a placeholder.)
+		}
+	}()
 }

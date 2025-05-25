@@ -47,7 +47,9 @@ func runPingSingle(check cfg.Check, member cfg.Member, isIPv6 bool) {
 	if err != nil {
 		UpdateSiteResultLocal(check, member, false,
 			fmt.Sprintf("Ping error init: %v", err),
-			nil, isIPv6)
+			nil,
+			isIPv6,
+		)
 		return
 	}
 	if isIPv6 {

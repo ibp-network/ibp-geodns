@@ -114,7 +114,7 @@ func runSiteCheck(check cfg.Check, fn CheckSiteFunc) {
 					defer func() {
 						if r := recover(); r != nil {
 							log.Log(log.Error, "Check %s for member %s crashed: %v", ch.Name, m.Details.Name, r)
-							UpdateSiteResultLocal(ch, m, false, "Check crashed", nil)
+							UpdateSiteResultLocal(ch, m, false, "Check crashed", nil, false)
 						}
 						close(done)
 					}()
@@ -124,7 +124,7 @@ func runSiteCheck(check cfg.Check, fn CheckSiteFunc) {
 				select {
 				case <-done:
 				case <-timer.C:
-					UpdateSiteResultLocal(ch, m, false, "Check timed out", nil)
+					UpdateSiteResultLocal(ch, m, false, "Check timed out", nil, false)
 				}
 			}(check, member)
 		}
@@ -132,11 +132,18 @@ func runSiteCheck(check cfg.Check, fn CheckSiteFunc) {
 }
 
 // ------------------------------------------------------------------
-// UpdateSiteResultLocal - we unify by also storing into data.Local now
+// UpdateSiteResultLocal - now with a 6th bool param for isIPv6
 // ------------------------------------------------------------------
-func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
+func UpdateSiteResultLocal(
+	check cfg.Check,
+	member cfg.Member,
+	status bool,
+	errorMsg string,
+	dataMap map[string]interface{},
+	isIPv6 bool,
+) {
 	// 1) Actually store in data.Local (so it gets saved to local.cache.json)
-	dat.UpdateLocalSiteResult(check, member, status, errorMsg, dataMap)
+	dat.UpdateLocalSiteResult(check, member, status, errorMsg, dataMap, isIPv6)
 
 	// 2) Compare with official status
 	found, officialStatus := dat.GetOfficialSiteStatus(check.Name, member.Details.Name)
@@ -231,8 +238,8 @@ func domainCheckWrapper(check cfg.Check, fn CheckDomainFunc, domain string, serv
 }
 
 func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service,
-	member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
-
+	member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{},
+) {
 	// 1) Store in data.Local
 	dat.UpdateLocalDomainResult(check, member, service, domain, status, errorMsg, dataMap)
 
@@ -299,8 +306,8 @@ func runEndpointCheck(check cfg.Check, fn CheckEndpointFunc) {
 }
 
 func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string,
-	service cfg.Service, member cfg.Member) {
-
+	service cfg.Service, member cfg.Member,
+) {
 	done := make(chan struct{})
 	timer := time.NewTimer(time.Duration(check.Timeout) * time.Second)
 
@@ -323,8 +330,8 @@ func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string
 }
 
 func UpdateEndpointResultLocal(check cfg.Check, member cfg.Member, service cfg.Service,
-	endpoint string, status bool, errorMsg string, dataMap map[string]interface{}) {
-
+	endpoint string, status bool, errorMsg string, dataMap map[string]interface{},
+) {
 	// 1) store to data.Local
 	parsed := max.ParseUrl(endpoint)
 	domain := parsed.Domain
