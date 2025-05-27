@@ -2,9 +2,11 @@ package data
 
 import (
 	cfg "ibp-geodns/src/common/config"
-	"ibp-geodns/src/common/data/mysql"
+	mysql "ibp-geodns/src/common/data/mysql"
 	log "ibp-geodns/src/common/logging"
 	"time"
+
+	"database/sql"
 )
 
 // InitOptions allows selective initialization of data subsystems.
@@ -21,20 +23,23 @@ func Init(opts InitOptions) {
 	go mysql.Init()
 
 	// (1) Set the global flags for saving caches:
-	//     *This is the critical missing line so that SaveAllCaches() sees them.*
 	SetCacheOptions(opts.UseLocalOfficialCaches, opts.UseUsageStats)
 
 	// Initialize the global Stats struct
-	Stats = &StatMap{Data: make(map[string]map[string]*DailyStats)}
+	Stats = &StatMap{
+		Data: make(map[string]map[string]*DailyStats),
+	}
 
-	// If we have local/official caching, we load them now.
-	// Then we force an immediate save so files appear quickly.
+	// Initialize the global Stats6 struct (if desired)
+	Stats6 = &StatMap{
+		Data: make(map[string]map[string]*DailyStats),
+	}
+
+	// If we have local/official caching, we load them now, then save them.
 	if opts.UseLocalOfficialCaches {
 		log.Log(log.Debug, "[data.Init] Loading local/official caches")
 		LoadAllCaches()
-
-		SaveAllCaches() // <-- new: force an immediate save so it re-creates the cache files now
-
+		SaveAllCaches()
 		// auto-save official & local caches
 		go startAutoUpdate()
 	}
@@ -42,21 +47,14 @@ func Init(opts InitOptions) {
 	// If usage is needed, we do usage-specific init.
 	if opts.UseUsageStats {
 		log.Log(log.Debug, "[data.Init] Enabling usage stats + daily usage processor")
-		// load stats
 		LoadAllCaches()
-
-		// force an immediate save for stats too
 		SaveAllCaches()
-
-		// auto-save stats as well
 		go startAutoUpdate()
-
-		// start the daily usage aggregator
 		go startDailyUsageProcessor()
 	}
 }
 
-// MemberEnable sets the Override to false...
+// MemberEnable sets Override=false on a member and records an event.
 func MemberEnable(name string) {
 	member, exists := cfg.GetMember(name)
 	if !exists {
@@ -69,7 +67,7 @@ func MemberEnable(name string) {
 	RecordEvent("site", "MemberEnable", name, "", "", true, "Member has disabled override.", nil)
 }
 
-// MemberDisable sets the Override to true...
+// MemberDisable sets Override=true on a member and records an event.
 func MemberDisable(name string) {
 	member, exists := cfg.GetMember(name)
 	if !exists {
@@ -82,11 +80,11 @@ func MemberDisable(name string) {
 	RecordEvent("site", "MemberDisable", name, "", "", false, "Member has enabled override.", nil)
 }
 
-// IsMemberOnlineForDomain checks official results...
+// IsMemberOnlineForDomain checks official results for IPv4 (site, domain, endpoint).
 func IsMemberOnlineForDomain(domain, memberName string) bool {
 	sites, domains, endpoints := GetOfficialResults()
 
-	// Check site-level results
+	// Check site-level
 	for _, sr := range sites {
 		for _, r := range sr.Results {
 			if r.Member.Details.Name == memberName && !r.Status {
@@ -120,7 +118,7 @@ func IsMemberOnlineForDomain(domain, memberName string) bool {
 	return true
 }
 
-// IsMemberOnlineForDomainIPv6 checks official results for IPv6
+// IsMemberOnlineForDomainIPv6 checks official results for IPv6.
 func IsMemberOnlineForDomainIPv6(domain, memberName string) bool {
 	sites, domains, endpoints := GetOfficialResults()
 
@@ -135,6 +133,7 @@ func IsMemberOnlineForDomainIPv6(domain, memberName string) bool {
 			}
 		}
 	}
+
 	// Domain-level
 	for _, dr := range domains {
 		if !dr.IsIPv6 {
@@ -148,6 +147,7 @@ func IsMemberOnlineForDomainIPv6(domain, memberName string) bool {
 			}
 		}
 	}
+
 	// Endpoint-level
 	for _, er := range endpoints {
 		if !er.IsIPv6 {
@@ -165,13 +165,9 @@ func IsMemberOnlineForDomainIPv6(domain, memberName string) bool {
 	return true
 }
 
-// ---------------------------------------------------------------------------
-// ADD THE MISSING FUNCTIONS HERE:
-// ---------------------------------------------------------------------------
-
 // startAutoUpdate periodically calls SaveAllCaches() so we keep disk caches updated.
 func startAutoUpdate() {
-	ticker := time.NewTicker(90 * time.Second) // or use config's CacheSaveTime
+	ticker := time.NewTicker(90 * time.Second)
 	go func() {
 		for range ticker.C {
 			SaveAllCaches()
@@ -179,21 +175,113 @@ func startAutoUpdate() {
 	}()
 }
 
-// startDailyUsageProcessor processes daily usage once per day at ~00:05 UTC
+// startDailyUsageProcessor processes daily usage at 00:05 UTC each day.
 func startDailyUsageProcessor() {
 	go func() {
 		for {
 			now := time.Now().UTC()
-			// We'll run the daily usage processing at 00:05 UTC each day
 			next := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 5, 0, 0, time.UTC)
 			time.Sleep(time.Until(next))
 
-			// Example: process "yesterday" usage
 			y := now.AddDate(0, 0, -1).Format("2006-01-02")
 			log.Log(log.Info, "startDailyUsageProcessor: processing daily usage for %s", y)
-			// If you want to implement that logic, you'd call something like:
-			// ProcessDailyUsage(y)
-			// (For now, this is just a placeholder.)
+
+			ProcessDailyUsage(y)
 		}
 	}()
+}
+
+// ProcessDailyUsage handles both IPv4 and IPv6 stats for the given date.
+func ProcessDailyUsage(date string) {
+	processDailyUsageV4(date)
+	processDailyUsageV6(date)
+}
+
+// processDailyUsageV4 writes IPv4 stats from memory to usage_daily in the database.
+func processDailyUsageV4(date string) {
+
+	Stats.Mu.Lock()
+	dailyMap, ok := Stats.Data[date]
+	if !ok {
+		Stats.Mu.Unlock()
+		return
+	}
+	for domain, dailyStats := range dailyMap {
+		// Overall usage (no member, per country)
+		for countryCode, hits := range dailyStats.ClientStats.Countries {
+			rec := UsageRecord{
+				Date:        date,
+				Domain:      domain,
+				MemberName:  sql.NullString{Valid: false},
+				CountryCode: countryCode,
+				Hits:        hits,
+			}
+			err := UpsertUsageRecord(rec)
+			if err != nil {
+				log.Log(log.Error, "processDailyUsageV4 upsert error: %v", err)
+			}
+		}
+		// Per-member usage
+		for memberName, ms := range dailyStats.MemberStats {
+			for countryCode, hits := range ms.Countries {
+				rec := UsageRecord{
+					Date:        date,
+					Domain:      domain,
+					MemberName:  sql.NullString{Valid: true, String: memberName},
+					CountryCode: countryCode,
+					Hits:        hits,
+				}
+				err := UpsertUsageRecord(rec)
+				if err != nil {
+					log.Log(log.Error, "processDailyUsageV4 upsert error: %v", err)
+				}
+			}
+		}
+	}
+	delete(Stats.Data, date)
+	Stats.Mu.Unlock()
+}
+
+// processDailyUsageV6 writes IPv6 stats from memory to usage_daily_v6 in the database.
+func processDailyUsageV6(date string) {
+	Stats6.Mu.Lock()
+	dailyMap, ok := Stats6.Data[date]
+	if !ok {
+		Stats6.Mu.Unlock()
+		return
+	}
+	for domain, dailyStats := range dailyMap {
+		// Overall usage (no member, per country)
+		for countryCode, hits := range dailyStats.ClientStats.Countries {
+			rec := UsageRecordV6{
+				Date:        date,
+				Domain:      domain,
+				MemberName:  sql.NullString{Valid: false},
+				CountryCode: countryCode,
+				Hits:        hits,
+			}
+			err := UpsertUsageRecordV6(rec)
+			if err != nil {
+				log.Log(log.Error, "processDailyUsageV6 upsert error: %v", err)
+			}
+		}
+		// Per-member usage
+		for memberName, ms := range dailyStats.MemberStats {
+			for countryCode, hits := range ms.Countries {
+				rec := UsageRecordV6{
+					Date:        date,
+					Domain:      domain,
+					MemberName:  sql.NullString{Valid: true, String: memberName},
+					CountryCode: countryCode,
+					Hits:        hits,
+				}
+				err := UpsertUsageRecordV6(rec)
+				if err != nil {
+					log.Log(log.Error, "processDailyUsageV6 upsert error: %v", err)
+				}
+			}
+		}
+	}
+	delete(Stats6.Data, date)
+	Stats6.Mu.Unlock()
 }
