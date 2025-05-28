@@ -30,35 +30,9 @@
         "Pass": "password123",
         "DB": "powerdns"
     },
-    "Discord": {
-        "Token": "your_discord_bot_token"
-    },
     "MonitorApi": {
         "ListenAddress": "0.0.0.0",
         "ListenPort": "6101"
-    },
-    "DnsApi": {
-        "ListenAddress": "0.0.0.0",
-        "ListenPort": "6100",
-        "MonitorAddress": "127.0.0.1",
-        "MonitorPort": "6101",
-        "RefreshIntervalSeconds": 30
-    },
-    "MgmtApi": {
-        "ListenAddress": "0.0.0.0",
-        "ListenPort": "6110",
-        "AuthKeys": {
-            "user1": "password123",
-            "user2": "password123",
-            "user3": "password123",
-            "user4": "password123"
-        }
-    },
-    "Matrix": {
-        "HomeServerURL": "https://matrix.org",
-        "Username": "user",
-        "Password": "password",
-        "RoomID": "roomid"
     },
     "Checks": [
         {

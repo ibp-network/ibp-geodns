@@ -1,0 +1,44 @@
+{
+    "System": {
+        "WorkDir": "D:\\Sync\\Projects\\stake.plus\\code\\ibp-geodns-v2\\",
+        "LogLevel": "Debug",
+        "ConfigUrls": {
+            "StaticDNSConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/geodns-static.json",
+            "MembersConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/members_professional.json",
+            "ServicesConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/services_rpc.json",
+            "IaasPricingConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/services_rpc_iaaspricing.json",
+            "ServicesRequestsConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/services_rpc_requests.json"
+        },
+        "ConfigReloadTime": 3600,
+        "CacheSaveTime": 90,
+        "MinimumOfflineTime": 3600
+    },
+    "Maxmind": {
+        "AccountID": "",
+        "LicenseKey": ""
+    },
+    "Nats": {
+        "NodeID": "DNS-01",
+        "Url": "nats://127.0.0.1:5222",
+        "User": "DNS01",
+        "Pass": "password123"
+    },
+    "Mysql": {
+        "Host": "localhosts",
+        "Port": "3306",
+        "User": "ibpgeodns",
+        "Pass": "password123",
+        "DB": "powerdns"
+    },
+    "MonitorApi": {
+        "ListenAddress": "0.0.0.0",
+        "ListenPort": "6101"
+    },
+    "DnsApi": {
+        "ListenAddress": "0.0.0.0",
+        "ListenPort": "6100",
+        "MonitorAddress": "127.0.0.1",
+        "MonitorPort": "6101",
+        "RefreshIntervalSeconds": 30
+    }
+}
