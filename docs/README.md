@@ -1,78 +1,71 @@
-# IBP-GeoDNS: Installation & Setup
+# Installation & Setup
 
-This file **continues** from the first three steps (clone/edit config/build) mentioned in the root `README.md`.
+This document continues from the first three steps (clone/edit config/build) in the root `README.md`.
 
 ---
 
-## 4. Run
+## Run
 
 After building the executables into `bin/`, run each with `-config`:
 
-    # Example: DNS API (PowerDNS backend)
-    ./bin/dnsApi -config config/dnsapi.json
+    # Example: DNS (PowerDNS backend)
+    ./bin/IBPDns -config config/dnsapi.json
 
-    # Example: Service Monitor
-    ./bin/serviceMonitor -config config/monitor.json
+    # Example: Monitor
+    ./bin/IBPMonitor -config config/monitor.json
+
+    # Example: Collator (optional)
+    ./bin/IBPCollator -config config/collator.json
 
     # Example: Management API
-    ./bin/mgmtApi -config config/config.json
+    ./bin/mgmtApi -config config/mgmt.json
 
 ### Typical Order
 
-1. **serviceMonitor**:  
-   - Periodic health checks on members (ping/ssl/wss).  
-   - Publishes official results on `/results` (port 6101).
+1. **IBPMonitor**  
+   - Performs periodic health checks (ping, SSL, WSS).
+   - Publishes official results on `/results` (default port 6101).
 
-2. **dnsApi**:  
-   - Queries serviceMonitor, answers DNS queries from PowerDNS via HTTP (port 6100).
+2. **IBPDns**  
+   - Receives queries from PowerDNS via HTTP (default port 6100).
+   - Fetches official statuses from IBPMonitor to determine which members are online.
+   - Optionally records usage stats to MySQL.
 
-3. **mgmtApi** (optional):  
-   - Provides domain usage, events, or membership info on port 6110.
+3. **mgmtApi** (optional)  
+   - Provides REST endpoints for domain usage, events, membership info, etc.
 
-4. **Bots** (optional):  
-   - Discord or Matrix for chat-based management commands.
+4. **Bots** (optional)  
+   - Discord or Matrix bots for chat-based monitoring or commands.
 
 ---
 
 ## Configuration Basics
 
 - **System**  
-  - `WorkDir`, `LogLevel`, intervals (ConfigReloadTime, CacheSaveTime, etc.).  
-  - `ConfigUrls` (static DNS, members, services).
+  `WorkDir`, `LogLevel`, intervals, etc.
 
-- **Nats**  
-  - `NodeID`, `Url`, `User`, `Pass`.
+- **NATS**  
+  `NodeID`, `Url`, `User`, `Pass`.
 
-- **Mysql**  
-  - `Host`, `Port`, `User`, `Pass`, `DB`.
+- **MySQL**  
+  `Host`, `Port`, `User`, `Pass`, `DB`.
 
-- **Maxmind**  
-  - `MaxmindDBPath`, `AccountID`, `LicenseKey`.
+- **MaxMind**  
+  `MaxmindDBPath`, `AccountID`, `LicenseKey` for geo lookups.
 
-- **MonitorApi / DnsApi / MgmtApi**  
-  - `ListenAddress`, `ListenPort`, optional auth keys.
+- **DNS / Monitor**  
+  `ListenAddress`, `ListenPort`, etc.
 
 - **Checks**  
-  - e.g. ping, ssl, wss checks with intervals.
+  e.g., ping, ssl, wss, each with intervals.
 
-See `config/*.json` for real examples.
-
----
-
-## Port & Connection Summary
-
-| Service          | Default Port | Purpose                                     |
-|------------------|-------------|---------------------------------------------|
-| dnsApi           | 6100        | PowerDNS remote-backend HTTP                |
-| serviceMonitor   | 6101        | Health checks, official results endpoint    |
-| mgmtApi          | 6110        | Management REST (usage/events/billing)      |
-| NATS             | 4222        | Pub-sub for consensus across IBP-GeoDNS     |
+See `config/*.json` for live examples.
 
 ---
 
 ## PowerDNS Integration
 
-Configure PowerDNS to call the DNS API endpoint (for example, `http://127.0.0.1:6100/dns`):
+Configure PowerDNS to point to the DNS service (e.g. `http://127.0.0.1:6100/dns`):
 
     launch=remote
     remote-connection-string=http:url=http://127.0.0.1:6100/dns
@@ -87,24 +80,11 @@ Test with cURL:
 
 ## Testing
 
-1. **Unit Tests**
-
+1. **Unit Tests**  
        go test ./...
-
-2. **Integration**
+2. **Integration**  
    - Start local MySQL and NATS.
-   - Run `serviceMonitor`, then `dnsApi`.
-   - Check logs, or cURL `/results` from `serviceMonitor` on port 6101.
-
-3. **Monitor Logs**
-   - If `dnsApi` sees official statuses from `serviceMonitor`, it should return the correct IP addresses.
-
----
-
-## More Info
-
-- [**README.md**](../README.md)  
-- [**docs/README.md**](./README.md)  
-- [**ibp-geodns.md**](./ibp-geodns.md) for architecture details.  
-- [**ibp-geodns-networking.md**](./ibp-geodns-networking.md) for NATS-based pub-sub.
-
+   - Run `IBPMonitor`, then `IBPDns`.
+   - `curl http://127.0.0.1:6101/results` to see official statuses.
+3. **Logs**  
+   - Check logs to confirm the DNS process is referencing the correct online members.
