@@ -24,14 +24,8 @@ func handle_DNSQuery(req Request) Response {
 		isIPv6Client = true
 	}
 
-	//
-	// 1) Record usage. We separate IPv4 vs. IPv6.
-	//
-	if isIPv6Client {
-		dat.ClientHitV6(params.Remote, qname) // new function for IPv6 stats
-	} else {
-		dat.ClientHit(params.Remote, qname) // existing IPv4 stats
-	}
+	// Merge old "client" + "member" counters into one usage increment:
+	dat.RecordDnsHit(isIPv6Client, params.Remote, qname, "")
 
 	var records []cfg.DNSRecord
 	var id int
@@ -58,26 +52,23 @@ func handle_DNSQuery(req Request) Response {
 	ANY := ProcessANY(params, id, qname)
 	records = appendUniqueRecords(records, ANY)
 
-	//
-	// 2) Dynamic: pick IPv4 or IPv6 addresses, depending on QType.
-	//
+	// 2) Dynamic: pick IPv4 or IPv6 addresses, depending on QType
 	var chosenRecords []cfg.DNSRecord
 	var chosenMemberName string
 
 	switch qtype {
 	case "A":
 		// Handle IPv4 dynamic
-		chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, false) // false = use IPv4
+		chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, false)
 	case "AAAA":
 		// Handle IPv6 dynamic
-		chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, true) // true = use IPv6
+		chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, true)
 	case "ANY":
 		// Possibly return both IPv4 + IPv6
 		v4Recs, v4Member := ProcessDynamic(params, id, qname, false)
 		v6Recs, v6Member := ProcessDynamic(params, id, qname, true)
-		// Combine
 		chosenRecords = append(v4Recs, v6Recs...)
-		// If both are valid, pick whichever for "member usage" or do both
+
 		if v6Member != "" {
 			chosenMemberName = v6Member
 		} else {
@@ -90,13 +81,10 @@ func handle_DNSQuery(req Request) Response {
 	}
 	records = appendUniqueRecords(records, chosenRecords)
 
-	// If we assigned a member for v4 or v6, record usage as well
+	// If we assigned a member for v4 or v6, store that in usage counters
 	if chosenMemberName != "" {
-		if isIPv6Client {
-			dat.MemberHitV6(chosenMemberName, params.Remote, qname)
-		} else {
-			dat.MemberHit(chosenMemberName, params.Remote, qname)
-		}
+		// Overwrite the previously empty "memberName" usage with the chosen member now
+		dat.RecordDnsHit(isIPv6Client, params.Remote, qname, chosenMemberName)
 	}
 
 	if len(records) == 0 {
