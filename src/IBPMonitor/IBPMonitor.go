@@ -5,13 +5,13 @@ import (
 	"os"
 	"time"
 
+	api "ibp-geodns/src/IBPMonitor/api"
+	"ibp-geodns/src/IBPMonitor/monitor"
+	nats "ibp-geodns/src/IBPMonitor/nats"
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	api "ibp-geodns/src/serviceMonitor/api"
-	"ibp-geodns/src/serviceMonitor/monitor"
-	nats "ibp-geodns/src/serviceMonitor/nats"
 )
 
 var version = "1.0.0"

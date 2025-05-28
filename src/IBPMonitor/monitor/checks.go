@@ -3,11 +3,11 @@ package monitor
 import (
 	"time"
 
+	nats "ibp-geodns/src/IBPMonitor/nats"
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data" // We want to store local results into data.Local
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	nats "ibp-geodns/src/serviceMonitor/nats"
 	"sync"
 )
 

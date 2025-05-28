@@ -7,11 +7,11 @@ import (
 	"os"
 	"time"
 
+	"ibp-geodns/src/IBPDns/api"
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	"ibp-geodns/src/dnsApi/api"
 )
 
 var version = "0.7.0"

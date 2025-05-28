@@ -14,10 +14,10 @@ BIN_DIR := bin
 SEP     := /
 
 # Phony targets
-.PHONY: all clean deps mgmtBotMatrix mgmtBotDiscord mgmtApi dnsApi serviceMonitor
+.PHONY: all clean deps IBPDns IBPMonitor IBPCollator
 
 # Default: clean → update deps → build everything
-all: clean deps dnsApi serviceMonitor
+all: clean deps IBPDns IBPMonitor IBPCollator
 
 # Pull in module deps + upgrades
 deps:
@@ -29,11 +29,14 @@ $(BIN_DIR):
 	$(MKDIRBIN)
 
 # Build rules, appending $(EXT) if on Windows
-dnsApi: $(BIN_DIR)
-	go build -o $(BIN_DIR)$(SEP)dnsApi$(EXT) src/dnsApi/dnsApi.go
+IBPDns: $(BIN_DIR)
+	go build -o $(BIN_DIR)$(SEP)IBPDns$(EXT) src/IBPDns/IBPDns.go
 
-serviceMonitor: $(BIN_DIR)
-	go build -o $(BIN_DIR)$(SEP)serviceMonitor$(EXT) src/serviceMonitor/serviceMonitor.go
+IBPMonitor: $(BIN_DIR)
+	go build -o $(BIN_DIR)$(SEP)IBPMonitor$(EXT) src/IBPMonitor/IBPMonitor.go
+
+IBPCollator: $(BIN_DIR)
+	go build -o $(BIN_DIR)$(SEP)IBPCollator$(EXT) src/IBPCollator/IBPCollator.go
 
 # Clean workspace
 clean:
