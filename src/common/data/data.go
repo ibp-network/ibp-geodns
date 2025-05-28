@@ -1,12 +1,11 @@
 package data
 
 import (
+	"database/sql"
 	cfg "ibp-geodns/src/common/config"
 	mysql "ibp-geodns/src/common/data/mysql"
 	log "ibp-geodns/src/common/logging"
 	"time"
-
-	"database/sql"
 )
 
 // InitOptions allows selective initialization of data subsystems.
@@ -180,6 +179,7 @@ func startDailyUsageProcessor() {
 	go func() {
 		for {
 			now := time.Now().UTC()
+			// Wait until next 00:05 UTC
 			next := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 5, 0, 0, time.UTC)
 			time.Sleep(time.Until(next))
 
@@ -199,13 +199,16 @@ func ProcessDailyUsage(date string) {
 
 // processDailyUsageV4 writes IPv4 stats from memory to usage_daily in the database.
 func processDailyUsageV4(date string) {
-
 	Stats.Mu.Lock()
 	dailyMap, ok := Stats.Data[date]
 	if !ok {
+		log.Log(log.Info, "processDailyUsageV4: no IPv4 usage found for %s", date)
 		Stats.Mu.Unlock()
 		return
 	}
+
+	log.Log(log.Info, "processDailyUsageV4: found IPv4 usage entries for date %s", date)
+
 	for domain, dailyStats := range dailyMap {
 		// Overall usage (no member, per country)
 		for countryCode, hits := range dailyStats.ClientStats.Countries {
@@ -238,8 +241,11 @@ func processDailyUsageV4(date string) {
 			}
 		}
 	}
+
+	// Remove processed data from memory
 	delete(Stats.Data, date)
 	Stats.Mu.Unlock()
+	log.Log(log.Info, "processDailyUsageV4: done writing IPv4 usage for %s", date)
 }
 
 // processDailyUsageV6 writes IPv6 stats from memory to usage_daily_v6 in the database.
@@ -247,9 +253,13 @@ func processDailyUsageV6(date string) {
 	Stats6.Mu.Lock()
 	dailyMap, ok := Stats6.Data[date]
 	if !ok {
+		log.Log(log.Info, "processDailyUsageV6: no IPv6 usage found for %s", date)
 		Stats6.Mu.Unlock()
 		return
 	}
+
+	log.Log(log.Info, "processDailyUsageV6: found IPv6 usage entries for date %s", date)
+
 	for domain, dailyStats := range dailyMap {
 		// Overall usage (no member, per country)
 		for countryCode, hits := range dailyStats.ClientStats.Countries {
@@ -282,6 +292,9 @@ func processDailyUsageV6(date string) {
 			}
 		}
 	}
+
+	// Remove processed data from memory
 	delete(Stats6.Data, date)
 	Stats6.Mu.Unlock()
+	log.Log(log.Info, "processDailyUsageV6: done writing IPv6 usage for %s", date)
 }
