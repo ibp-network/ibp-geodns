@@ -6,10 +6,14 @@ import (
 
 	log "ibp-geodns/src/common/logging"
 
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
+
+	// For local checks and official updates
+	dat "ibp-geodns/src/common/data"
 )
 
-// ProposeCheckStatus handles creating a new proposal for site/domain/endpoint status.
+// ProposeCheckStatus is a helper to propose a site/domain/endpoint status
 func ProposeCheckStatus(checkType, checkName, memberName, domainName, endpoint string, status bool, errorText string, dataMap map[string]interface{}) bool {
 	State.Mu.RLock()
 	for _, pt := range State.Proposals {
@@ -22,7 +26,7 @@ func ProposeCheckStatus(checkType, checkName, memberName, domainName, endpoint s
 			prop.Endpoint == endpoint &&
 			prop.ProposedStatus == status {
 			State.Mu.RUnlock()
-			log.Log(log.Debug, "Propose skipped: Active proposal already exists for CheckType=%s, CheckName=%s, MemberName=%s", checkType, checkName, memberName)
+			log.Log(log.Debug, "Propose skipped: identical active proposal already exists for CheckType=%s, CheckName=%s, Member=%s", checkType, checkName, memberName)
 			return false
 		}
 	}
@@ -32,9 +36,9 @@ func ProposeCheckStatus(checkType, checkName, memberName, domainName, endpoint s
 	return true
 }
 
-// Propose generates a new Proposal, stores it in State, and publishes it.
-func Propose(checkType string, checkName string, memberName string, domainName string, endpoint string, proposedStatus bool, errorText string, dataMap map[string]interface{}) (ProposalID, error) {
-	pid := ProposalID(generateProposalID())
+// Propose creates a new proposal, stores it, and publishes
+func Propose(checkType, checkName, memberName, domainName, endpoint string, proposedStatus bool, errorText string, dataMap map[string]interface{}) (ProposalID, error) {
+	pid := ProposalID(uuid.New().String())
 	prop := Proposal{
 		ID:             pid,
 		CheckType:      checkType,
@@ -66,7 +70,114 @@ func Propose(checkType string, checkName string, memberName string, domainName s
 	return pid, err
 }
 
-// finalizeVote finalizes a proposal due to a timeout or majority.
+func handleProposal(m *nats.Msg) {
+	var prop Proposal
+	if err := json.Unmarshal(m.Data, &prop); err != nil {
+		log.Log(log.Error, "handleProposal: unmarshal error: %v", err)
+		return
+	}
+
+	State.Mu.Lock()
+	_, exists := State.Proposals[prop.ID]
+	if !exists {
+		pt := &ProposalTracking{
+			Proposal: prop,
+			Votes:    make(map[string]bool),
+		}
+		State.Proposals[prop.ID] = pt
+		pt.Timer = time.AfterFunc(State.ProposalTimeout, func() {
+			finalizeVote(prop.ID)
+		})
+	}
+	State.Mu.Unlock()
+
+	// evaluate local status
+	go func(pr Proposal) {
+		found, localStatus := checkLocalStatus(pr.CheckType, pr.CheckName, pr.MemberName, pr.DomainName, pr.Endpoint)
+		if !found {
+			return
+		}
+		v := Vote{
+			ProposalID: pr.ID,
+			NodeID:     State.NodeID,
+			Agree:      (localStatus == pr.ProposedStatus),
+			Timestamp:  time.Now().UTC(),
+		}
+		data, _ := json.Marshal(v)
+		_ = Publish(State.SubjectVote, data)
+	}(prop)
+}
+
+func handleVote(m *nats.Msg) {
+	var vote Vote
+	if err := json.Unmarshal(m.Data, &vote); err != nil {
+		log.Log(log.Error, "handleVote: unmarshal error: %v", err)
+		return
+	}
+
+	State.Mu.Lock()
+	pt, exists := State.Proposals[vote.ProposalID]
+	if !exists || pt.Finalized {
+		State.Mu.Unlock()
+		return
+	}
+
+	pt.Votes[vote.NodeID] = vote.Agree
+	totalNodes := len(State.ClusterNodes)
+	majority := (totalNodes / 2) + 1
+	if majority < 2 {
+		majority = 2
+	}
+
+	yesCount := 0
+	noCount := 0
+	for _, v := range pt.Votes {
+		if v {
+			yesCount++
+		} else {
+			noCount++
+		}
+	}
+	if yesCount >= majority && !pt.Finalized {
+		pt.Finalized = true
+		State.Mu.Unlock()
+		finalizeVote(vote.ProposalID)
+		return
+	} else if noCount >= majority && !pt.Finalized {
+		pt.Finalized = true
+		State.Mu.Unlock()
+		finalizeVote(vote.ProposalID)
+		return
+	}
+
+	if len(pt.Votes) == totalNodes && !pt.Finalized {
+		pt.Finalized = true
+		State.Mu.Unlock()
+		finalizeVote(vote.ProposalID)
+		return
+	}
+	State.Mu.Unlock()
+}
+
+func handleFinalize(m *nats.Msg) {
+	var fm FinalizeMessage
+	if err := json.Unmarshal(m.Data, &fm); err != nil {
+		log.Log(log.Error, "handleFinalize: unmarshal error: %v", err)
+		return
+	}
+
+	State.Mu.RLock()
+	pt, exists := State.Proposals[fm.ProposalID]
+	State.Mu.RUnlock()
+
+	if exists && !pt.Finalized {
+		State.Mu.Lock()
+		pt.Finalized = true
+		State.Mu.Unlock()
+		go finalizeVote(pt.Proposal.ID)
+	}
+}
+
 func finalizeVote(pid ProposalID) {
 	State.Mu.Lock()
 	pt, exists := State.Proposals[pid]
@@ -90,8 +201,7 @@ func finalizeVote(pid ProposalID) {
 			noCount++
 		}
 	}
-
-	var finalStatus bool
+	finalStatus := false
 	if yesCount >= majority {
 		finalStatus = true
 	} else if noCount >= majority {
@@ -99,144 +209,60 @@ func finalizeVote(pid ProposalID) {
 	} else {
 		finalStatus = (yesCount > noCount)
 	}
-
 	pt.FinalStatus = finalStatus
 	State.Mu.Unlock()
 
-	log.Log(log.Debug, "Proposal timeout or forced finalize: ProposalID=%s, FinalStatus=%t", pid, finalStatus)
-
 	if finalStatus {
-		go applyOfficialChanges(pt.Proposal)
-		go PublishFinalize(FinalizeMessage{
+		// apply official up
+		go applyOfficialChanges(pt.Proposal, true)
+		_ = PublishFinalize(FinalizeMessage{
 			ProposalID:  pid,
 			FinalStatus: true,
 			DecidedAt:   time.Now().UTC(),
 		})
 	} else {
-		go PublishFinalize(FinalizeMessage{
+		// apply official down
+		go applyOfficialChanges(pt.Proposal, false)
+		_ = PublishFinalize(FinalizeMessage{
 			ProposalID:  pid,
 			FinalStatus: false,
 			DecidedAt:   time.Now().UTC(),
 		})
 	}
+	log.Log(log.Info, "Proposal %s finalized => status=%v", pid, finalStatus)
 }
 
-// handleProposal receives a new proposal from another monitor.
-func handleProposal(m *nats.Msg) {
-	var prop Proposal
-	if err := json.Unmarshal(m.Data, &prop); err != nil {
-		log.Log(log.Error, "Failed to unmarshal proposal message: %v", err)
-		return
-	}
-
-	State.Mu.Lock()
-	_, exists := State.Proposals[prop.ID]
-	if !exists {
-		pt := &ProposalTracking{
-			Proposal: prop,
-			Votes:    make(map[string]bool),
-		}
-		State.Proposals[prop.ID] = pt
-		pt.Timer = time.AfterFunc(State.ProposalTimeout, func() {
-			finalizeVote(prop.ID)
-		})
-	}
-	State.Mu.Unlock()
-
-	go func(prop Proposal) {
-		found, localStatus := checkLocalStatus(prop.CheckType, prop.CheckName, prop.MemberName, prop.DomainName, prop.Endpoint)
-		if !found {
-			return
-		}
-		v := Vote{
-			ProposalID: prop.ID,
-			NodeID:     State.NodeID,
-			Agree:      (localStatus == prop.ProposedStatus),
-			Timestamp:  time.Now().UTC(),
-		}
-		data, _ := json.Marshal(v)
-		go Publish(State.SubjectVote, data)
-	}(prop)
-}
-
-// handleVote receives a vote from another monitor.
-func handleVote(m *nats.Msg) {
-	var vote Vote
-	if err := json.Unmarshal(m.Data, &vote); err != nil {
-		log.Log(log.Error, "Failed to unmarshal vote message: %v", err)
-		return
-	}
-
-	State.Mu.Lock()
-	pt, exists := State.Proposals[vote.ProposalID]
-	if !exists || pt.Finalized {
-		State.Mu.Unlock()
-		return
-	}
-	pt.Votes[vote.NodeID] = vote.Agree
-
-	totalNodes := len(State.ClusterNodes)
-	majority := (totalNodes / 2) + 1
-	if majority < 2 {
-		majority = 2
-	}
-
-	yesCount := 0
-	noCount := 0
-	for _, v := range pt.Votes {
-		if v {
-			yesCount++
-		} else {
-			noCount++
-		}
-	}
-
-	if yesCount >= majority && !pt.Finalized {
-		pt.Finalized = true
-		State.Mu.Unlock()
-		finalizeVote(vote.ProposalID)
-		return
-	} else if noCount >= majority && !pt.Finalized {
-		pt.Finalized = true
-		State.Mu.Unlock()
-		finalizeVote(vote.ProposalID)
-		return
-	}
-
-	if len(pt.Votes) == totalNodes && !pt.Finalized {
-		pt.Finalized = true
-		State.Mu.Unlock()
-		finalizeVote(vote.ProposalID)
-		return
-	}
-	State.Mu.Unlock()
-}
-
-// handleFinalize applies the final decision from another monitor.
-func handleFinalize(m *nats.Msg) {
-	var fm FinalizeMessage
-	if err := json.Unmarshal(m.Data, &fm); err != nil {
-		log.Log(log.Error, "Failed to unmarshal finalize message: %v", err)
-		return
-	}
-
-	State.Mu.RLock()
-	pt, exists := State.Proposals[fm.ProposalID]
-	State.Mu.RUnlock()
-	if exists && !pt.Finalized {
-		State.Mu.Lock()
-		State.Proposals[pt.Proposal.ID].Finalized = true
-		State.Mu.Unlock()
-		go finalizeVote(pt.Proposal.ID)
+// checkLocalStatus consults local data about site/domain/endpoint
+func checkLocalStatus(checkType, checkName, memberName, domainName, endpoint string) (bool, bool) {
+	// Use data from data/results_Local.go
+	switch checkType {
+	case "site":
+		found, status := dat.GetLocalSiteStatus(checkName, memberName)
+		return found, status
+	case "domain":
+		found, status := dat.GetLocalDomainStatus(checkName, memberName, domainName)
+		return found, status
+	case "endpoint":
+		found, status := dat.GetLocalEndpointStatus(checkName, memberName, endpoint)
+		return found, status
+	default:
+		return false, false
 	}
 }
 
-// applyOfficialChanges updates official results once a vote passes.
-func applyOfficialChanges(proposal Proposal) {
-	// Insert the code that modifies official site/domain/endpoint status
-	// in data/Official or your final store. This can call data.UpdateOfficialSiteResult,
-	// data.UpdateOfficialDomainResult, etc.
-	// Omitted code is presumably found in the existing code base.
-	log.Log(log.Info, "Finalizing official status for proposal: %s, status=%t", proposal.ID, proposal.ProposedStatus)
-	// ...existing logic...
+// applyOfficialChanges updates the data.Official with new up/down status
+func applyOfficialChanges(prop Proposal, final bool) {
+	switch prop.CheckType {
+	case "site":
+		log.Log(log.Info, "Finalizing site check for %s => %t", prop.MemberName, final)
+		dat.UpdateOfficialSiteResultFromProposal(prop, final)
+	case "domain":
+		log.Log(log.Info, "Finalizing domain check for %s => %t (domain=%s)", prop.MemberName, final, prop.DomainName)
+		dat.UpdateOfficialDomainResultFromProposal(prop, final)
+	case "endpoint":
+		log.Log(log.Info, "Finalizing endpoint check for %s => %t (domain=%s, endpoint=%s)", prop.MemberName, final, prop.DomainName, prop.Endpoint)
+		dat.UpdateOfficialEndpointResultFromProposal(prop, final)
+	default:
+		log.Log(log.Warn, "Unknown checkType for applyOfficialChanges: %s", prop.CheckType)
+	}
 }

@@ -12,12 +12,13 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+// nc is the global NATS connection
 var (
-	connectionMu sync.Mutex
 	nc           *nats.Conn
+	connectionMu sync.Mutex
 )
 
-// Connect initializes a global NATS connection from the project's config.
+// Connect initializes a global NATS connection from config.json
 func Connect() error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -59,13 +60,12 @@ func Connect() error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to NATS: %w", err)
 	}
-
 	nc = connection
 	log.Log(log.Info, "[NATS] Connected successfully to %s", url)
 	return nil
 }
 
-// Disconnect closes the global NATS connection (if open).
+// Disconnect closes the global NATS connection, if open
 func Disconnect() {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -76,7 +76,7 @@ func Disconnect() {
 	}
 }
 
-// Publish sends a message to a subject without a reply.
+// Publish sends data on a subject (no reply)
 func Publish(subject string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -86,8 +86,7 @@ func Publish(subject string, data []byte) error {
 	return nc.Publish(subject, data)
 }
 
-// PublishMsgWithReply creates and sends a message with a subject, a reply subject, and data.
-// This is used by Collator to publish a request with a specified reply subject (inbox).
+// PublishMsgWithReply creates and sends a message with subject, reply, and data
 func PublishMsgWithReply(subject, reply string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -102,7 +101,7 @@ func PublishMsgWithReply(subject, reply string, data []byte) error {
 	return nc.PublishMsg(msg)
 }
 
-// Subscribe registers a callback for the given subject.
+// Subscribe to a subject with a callback
 func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -113,12 +112,11 @@ func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Large pending limits for reliability
 	sub.SetPendingLimits(-1, -1)
 	return sub, nil
 }
 
-// Request sends a request and waits for a single reply (typical request/response).
+// Request is a convenience for a single request/reply with a timeout
 func Request(subject string, data []byte, timeout time.Duration) (*nats.Msg, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -128,7 +126,7 @@ func Request(subject string, data []byte, timeout time.Duration) (*nats.Msg, err
 	return nc.Request(subject, data, timeout)
 }
 
-// PublishFinalize is a helper for the consensus finalization broadcast.
+// PublishFinalize is used by the monitor voting finalization
 func PublishFinalize(msg FinalizeMessage) error {
 	bytes, _ := json.Marshal(msg)
 	return Publish(State.SubjectFinalize, bytes)

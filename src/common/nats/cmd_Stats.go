@@ -7,45 +7,64 @@ import (
 	log "ibp-geodns/src/common/logging"
 
 	"github.com/nats-io/nats.go"
+
+	dat "ibp-geodns/src/common/data"
 )
 
-// handleMonitorStatsRequest listens for requests on "monitor.stats.getDowntime".
+// handleMonitorStatsRequest responds to downtime requests: "monitor.stats.getDowntime"
 func handleMonitorStatsRequest(m *nats.Msg) {
 	var req DowntimeRequest
-	err := json.Unmarshal(m.Data, &req)
-	if err != nil {
+	if err := json.Unmarshal(m.Data, &req); err != nil {
 		log.Log(log.Error, "handleMonitorStatsRequest: unmarshal error: %v", err)
 		return
 	}
 
-	// Query local downtime events in date range
-	// The logic below is an integration point to your data storage
-	events := retrieveLocalDowntimeEvents(req.StartTime, req.EndTime, req.MemberName)
+	// Query local downtime events from data/events.go
+	start := req.StartTime
+	end := req.EndTime
+	member := req.MemberName
+
+	// data.GetMemberEvents is from data/events.go or data usage
+	events, err := retrieveLocalDowntimeEvents(member, start, end)
+	if err != nil {
+		log.Log(log.Error, "Error retrieving local downtime: %v", err)
+		return
+	}
 
 	resp := DowntimeResponse{
 		NodeID: State.NodeID,
 		Events: events,
 	}
-	data, _ := json.Marshal(resp)
+	dataBytes, _ := json.Marshal(resp)
 
-	// If the request has a Reply subject (inbox), respond directly
 	if m.Reply != "" {
-		err = Publish(m.Reply, data)
-		if err != nil {
-			log.Log(log.Error, "Failed to publish downtime response: %v", err)
-		}
-		return
+		_ = PublishMsgWithReply(m.Reply, "", dataBytes)
+	} else {
+		_ = Publish("monitor.stats.downtimeData", dataBytes)
 	}
-
-	// Otherwise, publish to a well-known subject, e.g. "monitor.stats.downtimeData"
-	_ = Publish("monitor.stats.downtimeData", data)
 }
 
-// retrieveLocalDowntimeEvents is your local data retrieval logic.
-func retrieveLocalDowntimeEvents(start, end time.Time, memberName string) []DowntimeEvent {
-	// Implementation depends on your MySQL or in-memory DB code
-	// Returns an array of DowntimeEvent
-	var results []DowntimeEvent
-	// ...
-	return results
+// retrieveLocalDowntimeEvents uses data.GetMemberEvents from data/events.go
+func retrieveLocalDowntimeEvents(memberName string, start, end time.Time) ([]DowntimeEvent, error) {
+	rawEvents, err := dat.GetMemberEvents(memberName, "", start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]DowntimeEvent, 0, len(rawEvents))
+	for _, e := range rawEvents {
+		results = append(results, DowntimeEvent{
+			MemberName: e.MemberName,
+			CheckType:  e.CheckType,
+			CheckName:  e.CheckName,
+			DomainName: e.DomainName,
+			Endpoint:   e.Endpoint,
+			Status:     e.Status,
+			StartTime:  e.StartTime,
+			EndTime:    e.EndTime,
+			ErrorText:  e.ErrorText,
+			Data:       e.Data,
+		})
+	}
+	return results, nil
 }
