@@ -9,7 +9,7 @@ import (
 	"net"
 )
 
-// handle_DNSQuery processes incoming lookup requests from PowerDNS
+// handle_DNSQuery processes incoming lookup requests from PowerDNS.
 func handle_DNSQuery(req Request) Response {
 	params := req.Parameters
 	qname := strings.ToLower(strings.TrimSuffix(params.QName, "."))
@@ -17,14 +17,14 @@ func handle_DNSQuery(req Request) Response {
 
 	log.Log(log.Debug, "handle_DNSQuery: qname=%s, qtype=%s, remote=%s", qname, qtype, params.Remote)
 
-	// Determine if client is IPv6
+	// Check if this is IPv6 or IPv4
 	remoteIP := net.ParseIP(params.Remote)
 	isIPv6Client := false
 	if remoteIP != nil && remoteIP.To4() == nil {
 		isIPv6Client = true
 	}
 
-	// Identify TLDRecords index (id)
+	// Identify the domain in TLDRecords (id != 0 means recognized domain).
 	var id int
 	TLDRecords.mu.RLock()
 	for key, tld := range TLDRecords.records {
@@ -35,7 +35,7 @@ func handle_DNSQuery(req Request) Response {
 	}
 	TLDRecords.mu.RUnlock()
 
-	// We'll gather all standard static records:
+	// --- Gather static records: SOA, ACME, NS, ANY ---
 	var records []cfg.DNSRecord
 
 	SOA := ProcessSOA(params, id, qname)
@@ -50,46 +50,29 @@ func handle_DNSQuery(req Request) Response {
 	ANY := ProcessANY(params, id, qname)
 	records = appendUniqueRecords(records, ANY)
 
-	// For dynamic resolution, we handle A, AAAA, ANY:
+	// --- Possibly gather dynamic (A/AAAA) records ---
 	var chosenRecords []cfg.DNSRecord
 	var chosenMemberName string
 
 	switch qtype {
 	case "A":
-		// IPv4 dynamic
 		chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, false)
-
 	case "AAAA":
-		// IPv6 dynamic
 		chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, true)
-
 	case "ANY":
-		// We still gather dynamic A/AAAA for ANY queries if the domain is recognized.
+		// For ANY queries, we provide both A + AAAA if available.
 		v4Recs, v4Member := ProcessDynamic(params, id, qname, false)
 		v6Recs, v6Member := ProcessDynamic(params, id, qname, true)
 		chosenRecords = append(v4Recs, v6Recs...)
 
-		// For usage, though, we will skip increments for ANY (see below).
-		// But for completeness, we pick a "chosen" member to reflect which address was used last.
+		// If both members are valid, we pick whichever is found last
+		// purely for logging. The usage counters can reflect both.
 		if v6Member != "" {
 			chosenMemberName = v6Member
 		} else {
 			chosenMemberName = v4Member
 		}
-
-	default:
-		// For NS, SOA, CNAME, etc.: We do NOT do dynamic resolution beyond the above
-		// (though some existing code in ANY handles it).
-		// We do not record usage for anything except A/AAAA,
-		// but we DO want to return any static/dynamic records that already exist in 'records'.
-		if len(records) == 0 {
-			log.Log(log.Warn,
-				"handle_DNSQuery: returning 0 records for qname=%s qtype=%s => NXDOMAIN or REFUSE",
-				qname, qtype,
-			)
-			return Response{Result: []cfg.DNSRecord{}}
-		}
-		return Response{Result: records}
+		// for all other qtypes, no dynamic resolution beyond the above
 	}
 
 	if len(chosenRecords) > 0 {
@@ -97,23 +80,19 @@ func handle_DNSQuery(req Request) Response {
 	}
 	records = appendUniqueRecords(records, chosenRecords)
 
-	// ==========================
-	// USAGE RECORDING SECTION
-	// ==========================
-	// Only record usage stats if:
-	// 1) The query is A or AAAA
-	// 2) We recognized the domain (id != 0)
-	if (qtype == "A" || qtype == "AAAA") && id != 0 {
-		// First increment usage with memberName=""
+	// === USAGE RECORDING LOGIC ===
+	// We only record usage if domain is recognized (id != 0) AND qtype is A/AAAA/ANY.
+	if id != 0 && (qtype == "A" || qtype == "AAAA" || qtype == "ANY") {
+		// 1) Always record a domain-level usage (with memberName="").
 		dat.RecordDnsHit(isIPv6Client, params.Remote, qname, "")
 
-		// If a specific member was chosen, record usage for that member as well
+		// 2) If a dynamic resolution chose a specific member, also record that usage.
 		if chosenMemberName != "" {
 			dat.RecordDnsHit(isIPv6Client, params.Remote, qname, chosenMemberName)
 		}
 	}
-	// if qtype == ANY (or others), we do nothing for usage
 
+	// If no records at all, we return NXDOMAIN or REFUSE.
 	if len(records) == 0 {
 		log.Log(log.Warn,
 			"handle_DNSQuery: returning 0 records for qname=%s qtype=%s => NXDOMAIN or REFUSE",
