@@ -1,12 +1,11 @@
 [Unit]
-Description=IBP Matrix Bot
-After=ibp-geodns.service
+Description=IBP DNS
 
 [Service]
-ExecStart=/opt/ibp-geodns/bin/mgmt-matrixbot
+ExecStart=/opt/ibp-geodns/bin/IBPDns -config /opt/ibp-geodns/config/ibpdns.json
 WorkingDirectory=/opt/ibp-geodns
-User=ibp-geodns
-Group=ibp-geodns
+User=ibp
+Group=ibp
 Restart=always
 RestartSec=5
 Environment=PATH=/usr/bin:/usr/local/bin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin/

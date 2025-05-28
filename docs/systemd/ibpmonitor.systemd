@@ -1,12 +1,12 @@
 [Unit]
-Description=IBP Discord Bot
-After=ibp-geodns.service
+Description=IBP Monitor
+After=ibpdns.service
 
 [Service]
-ExecStart=/opt/ibp-geodns/bin/mgmt-discordbot
+ExecStart=/opt/ibp-geodns/bin/IBPMonitor -config /opt/ibp-geodns/config/ibpmonitor.json
 WorkingDirectory=/opt/ibp-geodns
-User=ibp-geodns
-Group=ibp-geodns
+User=ibp
+Group=ibp
 Restart=always
 RestartSec=5
 Environment=PATH=/usr/bin:/usr/local/bin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin/
