@@ -24,7 +24,7 @@ func handle_DNSQuery(req Request) Response {
 		isIPv6Client = true
 	}
 
-	// Look up TLDRecords
+	// Identify TLDRecords index (id)
 	var id int
 	TLDRecords.mu.RLock()
 	for key, tld := range TLDRecords.records {
@@ -35,7 +35,7 @@ func handle_DNSQuery(req Request) Response {
 	}
 	TLDRecords.mu.RUnlock()
 
-	// Gather static/dynamic records as before
+	// We'll gather all standard static records:
 	var records []cfg.DNSRecord
 
 	SOA := ProcessSOA(params, id, qname)
@@ -50,25 +50,38 @@ func handle_DNSQuery(req Request) Response {
 	ANY := ProcessANY(params, id, qname)
 	records = appendUniqueRecords(records, ANY)
 
-	// Determine if we should do dynamic lookups (A/AAAA only).
-	// If it's anything else, we skip dynamic resolution and skip usage increments.
+	// For dynamic resolution, we handle A, AAAA, ANY:
 	var chosenRecords []cfg.DNSRecord
 	var chosenMemberName string
 
 	switch qtype {
 	case "A":
-		// If domain recognized, pick IPv4
-		if id != 0 {
-			chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, false)
-		}
+		// IPv4 dynamic
+		chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, false)
+
 	case "AAAA":
-		// If domain recognized, pick IPv6
-		if id != 0 {
-			chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, true)
+		// IPv6 dynamic
+		chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, true)
+
+	case "ANY":
+		// We still gather dynamic A/AAAA for ANY queries if the domain is recognized.
+		v4Recs, v4Member := ProcessDynamic(params, id, qname, false)
+		v6Recs, v6Member := ProcessDynamic(params, id, qname, true)
+		chosenRecords = append(v4Recs, v6Recs...)
+
+		// For usage, though, we will skip increments for ANY (see below).
+		// But for completeness, we pick a "chosen" member to reflect which address was used last.
+		if v6Member != "" {
+			chosenMemberName = v6Member
+		} else {
+			chosenMemberName = v4Member
 		}
+
 	default:
-		// For anything else (NS, ANY, etc.), do not record usage or do dynamic resolution.
-		log.Log(log.Debug, "handle_DNSQuery: qtype=%s not A/AAAA, skipping usage increments", qtype)
+		// For NS, SOA, CNAME, etc.: We do NOT do dynamic resolution beyond the above
+		// (though some existing code in ANY handles it).
+		// We do not record usage for anything except A/AAAA,
+		// but we DO want to return any static/dynamic records that already exist in 'records'.
 		if len(records) == 0 {
 			log.Log(log.Warn,
 				"handle_DNSQuery: returning 0 records for qname=%s qtype=%s => NXDOMAIN or REFUSE",
@@ -84,18 +97,22 @@ func handle_DNSQuery(req Request) Response {
 	}
 	records = appendUniqueRecords(records, chosenRecords)
 
-	// Only record usage if qtype is A/AAAA AND domain recognized (id != 0).
-	// We'll do it after we know if a member was chosen or not.
+	// ==========================
+	// USAGE RECORDING SECTION
+	// ==========================
+	// Only record usage stats if:
+	// 1) The query is A or AAAA
+	// 2) We recognized the domain (id != 0)
 	if (qtype == "A" || qtype == "AAAA") && id != 0 {
-		// First increment usage with memberName = "" (none).
-		// This indicates a domain-level request.
+		// First increment usage with memberName=""
 		dat.RecordDnsHit(isIPv6Client, params.Remote, qname, "")
 
-		// If a member was chosen, we update usage under that member as well.
+		// If a specific member was chosen, record usage for that member as well
 		if chosenMemberName != "" {
 			dat.RecordDnsHit(isIPv6Client, params.Remote, qname, chosenMemberName)
 		}
 	}
+	// if qtype == ANY (or others), we do nothing for usage
 
 	if len(records) == 0 {
 		log.Log(log.Warn,
