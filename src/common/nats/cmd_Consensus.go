@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
 
 	"github.com/google/uuid"
@@ -250,19 +251,48 @@ func checkLocalStatus(checkType, checkName, memberName, domainName, endpoint str
 	}
 }
 
-// applyOfficialChanges updates the data.Official with new up/down status
+// applyOfficialChanges updates data.Official with up/down status
 func applyOfficialChanges(prop Proposal, final bool) {
+	// Retrieve the needed config data: check, member, and possibly service
+	chk, chkExists := findCheckByName(prop.CheckName, prop.CheckType)
+	if !chkExists {
+		log.Log(log.Warn, "applyOfficialChanges: no check named %s (type=%s) found", prop.CheckName, prop.CheckType)
+		return
+	}
+	mem, memExists := findMemberByName(prop.MemberName)
+	if !memExists {
+		log.Log(log.Warn, "applyOfficialChanges: no member named %s found", prop.MemberName)
+		return
+	}
+
+	var svc cfg.Service
+	if prop.CheckType == "domain" || prop.CheckType == "endpoint" {
+		s, sExists := findServiceForDomain(prop.DomainName)
+		if !sExists && prop.CheckType == "domain" {
+			log.Log(log.Warn, "applyOfficialChanges: domain service not found for %s", prop.DomainName)
+			return
+		}
+		svc = s
+	}
+
+	status := final
+	errMsg := prop.ErrorText
+	dataMap := prop.Data
+
 	switch prop.CheckType {
 	case "site":
-		log.Log(log.Info, "Finalizing site check for %s => %t", prop.MemberName, final)
-		dat.UpdateOfficialSiteResultFromProposal(prop, final)
+		log.Log(log.Info, "Finalizing site check for member=%s => %t", prop.MemberName, status)
+		dat.UpdateOfficialSiteResult(chk, mem, status, errMsg, dataMap)
+
 	case "domain":
-		log.Log(log.Info, "Finalizing domain check for %s => %t (domain=%s)", prop.MemberName, final, prop.DomainName)
-		dat.UpdateOfficialDomainResultFromProposal(prop, final)
+		log.Log(log.Info, "Finalizing domain check for member=%s => %t domain=%s", prop.MemberName, status, prop.DomainName)
+		dat.UpdateOfficialDomainResult(chk, mem, svc, prop.DomainName, status, errMsg, dataMap)
+
 	case "endpoint":
-		log.Log(log.Info, "Finalizing endpoint check for %s => %t (domain=%s, endpoint=%s)", prop.MemberName, final, prop.DomainName, prop.Endpoint)
-		dat.UpdateOfficialEndpointResultFromProposal(prop, final)
+		log.Log(log.Info, "Finalizing endpoint check for member=%s => %t domain=%s endpoint=%s", prop.MemberName, status, prop.DomainName, prop.Endpoint)
+		dat.UpdateOfficialEndpointResult(chk, mem, svc, prop.DomainName, prop.Endpoint, status, errMsg, dataMap)
+
 	default:
-		log.Log(log.Warn, "Unknown checkType for applyOfficialChanges: %s", prop.CheckType)
+		log.Log(log.Warn, "applyOfficialChanges: unknown checkType %s", prop.CheckType)
 	}
 }
