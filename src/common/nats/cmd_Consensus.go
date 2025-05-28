@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"time"
 
-	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 
 	// For local checks and official updates
+	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 )
 
@@ -27,7 +27,8 @@ func ProposeCheckStatus(checkType, checkName, memberName, domainName, endpoint s
 			prop.Endpoint == endpoint &&
 			prop.ProposedStatus == status {
 			State.Mu.RUnlock()
-			log.Log(log.Debug, "Propose skipped: identical active proposal already exists for CheckType=%s, CheckName=%s, Member=%s", checkType, checkName, memberName)
+			log.Log(log.Debug, "Propose skipped: identical active proposal already exists for CheckType=%s, CheckName=%s, Member=%s",
+				checkType, checkName, memberName)
 			return false
 		}
 	}
@@ -37,8 +38,15 @@ func ProposeCheckStatus(checkType, checkName, memberName, domainName, endpoint s
 	return true
 }
 
-// Propose creates a new proposal, stores it, and publishes
-func Propose(checkType, checkName, memberName, domainName, endpoint string, proposedStatus bool, errorText string, dataMap map[string]interface{}) (ProposalID, error) {
+// Propose creates a new proposal, stores it, and publishes it to 'consensus.propose'
+func Propose(
+	checkType, checkName, memberName,
+	domainName, endpoint string,
+	proposedStatus bool,
+	errorText string,
+	dataMap map[string]interface{},
+) (ProposalID, error) {
+
 	pid := ProposalID(uuid.New().String())
 	prop := Proposal{
 		ID:             pid,
@@ -71,6 +79,7 @@ func Propose(checkType, checkName, memberName, domainName, endpoint string, prop
 	return pid, err
 }
 
+// handleProposal processes incoming "consensus.propose" messages.
 func handleProposal(m *nats.Msg) {
 	var prop Proposal
 	if err := json.Unmarshal(m.Data, &prop); err != nil {
@@ -92,7 +101,7 @@ func handleProposal(m *nats.Msg) {
 	}
 	State.Mu.Unlock()
 
-	// evaluate local status
+	// evaluate local status asynchronously
 	go func(pr Proposal) {
 		found, localStatus := checkLocalStatus(pr.CheckType, pr.CheckName, pr.MemberName, pr.DomainName, pr.Endpoint)
 		if !found {
@@ -109,6 +118,7 @@ func handleProposal(m *nats.Msg) {
 	}(prop)
 }
 
+// handleVote processes incoming "consensus.vote" messages.
 func handleVote(m *nats.Msg) {
 	var vote Vote
 	if err := json.Unmarshal(m.Data, &vote); err != nil {
@@ -139,6 +149,8 @@ func handleVote(m *nats.Msg) {
 			noCount++
 		}
 	}
+
+	// Early finalize if majority reached
 	if yesCount >= majority && !pt.Finalized {
 		pt.Finalized = true
 		State.Mu.Unlock()
@@ -151,15 +163,18 @@ func handleVote(m *nats.Msg) {
 		return
 	}
 
+	// If all nodes voted, finalize
 	if len(pt.Votes) == totalNodes && !pt.Finalized {
 		pt.Finalized = true
 		State.Mu.Unlock()
 		finalizeVote(vote.ProposalID)
 		return
 	}
+
 	State.Mu.Unlock()
 }
 
+// handleFinalize processes incoming "consensus.finalize" messages.
 func handleFinalize(m *nats.Msg) {
 	var fm FinalizeMessage
 	if err := json.Unmarshal(m.Data, &fm); err != nil {
@@ -179,6 +194,7 @@ func handleFinalize(m *nats.Msg) {
 	}
 }
 
+// finalizeVote is called when a proposal times out or is forced to finalize.
 func finalizeVote(pid ProposalID) {
 	State.Mu.Lock()
 	pt, exists := State.Proposals[pid]
@@ -230,6 +246,7 @@ func finalizeVote(pid ProposalID) {
 			DecidedAt:   time.Now().UTC(),
 		})
 	}
+
 	log.Log(log.Info, "Proposal %s finalized => status=%v", pid, finalStatus)
 }
 
@@ -251,48 +268,50 @@ func checkLocalStatus(checkType, checkName, memberName, domainName, endpoint str
 	}
 }
 
-// applyOfficialChanges updates data.Official with up/down status
+// applyOfficialChanges updates data.Official with up/down status (no "FromProposal" calls).
 func applyOfficialChanges(prop Proposal, final bool) {
-	// Retrieve the needed config data: check, member, and possibly service
-	chk, chkExists := findCheckByName(prop.CheckName, prop.CheckType)
-	if !chkExists {
-		log.Log(log.Warn, "applyOfficialChanges: no check named %s (type=%s) found", prop.CheckName, prop.CheckType)
+	// 1) Find the relevant check from config
+	chk, chkOk := findCheckByName(prop.CheckName, prop.CheckType)
+	if !chkOk {
+		log.Log(log.Warn, "applyOfficialChanges: no check named %s (type=%s)", prop.CheckName, prop.CheckType)
 		return
 	}
-	mem, memExists := findMemberByName(prop.MemberName)
-	if !memExists {
+	// 2) Find the member
+	mem, memOk := findMemberByName(prop.MemberName)
+	if !memOk {
 		log.Log(log.Warn, "applyOfficialChanges: no member named %s found", prop.MemberName)
 		return
 	}
-
+	// 3) Possibly find the service if domain or endpoint
 	var svc cfg.Service
 	if prop.CheckType == "domain" || prop.CheckType == "endpoint" {
-		s, sExists := findServiceForDomain(prop.DomainName)
-		if !sExists && prop.CheckType == "domain" {
-			log.Log(log.Warn, "applyOfficialChanges: domain service not found for %s", prop.DomainName)
+		serviceObj, ok := findServiceForDomain(prop.DomainName)
+		if !ok && prop.CheckType == "domain" {
+			log.Log(log.Warn, "applyOfficialChanges: domain service not found for domain=%s", prop.DomainName)
 			return
 		}
-		svc = s
+		svc = serviceObj
 	}
 
 	status := final
-	errMsg := prop.ErrorText
+	errorMsg := prop.ErrorText
 	dataMap := prop.Data
 
 	switch prop.CheckType {
 	case "site":
 		log.Log(log.Info, "Finalizing site check for member=%s => %t", prop.MemberName, status)
-		dat.UpdateOfficialSiteResult(chk, mem, status, errMsg, dataMap)
+		dat.UpdateOfficialSiteResult(chk, mem, status, errorMsg, dataMap)
 
 	case "domain":
 		log.Log(log.Info, "Finalizing domain check for member=%s => %t domain=%s", prop.MemberName, status, prop.DomainName)
-		dat.UpdateOfficialDomainResult(chk, mem, svc, prop.DomainName, status, errMsg, dataMap)
+		dat.UpdateOfficialDomainResult(chk, mem, svc, prop.DomainName, status, errorMsg, dataMap)
 
 	case "endpoint":
-		log.Log(log.Info, "Finalizing endpoint check for member=%s => %t domain=%s endpoint=%s", prop.MemberName, status, prop.DomainName, prop.Endpoint)
-		dat.UpdateOfficialEndpointResult(chk, mem, svc, prop.DomainName, prop.Endpoint, status, errMsg, dataMap)
+		log.Log(log.Info, "Finalizing endpoint check for member=%s => %t domain=%s endpoint=%s",
+			prop.MemberName, status, prop.DomainName, prop.Endpoint)
+		dat.UpdateOfficialEndpointResult(chk, mem, svc, prop.DomainName, prop.Endpoint, status, errorMsg, dataMap)
 
 	default:
-		log.Log(log.Warn, "applyOfficialChanges: unknown checkType %s", prop.CheckType)
+		log.Log(log.Warn, "applyOfficialChanges: unrecognized checkType=%s", prop.CheckType)
 	}
 }
