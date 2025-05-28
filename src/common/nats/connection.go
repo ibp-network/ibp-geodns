@@ -12,19 +12,18 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// connectionMu protects nc.
-var connectionMu sync.Mutex
+var (
+	connectionMu sync.Mutex
+	nc           *nats.Conn
+)
 
-// nc is the global NATS connection handle used by all sub-packages.
-var nc *nats.Conn
-
-// Connect initializes the global NATS connection using config data.
+// Connect initializes a global NATS connection from the project's config.
 func Connect() error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
 
 	if nc != nil && !nc.IsClosed() {
-		log.Log(log.Debug, "[NATS] Already connected or not closed.")
+		log.Log(log.Debug, "[NATS] Already connected.")
 		return nil
 	}
 
@@ -56,28 +55,28 @@ func Connect() error {
 		}),
 	}
 
-	conn, err := nats.Connect(url, opts...)
+	connection, err := nats.Connect(url, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to connect to NATS: %w", err)
 	}
-	nc = conn
-	log.Log(log.Info, "[NATS] Connected successfully to %s", url)
 
+	nc = connection
+	log.Log(log.Info, "[NATS] Connected successfully to %s", url)
 	return nil
 }
 
-// Disconnect closes the global NATS connection.
+// Disconnect closes the global NATS connection (if open).
 func Disconnect() {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
 	if nc != nil && !nc.IsClosed() {
 		nc.Close()
 		nc = nil
-		log.Log(log.Info, "[NATS] Connection closed by request.")
+		log.Log(log.Info, "[NATS] Connection closed by user request.")
 	}
 }
 
-// Publish sends a message to the specified subject.
+// Publish sends a message to a subject without a reply.
 func Publish(subject string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -87,8 +86,24 @@ func Publish(subject string, data []byte) error {
 	return nc.Publish(subject, data)
 }
 
-// Subscribe subscribes to a subject with the given callback.
-func Subscribe(subject string, cb nats.MsgHandler) (*nats.Subscription, error) {
+// PublishMsgWithReply creates and sends a message with a subject, a reply subject, and data.
+// This is used by Collator to publish a request with a specified reply subject (inbox).
+func PublishMsgWithReply(subject, reply string, data []byte) error {
+	connectionMu.Lock()
+	defer connectionMu.Unlock()
+	if nc == nil || nc.IsClosed() {
+		return nats.ErrConnectionClosed
+	}
+	msg := &nats.Msg{
+		Subject: subject,
+		Reply:   reply,
+		Data:    data,
+	}
+	return nc.PublishMsg(msg)
+}
+
+// Subscribe registers a callback for the given subject.
+func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
 	if nc == nil || nc.IsClosed() {
@@ -98,34 +113,23 @@ func Subscribe(subject string, cb nats.MsgHandler) (*nats.Subscription, error) {
 	if err != nil {
 		return nil, err
 	}
-	sub.SetPendingLimits(-1, 268435456) // large limits
+	// Large pending limits for reliability
+	sub.SetPendingLimits(-1, -1)
 	return sub, nil
 }
 
-// Request publishes a request and waits for a reply.
+// Request sends a request and waits for a single reply (typical request/response).
 func Request(subject string, data []byte, timeout time.Duration) (*nats.Msg, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
 	if nc == nil || nc.IsClosed() {
 		return nil, nats.ErrConnectionClosed
 	}
-	msg, err := nc.Request(subject, data, timeout)
-	return msg, err
+	return nc.Request(subject, data, timeout)
 }
 
-// PublishFinalize sends a finalize message to the consensus.finalize subject.
+// PublishFinalize is a helper for the consensus finalization broadcast.
 func PublishFinalize(msg FinalizeMessage) error {
-	data, _ := json.Marshal(msg)
-	return Publish(State.SubjectFinalize, data)
-}
-
-// StartGarbageCollection runs in the background to remove old proposals.
-func StartGarbageCollection() {
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			cleanOldProposals()
-		}
-	}()
+	bytes, _ := json.Marshal(msg)
+	return Publish(State.SubjectFinalize, bytes)
 }
