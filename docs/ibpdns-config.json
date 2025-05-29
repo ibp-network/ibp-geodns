@@ -18,7 +18,7 @@
         "LicenseKey": ""
     },
     "Nats": {
-        "NodeID": "DNS-01",
+        "NodeID": "DNS1",
         "Url": "nats://127.0.0.1:5222",
         "User": "DNS01",
         "Pass": "password123"
