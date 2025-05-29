@@ -20,7 +20,7 @@
     "Nats": {
         "NodeID": "DNS1",
         "Url": "nats://127.0.0.1:5222",
-        "User": "DNS01",
+        "User": "DNS1",
         "Pass": "password123"
     },
     "Mysql": {
