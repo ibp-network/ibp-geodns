@@ -25,14 +25,14 @@ var (
 	}
 )
 
-type CheckSiteFunc func(check cfg.Check, member cfg.Member)
-type CheckDomainFunc func(check cfg.Check, domain string, service cfg.Service, member cfg.Member)
-type CheckEndpointFunc func(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member)
+// These are function types for the different checks.
+type (
+	CheckSiteFunc     func(check cfg.Check, member cfg.Member)
+	CheckDomainFunc   func(check cfg.Check, domain string, service cfg.Service, member cfg.Member)
+	CheckEndpointFunc func(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member)
+)
 
-// ------------------------------------------------------------------
-// Registration
-// ------------------------------------------------------------------
-
+// RegisterSiteCheck associates a check name ("ping", etc.) with a site-level check function.
 func RegisterSiteCheck(name string, checkFunc CheckSiteFunc) {
 	CheckRegistry.Mu.Lock()
 	defer CheckRegistry.Mu.Unlock()
@@ -40,6 +40,7 @@ func RegisterSiteCheck(name string, checkFunc CheckSiteFunc) {
 	log.Log(log.Info, "Registered site check '%s'", name)
 }
 
+// RegisterDomainCheck associates a check name ("ssl", etc.) with a domain-level check function.
 func RegisterDomainCheck(name string, checkFunc CheckDomainFunc) {
 	CheckRegistry.Mu.Lock()
 	defer CheckRegistry.Mu.Unlock()
@@ -47,10 +48,18 @@ func RegisterDomainCheck(name string, checkFunc CheckDomainFunc) {
 	log.Log(log.Info, "Registered domain check '%s'", name)
 }
 
+// RegisterEndpointCheck associates a check name ("wss", etc.) with an endpoint-level check function.
 func RegisterEndpointCheck(name string, checkFunc CheckEndpointFunc) {
 	CheckRegistry.Mu.Lock()
 	defer CheckRegistry.Mu.Unlock()
 	CheckRegistry.Endpoint[name] = checkFunc
+}
+
+// startChecks is invoked by monitor.Init() to kick off all checks in parallel.
+func startChecks() {
+	go initSiteCheck()
+	go initDomainCheck()
+	go initEndpointCheck()
 }
 
 // ------------------------------------------------------------------
@@ -67,7 +76,7 @@ func getSiteCheck(name string) (CheckSiteFunc, bool) {
 func initSiteCheck() {
 	c := cfg.GetConfig()
 
-	// Copy all site checks from config into a stable slice
+	// Copy site checks from config into a local slice (so reloading won't disrupt iteration).
 	var siteChecks []cfg.Check
 	for _, ch := range c.Local.Checks {
 		if ch.CheckType == "site" && ch.Enabled == 1 {
@@ -75,7 +84,6 @@ func initSiteCheck() {
 		}
 	}
 
-	// Launch each check in its own goroutine
 	for _, check := range siteChecks {
 		fn, exists := getSiteCheck(check.Name)
 		if exists {
@@ -125,6 +133,7 @@ func runSiteCheck(check cfg.Check, fn CheckSiteFunc) {
 	}
 }
 
+// UpdateSiteResultLocal saves local site results and proposes consensus if they differ from official.
 func UpdateSiteResultLocal(
 	check cfg.Check,
 	member cfg.Member,
@@ -196,7 +205,6 @@ func runDomainCheck(check cfg.Check, fn CheckDomainFunc) {
 				member.Service.Active == 1 && !member.Override {
 
 				domainsSet := make(map[string]struct{})
-				// gather domains from the assigned service
 				for _, assignments := range member.ServiceAssignments {
 					for _, assignment := range assignments {
 						if assignment == svcName {
@@ -209,7 +217,6 @@ func runDomainCheck(check cfg.Check, fn CheckDomainFunc) {
 						}
 					}
 				}
-				// run the check for each domain
 				for dom := range domainsSet {
 					go domainCheckWrapper(check, fn, dom, svc, member)
 					time.Sleep(10 * time.Millisecond)
@@ -241,6 +248,7 @@ func domainCheckWrapper(check cfg.Check, fn CheckDomainFunc, domain string, serv
 	}
 }
 
+// UpdateDomainResultLocal saves local domain results, proposes changes if different from official.
 func UpdateDomainResultLocal(
 	check cfg.Check,
 	domain string,
@@ -250,10 +258,8 @@ func UpdateDomainResultLocal(
 	errorMsg string,
 	dataMap map[string]interface{},
 ) {
-	// 1) Store in data.Local
 	dat.UpdateLocalDomainResult(check, member, service, domain, status, errorMsg, dataMap)
 
-	// 2) Compare with official
 	found, officialStatus := dat.GetOfficialDomainStatus(check.Name, member.Details.Name, domain)
 	if !found {
 		natsCommon.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
@@ -351,6 +357,7 @@ func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string
 	}
 }
 
+// UpdateEndpointResultLocal saves local endpoint results, proposes changes if different from official.
 func UpdateEndpointResultLocal(
 	check cfg.Check,
 	member cfg.Member,
@@ -360,12 +367,11 @@ func UpdateEndpointResultLocal(
 	errorMsg string,
 	dataMap map[string]interface{},
 ) {
-	// 1) store to data.Local
 	parsed := max.ParseUrl(endpoint)
 	domain := parsed.Domain
+
 	dat.UpdateLocalEndpointResult(check, member, service, domain, endpoint, status, errorMsg, dataMap)
 
-	// 2) Compare with official
 	found, officialStatus := dat.GetOfficialEndpointStatus(check.Name, member.Details.Name, domain, endpoint)
 	if !found {
 		natsCommon.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap)
