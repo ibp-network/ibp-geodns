@@ -1,14 +1,14 @@
 package monitor
 
 import (
+	"sync"
 	"time"
 
-	nats "ibp-geodns/src/IBPMonitor/nats"
 	cfg "ibp-geodns/src/common/config"
-	dat "ibp-geodns/src/common/data" // We want to store local results into data.Local
+	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
-	"sync"
+	natsCommon "ibp-geodns/src/common/nats"
 )
 
 // Registry of checks
@@ -30,13 +30,8 @@ type CheckDomainFunc func(check cfg.Check, domain string, service cfg.Service, m
 type CheckEndpointFunc func(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member)
 
 // ------------------------------------------------------------------
-// Initialization
+// Registration
 // ------------------------------------------------------------------
-func startChecks() {
-	go initSiteCheck()
-	go initDomainCheck()
-	go initEndpointCheck()
-}
 
 func RegisterSiteCheck(name string, checkFunc CheckSiteFunc) {
 	CheckRegistry.Mu.Lock()
@@ -44,17 +39,23 @@ func RegisterSiteCheck(name string, checkFunc CheckSiteFunc) {
 	CheckRegistry.Site[name] = checkFunc
 	log.Log(log.Info, "Registered site check '%s'", name)
 }
+
 func RegisterDomainCheck(name string, checkFunc CheckDomainFunc) {
 	CheckRegistry.Mu.Lock()
 	defer CheckRegistry.Mu.Unlock()
 	CheckRegistry.Domain[name] = checkFunc
 	log.Log(log.Info, "Registered domain check '%s'", name)
 }
+
 func RegisterEndpointCheck(name string, checkFunc CheckEndpointFunc) {
 	CheckRegistry.Mu.Lock()
 	defer CheckRegistry.Mu.Unlock()
 	CheckRegistry.Endpoint[name] = checkFunc
 }
+
+// ------------------------------------------------------------------
+// SITE checks
+// ------------------------------------------------------------------
 
 func getSiteCheck(name string) (CheckSiteFunc, bool) {
 	CheckRegistry.Mu.RLock()
@@ -62,22 +63,7 @@ func getSiteCheck(name string) (CheckSiteFunc, bool) {
 	fn, ok := CheckRegistry.Site[name]
 	return fn, ok
 }
-func getDomainCheck(name string) (CheckDomainFunc, bool) {
-	CheckRegistry.Mu.RLock()
-	defer CheckRegistry.Mu.RUnlock()
-	fn, ok := CheckRegistry.Domain[name]
-	return fn, ok
-}
-func getEndpointCheck(name string) (CheckEndpointFunc, bool) {
-	CheckRegistry.Mu.RLock()
-	defer CheckRegistry.Mu.RUnlock()
-	fn, ok := CheckRegistry.Endpoint[name]
-	return fn, ok
-}
 
-// ------------------------------------------------------------------
-// SITE checks
-// ------------------------------------------------------------------
 func initSiteCheck() {
 	c := cfg.GetConfig()
 	for _, check := range c.Local.Checks {
@@ -131,9 +117,6 @@ func runSiteCheck(check cfg.Check, fn CheckSiteFunc) {
 	}
 }
 
-// ------------------------------------------------------------------
-// UpdateSiteResultLocal - now with a 6th bool param for isIPv6
-// ------------------------------------------------------------------
 func UpdateSiteResultLocal(
 	check cfg.Check,
 	member cfg.Member,
@@ -142,24 +125,31 @@ func UpdateSiteResultLocal(
 	dataMap map[string]interface{},
 	isIPv6 bool,
 ) {
-	// 1) Actually store in data.Local (so it gets saved to local.cache.json)
+	// 1) Store in data.Local
 	dat.UpdateLocalSiteResult(check, member, status, errorMsg, dataMap, isIPv6)
 
-	// 2) Compare with official status
+	// 2) Compare with official
 	found, officialStatus := dat.GetOfficialSiteStatus(check.Name, member.Details.Name)
 	if !found {
-		// If official had no record, propose a new status
-		nats.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
+		natsCommon.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
 		return
 	}
 	if officialStatus != status {
-		nats.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
+		natsCommon.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
 	}
 }
 
 // ------------------------------------------------------------------
 // DOMAIN checks
 // ------------------------------------------------------------------
+
+func getDomainCheck(name string) (CheckDomainFunc, bool) {
+	CheckRegistry.Mu.RLock()
+	defer CheckRegistry.Mu.RUnlock()
+	fn, ok := CheckRegistry.Domain[name]
+	return fn, ok
+}
+
 func initDomainCheck() {
 	c := cfg.GetConfig()
 	for _, check := range c.Local.Checks {
@@ -237,8 +227,14 @@ func domainCheckWrapper(check cfg.Check, fn CheckDomainFunc, domain string, serv
 	}
 }
 
-func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service,
-	member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{},
+func UpdateDomainResultLocal(
+	check cfg.Check,
+	domain string,
+	service cfg.Service,
+	member cfg.Member,
+	status bool,
+	errorMsg string,
+	dataMap map[string]interface{},
 ) {
 	// 1) Store in data.Local
 	dat.UpdateLocalDomainResult(check, member, service, domain, status, errorMsg, dataMap)
@@ -246,17 +242,25 @@ func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service
 	// 2) Compare with official
 	found, officialStatus := dat.GetOfficialDomainStatus(check.Name, member.Details.Name, domain)
 	if !found {
-		nats.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
+		natsCommon.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
 		return
 	}
 	if officialStatus != status {
-		nats.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
+		natsCommon.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
 	}
 }
 
 // ------------------------------------------------------------------
 // ENDPOINT checks
 // ------------------------------------------------------------------
+
+func getEndpointCheck(name string) (CheckEndpointFunc, bool) {
+	CheckRegistry.Mu.RLock()
+	defer CheckRegistry.Mu.RUnlock()
+	fn, ok := CheckRegistry.Endpoint[name]
+	return fn, ok
+}
+
 func initEndpointCheck() {
 	c := cfg.GetConfig()
 	for _, check := range c.Local.Checks {
@@ -305,9 +309,7 @@ func runEndpointCheck(check cfg.Check, fn CheckEndpointFunc) {
 	}
 }
 
-func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string,
-	service cfg.Service, member cfg.Member,
-) {
+func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string, service cfg.Service, member cfg.Member) {
 	done := make(chan struct{})
 	timer := time.NewTimer(time.Duration(check.Timeout) * time.Second)
 
@@ -329,8 +331,14 @@ func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string
 	}
 }
 
-func UpdateEndpointResultLocal(check cfg.Check, member cfg.Member, service cfg.Service,
-	endpoint string, status bool, errorMsg string, dataMap map[string]interface{},
+func UpdateEndpointResultLocal(
+	check cfg.Check,
+	member cfg.Member,
+	service cfg.Service,
+	endpoint string,
+	status bool,
+	errorMsg string,
+	dataMap map[string]interface{},
 ) {
 	// 1) store to data.Local
 	parsed := max.ParseUrl(endpoint)
@@ -340,10 +348,20 @@ func UpdateEndpointResultLocal(check cfg.Check, member cfg.Member, service cfg.S
 	// 2) Compare with official
 	found, officialStatus := dat.GetOfficialEndpointStatus(check.Name, member.Details.Name, domain, endpoint)
 	if !found {
-		nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap)
+		natsCommon.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap)
 		return
 	}
 	if officialStatus != status {
-		nats.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap)
+		natsCommon.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap)
 	}
+}
+
+// ------------------------------------------------------------------
+// startChecks - called once in Init()
+// ------------------------------------------------------------------
+
+func startChecks() {
+	go initSiteCheck()
+	go initDomainCheck()
+	go initEndpointCheck()
 }

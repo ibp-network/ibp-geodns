@@ -7,21 +7,16 @@ import (
 
 	api "ibp-geodns/src/IBPMonitor/api"
 	"ibp-geodns/src/IBPMonitor/monitor"
-	nats "ibp-geodns/src/IBPMonitor/nats"
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
+	natsCommon "ibp-geodns/src/common/nats"
 )
 
 var version = "1.0.0"
 
 func main() {
-	// -----------------------------------------------------------
-	// Also removed the early log.SetLogLevel(log.Info) call here
-	// so we pick up "Debug" from config.
-	// -----------------------------------------------------------
-
 	log.Log(log.Info, "IBP-GeoDNS serviceMonitor v%s starting...", version)
 
 	cfgFile := flag.String("config", "config.json", "Path to the configuration file")
@@ -49,8 +44,15 @@ func main() {
 	// 4) Initialize MaxMind
 	max.Init()
 
-	// 5) Launch NATS
-	nats.Init()
+	// 5) Connect to NATS and enable Monitor role
+	if err := natsCommon.Connect(); err != nil {
+		log.Log(log.Fatal, "Failed to connect to NATS: %v", err)
+		os.Exit(1)
+	}
+	if err := natsCommon.EnableMonitorRole(); err != nil {
+		log.Log(log.Fatal, "Failed to enable monitor role for NATS: %v", err)
+		os.Exit(1)
+	}
 
 	// 6) Start monitor checks
 	monitor.Init()
