@@ -12,6 +12,7 @@ import (
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
+	natsCommon "ibp-geodns/src/common/nats"
 )
 
 var version = "0.7.0"
@@ -44,7 +45,21 @@ func main() {
 	// 4) Initialize MaxMind
 	max.Init()
 
-	// 5) Launch the DNS API
+	// 5) Connect to NATS and enable DNS API role (for usage requests, etc.)
+	if err := natsCommon.Connect(); err != nil {
+		log.Log(log.Fatal, "Failed to connect to NATS: %v", err)
+		os.Exit(1)
+	}
+	natsCommon.State.NodeID = c.Local.Nats.NodeID
+	natsCommon.State.ThisNode = natsCommon.NodeInfo{
+		NodeID: c.Local.Nats.NodeID,
+	}
+	if err := natsCommon.EnableDNSApiRole(); err != nil {
+		log.Log(log.Fatal, "Failed to enable DNSApi role: %v", err)
+		os.Exit(1)
+	}
+
+	// 6) Launch the DNS API
 	api.Init()
 
 	// Adjust for dual stack if we see 0.0.0.0
@@ -52,7 +67,7 @@ func main() {
 	if addr == "0.0.0.0" {
 		addr = "[::]"
 	}
-	// 6) Start listening (potentially dual-stack if OS supports it)
+	// 7) Start listening (potentially dual-stack if OS supports it)
 	log.Log(log.Info, "Starting DNS API server on %s:%s", addr, c.Local.DnsApi.ListenPort)
 	dnsApi := http.DefaultServeMux // replaced in api.Init() with routes
 
@@ -61,18 +76,17 @@ func main() {
 		dnsApi,
 	)
 
-	// 7) Start polling serviceMonitor for official results, if desired
+	// 8) Start polling serviceMonitor for official results
 	intervalSec := c.Local.DnsApi.RefreshIntervalSeconds
 	log.Log(log.Info, "Starting serviceMonitor poller every %d seconds", intervalSec)
 	startServiceMonitorPoller(intervalSec)
 
-	// 8) Keep running forever
+	// 9) Keep running forever
 	for {
 		time.Sleep(60 * time.Second)
 	}
 }
 
-// startServiceMonitorPoller runs a ticker that fetches the official results
 func startServiceMonitorPoller(intervalSec int) {
 	updateDNSMonitorSnapshot()
 
@@ -85,7 +99,6 @@ func startServiceMonitorPoller(intervalSec int) {
 	}()
 }
 
-// updateDNSMonitorSnapshot fetches official results from the monitor’s /results endpoint
 func updateDNSMonitorSnapshot() {
 	c := cfg.GetConfig()
 	url := fmt.Sprintf("http://%s:%s/results",
@@ -108,7 +121,6 @@ func updateDNSMonitorSnapshot() {
 		return
 	}
 
-	// Store into official snapshot
 	api.SetOfficialSnapshot(tmp)
 	log.Log(log.Debug, "dnsApi poller: updated official results snapshot.")
 }

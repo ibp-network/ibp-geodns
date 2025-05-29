@@ -75,7 +75,7 @@ func cleanOldProposals() {
 	defer State.Mu.Unlock()
 
 	now := time.Now().UTC()
-	threshold := 6 * time.Second
+	threshold := 900 * time.Second
 	for pid, pt := range State.Proposals {
 		if now.Sub(pt.Proposal.Timestamp) > threshold {
 			delete(State.Proposals, pid)
