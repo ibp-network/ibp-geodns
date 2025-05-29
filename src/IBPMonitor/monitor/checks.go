@@ -66,12 +66,20 @@ func getSiteCheck(name string) (CheckSiteFunc, bool) {
 
 func initSiteCheck() {
 	c := cfg.GetConfig()
-	for _, check := range c.Local.Checks {
-		if check.CheckType == "site" && check.Enabled == 1 {
-			fn, exists := getSiteCheck(check.Name)
-			if exists {
-				go siteCheckTimer(check, fn)
-			}
+
+	// Copy all site checks from config into a stable slice
+	var siteChecks []cfg.Check
+	for _, ch := range c.Local.Checks {
+		if ch.CheckType == "site" && ch.Enabled == 1 {
+			siteChecks = append(siteChecks, ch)
+		}
+	}
+
+	// Launch each check in its own goroutine
+	for _, check := range siteChecks {
+		fn, exists := getSiteCheck(check.Name)
+		if exists {
+			go siteCheckTimer(check, fn)
 		}
 	}
 }
@@ -152,12 +160,18 @@ func getDomainCheck(name string) (CheckDomainFunc, bool) {
 
 func initDomainCheck() {
 	c := cfg.GetConfig()
-	for _, check := range c.Local.Checks {
-		if check.CheckType == "domain" && check.Enabled == 1 {
-			fn, exists := getDomainCheck(check.Name)
-			if exists {
-				go domainCheckTimer(check, fn)
-			}
+
+	var domainChecks []cfg.Check
+	for _, ch := range c.Local.Checks {
+		if ch.CheckType == "domain" && ch.Enabled == 1 {
+			domainChecks = append(domainChecks, ch)
+		}
+	}
+
+	for _, check := range domainChecks {
+		fn, exists := getDomainCheck(check.Name)
+		if exists {
+			go domainCheckTimer(check, fn)
 		}
 	}
 }
@@ -263,12 +277,18 @@ func getEndpointCheck(name string) (CheckEndpointFunc, bool) {
 
 func initEndpointCheck() {
 	c := cfg.GetConfig()
-	for _, check := range c.Local.Checks {
-		if check.CheckType == "endpoint" && check.Enabled == 1 {
-			fn, exists := getEndpointCheck(check.Name)
-			if exists {
-				go endpointCheckTimer(check, fn)
-			}
+
+	var endpointChecks []cfg.Check
+	for _, ch := range c.Local.Checks {
+		if ch.CheckType == "endpoint" && ch.Enabled == 1 {
+			endpointChecks = append(endpointChecks, ch)
+		}
+	}
+
+	for _, check := range endpointChecks {
+		fn, exists := getEndpointCheck(check.Name)
+		if exists {
+			go endpointCheckTimer(check, fn)
 		}
 	}
 }
@@ -354,14 +374,4 @@ func UpdateEndpointResultLocal(
 	if officialStatus != status {
 		natsCommon.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap)
 	}
-}
-
-// ------------------------------------------------------------------
-// startChecks - called once in Init()
-// ------------------------------------------------------------------
-
-func startChecks() {
-	go initSiteCheck()
-	go initDomainCheck()
-	go initEndpointCheck()
 }

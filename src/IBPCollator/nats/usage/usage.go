@@ -29,36 +29,56 @@ func RequestAllUsage(startDate, endDate, domain, member, country string, timeout
 
 	// Create a unique inbox for replies
 	inbox := fmt.Sprintf("%s.dnsUsageReply.%d", nconn.State.NodeID, time.Now().UnixNano())
-
 	aggregated := make([]nconn.UsageRecord, 0, 16)
-	var mu sync.Mutex
 
-	// Subscribe to the inbox
+	// Channel for each response's usage records
+	responseChan := make(chan []nconn.UsageRecord, 32)
+
 	sub, subErr := nconn.Subscribe(inbox, func(msg *nats.Msg) {
 		var resp nconn.UsageResponse
 		if unErr := json.Unmarshal(msg.Data, &resp); unErr != nil {
 			log.Log(log.Error, "usage aggregator: unmarshal error: %v", unErr)
 			return
 		}
-		mu.Lock()
-		aggregated = append(aggregated, resp.UsageRecords...)
-		mu.Unlock()
+		responseChan <- resp.UsageRecords
 	})
 	if subErr != nil {
 		return nil, fmt.Errorf("subscribe error: %w", subErr)
 	}
-	defer func() {
-		sub.Unsubscribe()
-	}()
 
-	// Publish the request with a "Reply" set to the inbox
+	// Publish the request with "Reply" set to the inbox
 	err = nconn.PublishMsgWithReply("dns.usage.getUsage", inbox, data)
 	if err != nil {
+		sub.Unsubscribe()
 		return nil, fmt.Errorf("publish request error: %w", err)
 	}
 
-	// Wait for responses up to the timeout
-	time.Sleep(timeout)
+	timer := time.NewTimer(timeout)
+	var mu sync.Mutex
 
+	doneChan := make(chan struct{})
+	go func() {
+		defer close(doneChan)
+		for {
+			select {
+			case recs := <-responseChan:
+				if recs == nil {
+					return
+				}
+				mu.Lock()
+				aggregated = append(aggregated, recs...)
+				mu.Unlock()
+			case <-timer.C:
+				return
+			}
+		}
+	}()
+
+	<-doneChan
+	sub.Unsubscribe()
+	close(responseChan)
+
+	mu.Lock()
+	defer mu.Unlock()
 	return aggregated, nil
 }

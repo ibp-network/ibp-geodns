@@ -98,6 +98,7 @@ func ProcessANY(params Parameters, id int, domain string) []cfg.DNSRecord {
 
 	for _, entry := range StaticRecords.records {
 		if entry.QName == domain {
+			// For ANY, we return all matching records except ACME
 			if (entry.QType == params.QType || params.QType == "ANY") &&
 				(!strings.HasPrefix(domain, "_acme-challenge.")) {
 				records = append(records, entry)
@@ -107,18 +108,38 @@ func ProcessANY(params Parameters, id int, domain string) []cfg.DNSRecord {
 	return records
 }
 
-// fetchACMEChallenge is used to retrieve ACME challenge content from a URL
+// fetchACMEChallenge is used to retrieve ACME challenge content from a URL.
+// Now includes a timeout and a simple size check for security.
 func fetchACMEChallenge(url string) string {
-	resp, err := http.Get(url)
+	client := &http.Client{
+		Timeout: 5 * time.Second, // added a short timeout for ACME retrieval
+	}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Log(log.Error, "Failed to create ACME challenge request for %s: %v", url, err)
+		return ""
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Log(log.Error, "Failed to fetch ACME challenge from %s: %v", url, err)
 		return ""
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+
+	// Limit the amount of data we read to avoid huge memory usage.
+	limitReader := io.LimitReader(resp.Body, 2048) // 2KB limit
+	body, err := io.ReadAll(limitReader)
 	if err != nil {
-		log.Log(log.Error, "Failed to read response body: %v", err)
+		log.Log(log.Error, "Failed to read ACME challenge body: %v", err)
 		return ""
 	}
+
+	// Enforce a maximum length for the ACME content (e.g., 512 bytes).
+	if len(body) > 512 {
+		log.Log(log.Error, "ACME challenge data too large: length=%d from %s", len(body), url)
+		return ""
+	}
+
 	return strings.TrimSpace(string(body))
 }

@@ -26,35 +26,67 @@ func RequestAllDowntime(startTime, endTime time.Time, memberName string, timeout
 	}
 
 	inbox := fmt.Sprintf("%s.monitorStatsReply.%d", nconn.State.NodeID, time.Now().UnixNano())
-
 	aggregated := make([]nconn.DowntimeEvent, 0, 16)
-	var mu sync.Mutex
 
+	// A channel on which we receive each response's events
+	responseChan := make(chan []nconn.DowntimeEvent, 32)
+
+	// Subscribe to the inbox; every message appends its events to responseChan
 	sub, subErr := nconn.Subscribe(inbox, func(msg *nats.Msg) {
 		var resp nconn.DowntimeResponse
 		if unErr := json.Unmarshal(msg.Data, &resp); unErr != nil {
 			log.Log(log.Error, "downtime aggregator: unmarshal error: %v", unErr)
 			return
 		}
-		mu.Lock()
-		aggregated = append(aggregated, resp.Events...)
-		mu.Unlock()
+
+		// Collect events
+		responseChan <- resp.Events
 	})
 	if subErr != nil {
 		return nil, fmt.Errorf("subscribe error: %w", subErr)
 	}
-	defer func() {
-		sub.Unsubscribe()
-	}()
 
+	// Publish the request with a Reply set to our inbox
 	err = nconn.PublishMsgWithReply("monitor.stats.getDowntime", inbox, data)
 	if err != nil {
+		sub.Unsubscribe()
 		return nil, fmt.Errorf("publish downtime request error: %w", err)
 	}
 
-	// Wait for the specified duration
-	time.Sleep(timeout)
+	// We'll wait for messages up to 'timeout' using a select-based approach
+	timer := time.NewTimer(timeout)
+	var mu sync.Mutex
 
+	// Reader goroutine: we gather from the channel until we hit the timer
+	doneChan := make(chan struct{})
+	go func() {
+		defer close(doneChan)
+		for {
+			select {
+			case evts := <-responseChan:
+				if evts == nil {
+					// channel closed
+					return
+				}
+				mu.Lock()
+				aggregated = append(aggregated, evts...)
+				mu.Unlock()
+			case <-timer.C:
+				// timed out
+				return
+			}
+		}
+	}()
+
+	// Wait for the collection goroutine to complete after the timeout
+	<-doneChan
+
+	// Unsubscribe once done collecting
+	sub.Unsubscribe()
+	close(responseChan)
+
+	mu.Lock()
+	defer mu.Unlock()
 	return aggregated, nil
 }
 

@@ -185,9 +185,24 @@ func loadServiceRequestsConfig(url string, initialLoad bool) {
 	log.Log(log.Debug, "Services configuration loaded from %s", url)
 }
 
-// downloadConfig downloads a config file from a URL
+// downloadConfig downloads a config file from a URL, now with a custom client that has a timeout.
 func downloadConfig(url string, initialLoad bool) []byte {
-	resp, err := http.Get(url)
+	client := &http.Client{
+		Timeout: 15 * time.Second, // <-- Added timeout
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Log(log.Error, "Failed to create HTTP request for config from %s: %v", url, err)
+		if initialLoad {
+			_, _, line, _ := runtime.Caller(2)
+			log.Log(log.Fatal, "Terminating program due to critical error on initial load. Line: %d", line)
+			os.Exit(1)
+		}
+		return nil
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Log(log.Error, "Failed to download config from %s: %v", url, err)
 		if initialLoad {
