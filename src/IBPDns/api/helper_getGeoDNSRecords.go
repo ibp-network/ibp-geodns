@@ -102,15 +102,9 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 	return records, chosenMemberName
 }
 
-// IsMemberOnlineForDomainV6 is a simplified version that checks official
-// results specifically for IPv6. We store them separately from the IPv4 checks.
+// IsMemberOnlineForDomainV6 checks official results for IPv6 by calling
+// our data-layer function that filters on IPv6 only.
 func IsMemberOnlineForDomainV6(domain, memberName string) bool {
-	// For a production approach: we’d do a separate “IsMemberOnlineForDomain”
-	// that checks results with “IsIPv6=true”. Below is an example placeholder:
-	// The function is analogous to IsMemberOnlineForDomain, but filtered on v6.
-
-	// We do a minimal approach: if official results for "endpoint" or "domain"
-	// were stored with isIPv6, we'd check that. For demonstration, call a dummy:
 	return dat.IsMemberOnlineForDomainIPv6(domain, memberName)
 }
 
