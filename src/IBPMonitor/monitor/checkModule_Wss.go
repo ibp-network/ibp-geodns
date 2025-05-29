@@ -25,16 +25,44 @@ func init() {
 	RegisterEndpointCheck("wss", WssCheck)
 }
 
+// WssCheck tries IPv4 if present, and IPv6 if present (similar to ping check).
 func WssCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member) {
+	ip4 := member.Service.ServiceIPv4
+	ip6 := member.Service.ServiceIPv6
+
+	// If no IP is configured, fail immediately.
+	if ip4 == "" && ip6 == "" {
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, "No IPv4 or IPv6 configured", nil)
+		return
+	}
+
+	// Attempt WSS check over IPv4
+	if ip4 != "" {
+		runWssSingle(check, endpoint, service, member, ip4)
+	}
+
+	// Attempt WSS check over IPv6
+	if ip6 != "" {
+		runWssSingle(check, endpoint, service, member, ip6)
+	}
+}
+
+// runWssSingle tries a WSS dial to ip:443, then verifies it's a full archive node, correct network, etc.
+func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member, ip string) {
 	u := max.ParseUrl(endpoint)
+	// Reconstruct the wss://... but substituting the IP for the domain
+	// so we dial the correct IP. We'll keep the same path as the original parse.
 	reconstructedURL := fmt.Sprintf("%s%s%s", u.Protocol, u.Domain, u.Directory)
+
+	// We'll override the dial target with ip:443
+	// But the "ServerName" in TLS config is still the domain
 	dialer := websocket.Dialer{
 		TLSClientConfig: &tls.Config{
 			ServerName:         u.Domain,
 			InsecureSkipVerify: false,
 		},
 		NetDial: func(network, addr string) (net.Conn, error) {
-			return net.DialTimeout(network, net.JoinHostPort(member.Service.ServiceIPv4, "443"),
+			return net.DialTimeout(network, net.JoinHostPort(ip, "443"),
 				time.Duration(getIntOption(check.ExtraOptions, "ConnectTimeout", 10))*time.Second)
 		},
 		HandshakeTimeout: time.Duration(getIntOption(check.ExtraOptions, "ConnectTimeout", 10)) * time.Second,
@@ -42,7 +70,9 @@ func WssCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.
 
 	c, _, err := dialer.Dial(reconstructedURL, nil)
 	if err != nil {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Failed to connect", nil)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false,
+			fmt.Sprintf("Failed to connect on IP=%s => %v", ip, err),
+			nil)
 		return
 	}
 	defer c.Close()
@@ -53,6 +83,7 @@ func WssCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.
 		Params:  []interface{}{"latest"},
 		ID:      1,
 	}
+
 	if !sendJSONRPCRequest(c, request) {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Failed to send JSON RPC", nil)
 		return
@@ -61,14 +92,16 @@ func WssCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.
 	_, _, err = c.ReadMessage()
 	if err != nil {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false,
-			fmt.Sprintf("Failed to read JSON-RPC response: %v", err), nil)
+			fmt.Sprintf("Failed to read JSON-RPC response: %v", err),
+			nil)
 		return
 	}
 
 	isFullArchive, err := checkFullArchive(c)
 	if err != nil {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false,
-			fmt.Sprintf("Full archive check failed: %v", err), nil)
+			fmt.Sprintf("Full archive check failed: %v", err),
+			nil)
 		return
 	}
 	if !isFullArchive {
@@ -79,7 +112,8 @@ func WssCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.
 	isCorrectNetwork, err := checkNetwork(c, service.Configuration.NetworkName)
 	if err != nil {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false,
-			fmt.Sprintf("Network check failed: %v", err), nil)
+			fmt.Sprintf("Network check failed: %v", err),
+			nil)
 		return
 	}
 	if !isCorrectNetwork {
@@ -90,7 +124,8 @@ func WssCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.
 	hasEnoughPeers, isSyncing, err := checkPeers(c)
 	if err != nil {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false,
-			fmt.Sprintf("Peer check failed: %v", err), nil)
+			fmt.Sprintf("Peer check failed: %v", err),
+			nil)
 		return
 	}
 	if !hasEnoughPeers || isSyncing {
@@ -98,14 +133,16 @@ func WssCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.
 		return
 	}
 
-	UpdateEndpointResultLocal(check, member, service, endpoint, true, "", map[string]interface{}{
-		"Syncing": isSyncing,
-		"Peers":   hasEnoughPeers,
-		"Network": isCorrectNetwork,
-		"Archive": isFullArchive,
-	})
+	UpdateEndpointResultLocal(check, member, service, endpoint, true, "",
+		map[string]interface{}{
+			"Syncing": isSyncing,
+			"Peers":   hasEnoughPeers,
+			"Network": isCorrectNetwork,
+			"Archive": isFullArchive,
+		})
 }
 
+// The rest is unchanged
 func checkFullArchive(c *websocket.Conn) (bool, error) {
 	req := JSONRPCRequest{
 		JSONRPC: "2.0",
