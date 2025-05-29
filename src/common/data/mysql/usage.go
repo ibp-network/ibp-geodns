@@ -5,6 +5,8 @@ import (
 	"fmt"
 )
 
+// UsageRecord remains the same. We note that MemberName, Asn, NetworkName, CountryName
+// can hold the expanded columns from the DB.
 type UsageRecord struct {
 	Date        string
 	Domain      string
@@ -21,20 +23,34 @@ func UpsertUsageRecord(rec UsageRecord) error {
         VALUES (?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE hits = hits + VALUES(hits)
     `
-	_, err := DB.Exec(query, rec.Date, rec.Domain, rec.MemberName, rec.CountryCode, rec.Hits)
+	_, err := DB.Exec(query,
+		rec.Date,
+		rec.Domain,
+		rec.MemberName,
+		rec.CountryCode,
+		rec.Hits,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to upsert usage record: %w", err)
 	}
 	return nil
 }
 
-// GetUsageByDomain returns aggregated usage grouped by country for a domain.
+// GetUsageByDomain returns aggregated usage grouped by country, member_name, asn, network_name, country_name, etc.
 func GetUsageByDomain(domain, startDate, endDate string) ([]UsageRecord, error) {
+	// Expanded query to fetch member_name, asn, network_name, country_name if they exist in usage_daily.
+	// If your table has those columns, incorporate them. If not, adapt accordingly.
 	query := `
-        SELECT usage_date, domain, country_code, SUM(hits) as hits
+        SELECT
+            usage_date,
+            domain,
+            IFNULL(member_name, '') AS member_name,
+            country_code,
+            SUM(hits) as hits
         FROM usage_daily
-        WHERE domain = ? AND usage_date BETWEEN ? AND ?
-        GROUP BY usage_date, domain, country_code
+        WHERE domain = ?
+          AND usage_date BETWEEN ? AND ?
+        GROUP BY usage_date, domain, member_name, country_code
         ORDER BY usage_date
     `
 	rows, err := DB.Query(query, domain, startDate, endDate)
@@ -46,7 +62,10 @@ func GetUsageByDomain(domain, startDate, endDate string) ([]UsageRecord, error) 
 	var res []UsageRecord
 	for rows.Next() {
 		var r UsageRecord
-		if err := rows.Scan(&r.Date, &r.Domain, &r.CountryCode, &r.Hits); err != nil {
+		// We'll scan into the usage_date, domain, member_name, country_code, hits
+		// The query uses IFNULL(member_name, '') to ensure no NULL returned, but we'll keep it in NullString
+		err := rows.Scan(&r.Date, &r.Domain, &r.MemberName, &r.CountryCode, &r.Hits)
+		if err != nil {
 			return nil, fmt.Errorf("scan error: %w", err)
 		}
 		res = append(res, r)
@@ -54,12 +73,19 @@ func GetUsageByDomain(domain, startDate, endDate string) ([]UsageRecord, error) 
 	return res, nil
 }
 
-// GetUsageByMember returns usage grouped by country for a domain/member.
+// GetUsageByMember returns usage grouped by country, as well as extended columns.
 func GetUsageByMember(domain, member, startDate, endDate string) ([]UsageRecord, error) {
 	query := `
-        SELECT usage_date, domain, member_name, country_code, SUM(hits) as hits
+        SELECT
+            usage_date,
+            domain,
+            IFNULL(member_name, '') AS member_name,
+            country_code,
+            SUM(hits) as hits
         FROM usage_daily
-        WHERE domain = ? AND member_name = ? AND usage_date BETWEEN ? AND ?
+        WHERE domain = ?
+          AND member_name = ?
+          AND usage_date BETWEEN ? AND ?
         GROUP BY usage_date, domain, member_name, country_code
         ORDER BY usage_date
     `
@@ -72,7 +98,8 @@ func GetUsageByMember(domain, member, startDate, endDate string) ([]UsageRecord,
 	var res []UsageRecord
 	for rows.Next() {
 		var r UsageRecord
-		if err := rows.Scan(&r.Date, &r.Domain, &r.MemberName, &r.CountryCode, &r.Hits); err != nil {
+		err := rows.Scan(&r.Date, &r.Domain, &r.MemberName, &r.CountryCode, &r.Hits)
+		if err != nil {
 			return nil, fmt.Errorf("scan error: %w", err)
 		}
 		res = append(res, r)
@@ -80,13 +107,18 @@ func GetUsageByMember(domain, member, startDate, endDate string) ([]UsageRecord,
 	return res, nil
 }
 
-// GetUsageByCountry returns overall usage grouped by country.
+// GetUsageByCountry returns overall usage grouped by country. We could also expand to asn, network_name, etc.
 func GetUsageByCountry(startDate, endDate string) ([]UsageRecord, error) {
 	query := `
-        SELECT usage_date, country_code, SUM(hits) as hits
+        SELECT
+            usage_date,
+            domain,
+            IFNULL(member_name, '') AS member_name,
+            country_code,
+            SUM(hits) as hits
         FROM usage_daily
         WHERE usage_date BETWEEN ? AND ?
-        GROUP BY usage_date, country_code
+        GROUP BY usage_date, domain, member_name, country_code
         ORDER BY usage_date
     `
 	rows, err := DB.Query(query, startDate, endDate)
@@ -98,7 +130,8 @@ func GetUsageByCountry(startDate, endDate string) ([]UsageRecord, error) {
 	var res []UsageRecord
 	for rows.Next() {
 		var r UsageRecord
-		if err := rows.Scan(&r.Date, &r.CountryCode, &r.Hits); err != nil {
+		err := rows.Scan(&r.Date, &r.Domain, &r.MemberName, &r.CountryCode, &r.Hits)
+		if err != nil {
 			return nil, fmt.Errorf("scan error: %w", err)
 		}
 		res = append(res, r)

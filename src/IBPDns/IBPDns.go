@@ -59,29 +59,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 6) Launch the DNS API
+	// 6) Launch the DNS API. This spawns its own ListenAndServe goroutine.
 	api.Init()
 
-	// Adjust for dual stack if we see 0.0.0.0
-	addr := c.Local.DnsApi.ListenAddress
-	if addr == "0.0.0.0" {
-		addr = "[::]"
-	}
-	// 7) Start listening (potentially dual-stack if OS supports it)
-	log.Log(log.Info, "Starting DNS API server on %s:%s", addr, c.Local.DnsApi.ListenPort)
-	dnsApi := http.DefaultServeMux // replaced in api.Init() with routes
+	// (REMOVE or unify the second ListenAndServe to avoid binding the same port again.)
+	// Previously we had:
+	//   addr := c.Local.DnsApi.ListenAddress
+	//   if addr == "0.0.0.0" { addr = "[::]" }
+	//   dnsApi := http.DefaultServeMux
+	//   go http.ListenAndServe(fmt.Sprintf("%s:%s", addr, c.Local.DnsApi.ListenPort), dnsApi)
+	// This is no longer needed because api.Init() already spawns a server on c.Local.DnsApi.ListenPort.
 
-	go http.ListenAndServe(
-		fmt.Sprintf("%s:%s", addr, c.Local.DnsApi.ListenPort),
-		dnsApi,
-	)
-
-	// 8) Start polling serviceMonitor for official results
+	// 7) Start polling serviceMonitor for official results
 	intervalSec := c.Local.DnsApi.RefreshIntervalSeconds
 	log.Log(log.Info, "Starting serviceMonitor poller every %d seconds", intervalSec)
 	startServiceMonitorPoller(intervalSec)
 
-	// 9) Keep running forever
+	// 8) Keep running forever
 	for {
 		time.Sleep(60 * time.Second)
 	}

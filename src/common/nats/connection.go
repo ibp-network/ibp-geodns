@@ -35,7 +35,8 @@ func Connect() error {
 
 	opts := []nats.Option{
 		nats.UserInfo(user, pass),
-		nats.MaxReconnects(-1),
+		// Changed from -1 (infinite) to a finite number, e.g. 30 attempts:
+		nats.MaxReconnects(30),
 		nats.ReconnectWait(2 * time.Second),
 		nats.DisconnectErrHandler(func(conn *nats.Conn, err error) {
 			if err != nil {
@@ -61,6 +62,7 @@ func Connect() error {
 		return fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 	nc = connection
+
 	log.Log(log.Info, "[NATS] Connected successfully to %s", url)
 	return nil
 }
