@@ -54,21 +54,13 @@ func main() {
 	natsCommon.State.ThisNode = natsCommon.NodeInfo{
 		NodeID: c.Local.Nats.NodeID,
 	}
-	if err := natsCommon.EnableDNSApiRole(); err != nil {
+	if err := natsCommon.EnableDnsRole(); err != nil {
 		log.Log(log.Fatal, "Failed to enable DNSApi role: %v", err)
 		os.Exit(1)
 	}
 
 	// 6) Launch the DNS API. This spawns its own ListenAndServe goroutine.
 	api.Init()
-
-	// (REMOVE or unify the second ListenAndServe to avoid binding the same port again.)
-	// Previously we had:
-	//   addr := c.Local.DnsApi.ListenAddress
-	//   if addr == "0.0.0.0" { addr = "[::]" }
-	//   dnsApi := http.DefaultServeMux
-	//   go http.ListenAndServe(fmt.Sprintf("%s:%s", addr, c.Local.DnsApi.ListenPort), dnsApi)
-	// This is no longer needed because api.Init() already spawns a server on c.Local.DnsApi.ListenPort.
 
 	// 7) Start polling serviceMonitor for official results
 	intervalSec := c.Local.DnsApi.RefreshIntervalSeconds

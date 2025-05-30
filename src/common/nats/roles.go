@@ -20,7 +20,7 @@ func EnableMonitorRole() error {
 	State.Proposals = make(map[ProposalID]*ProposalTracking)
 	State.ClusterNodes = make(map[string]NodeInfo)
 
-	State.ThisNode.NodeRole = "monitor"
+	State.ThisNode.NodeRole = "IBPMonitor"
 	State.ClusterNodes[State.NodeID] = State.ThisNode
 
 	if _, err := Subscribe(State.SubjectPropose, handleProposal); err != nil {
@@ -45,8 +45,8 @@ func EnableMonitorRole() error {
 	return nil
 }
 
-// EnableDNSApiRole configures NATS subscriptions for a dnsApi node.
-func EnableDNSApiRole() error {
+// EnableIBPDnsRole configures NATS subscriptions for a IBPDns node.
+func EnableDnsRole() error {
 	if _, err := Subscribe("dns.usage.getUsage", handleDnsUsageRequest); err != nil {
 		return err
 	}
@@ -62,17 +62,17 @@ func EnableDNSApiRole() error {
 		State.ClusterNodes = make(map[string]NodeInfo)
 	}
 
-	State.ThisNode.NodeRole = "dnsApi"
+	State.ThisNode.NodeRole = "IBPDns"
 	State.ClusterNodes[State.NodeID] = State.ThisNode
 
-	log.Log(log.Info, "[NATS] DNSApi role enabled.")
+	log.Log(log.Info, "[NATS] IBPDns role enabled.")
 	broadcastClusterJoin()
 	return nil
 }
 
 // EnableCollatorRole configures NATS subscriptions for a collator node.
 func EnableCollatorRole() error {
-	State.ThisNode.NodeRole = "collator"
+	State.ThisNode.NodeRole = "IBPCollator"
 	log.Log(log.Info, "[NATS] Collator role enabled.")
 	return nil
 }
@@ -184,16 +184,14 @@ func addNode(node NodeInfo) {
 	}
 }
 
-// CountMonitorNodes returns how many nodes have NodeRole == "monitor"
-func CountMonitorNodes() int {
+func countNodesByRole(role string) int {
 	State.Mu.RLock()
 	defer State.Mu.RUnlock()
-
-	count := 0
-	for _, n := range State.ClusterNodes {
-		if n.NodeRole == "monitor" {
-			count++
+	n := 0
+	for _, node := range State.ClusterNodes {
+		if node.NodeRole == role {
+			n++
 		}
 	}
-	return count
+	return n
 }

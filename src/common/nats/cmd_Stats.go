@@ -4,30 +4,28 @@ import (
 	"encoding/json"
 	"time"
 
+	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 
 	"github.com/nats-io/nats.go"
-
-	dat "ibp-geodns/src/common/data"
 )
 
 // handleMonitorStatsRequest responds to downtime requests: "monitor.stats.getDowntime"
 func handleMonitorStatsRequest(m *nats.Msg) {
+	log.Log(log.Debug, "[NATS] handleMonitorStatsRequest: received request on subject=%s from reply=%s", m.Subject, m.Reply)
+
 	var req DowntimeRequest
 	if err := json.Unmarshal(m.Data, &req); err != nil {
-		log.Log(log.Error, "handleMonitorStatsRequest: unmarshal error: %v", err)
+		log.Log(log.Error, "[NATS] handleMonitorStatsRequest: unmarshal error: %v", err)
 		return
 	}
 
-	// Query local downtime events from data/events.go
-	start := req.StartTime
-	end := req.EndTime
-	member := req.MemberName
+	log.Log(log.Debug, "[NATS] handleMonitorStatsRequest: StartTime=%v EndTime=%v MemberName=%s",
+		req.StartTime, req.EndTime, req.MemberName)
 
-	// data.GetMemberEvents is from data/events.go or data usage
-	events, err := retrieveLocalDowntimeEvents(member, start, end)
+	events, err := retrieveLocalDowntimeEvents(req.MemberName, req.StartTime, req.EndTime)
 	if err != nil {
-		log.Log(log.Error, "Error retrieving local downtime: %v", err)
+		log.Log(log.Error, "[NATS] handleMonitorStatsRequest: error retrieving local downtime: %v", err)
 		return
 	}
 
@@ -38,16 +36,20 @@ func handleMonitorStatsRequest(m *nats.Msg) {
 	dataBytes, _ := json.Marshal(resp)
 
 	if m.Reply != "" {
+		log.Log(log.Debug, "[NATS] handleMonitorStatsRequest: replying to %s with %d events", m.Reply, len(events))
 		_ = PublishMsgWithReply(m.Reply, "", dataBytes)
 	} else {
+		log.Log(log.Debug, "[NATS] handleMonitorStatsRequest: publishing downtimeData with %d events", len(events))
 		_ = Publish("monitor.stats.downtimeData", dataBytes)
 	}
 }
 
 // retrieveLocalDowntimeEvents uses data.GetMemberEvents from data/events.go
 func retrieveLocalDowntimeEvents(memberName string, start, end time.Time) ([]DowntimeEvent, error) {
+	log.Log(log.Debug, "[NATS] retrieveLocalDowntimeEvents: memberName=%s start=%v end=%v", memberName, start, end)
 	rawEvents, err := dat.GetMemberEvents(memberName, "", start, end)
 	if err != nil {
+		log.Log(log.Error, "[NATS] retrieveLocalDowntimeEvents: error from data.GetMemberEvents: %v", err)
 		return nil, err
 	}
 
@@ -66,5 +68,7 @@ func retrieveLocalDowntimeEvents(memberName string, start, end time.Time) ([]Dow
 			Data:       e.Data,
 		})
 	}
+
+	log.Log(log.Debug, "[NATS] retrieveLocalDowntimeEvents: returning %d events", len(results))
 	return results, nil
 }
