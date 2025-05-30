@@ -10,19 +10,29 @@ import (
 )
 
 // EnableMonitorRole configures NATS subscriptions for a serviceMonitor node.
+// This includes:
+//   - Subscribing to consensus proposals/votes/finalize
+//   - Subscribing to cluster messages
+//   - Subscribing to downtime requests (monitor.stats.getDowntime)
+//   - Broadcasting its own join event so other nodes see it
+//   - Starting garbage collection of stale proposals
 func EnableMonitorRole() error {
+	// Set up standard consensus subjects
 	State.SubjectPropose = "consensus.propose"
 	State.SubjectVote = "consensus.vote"
 	State.SubjectFinalize = "consensus.finalize"
 	State.SubjectCluster = "consensus.cluster"
 	State.ProposalTimeout = 12 * time.Second
 
-	State.Proposals = make(map[ProposalID]*ProposalTracking)
-	State.ClusterNodes = make(map[string]NodeInfo)
+	// Ensure proposals/cluster maps exist
+	if State.Proposals == nil {
+		State.Proposals = make(map[ProposalID]*ProposalTracking)
+	}
+	if State.ClusterNodes == nil {
+		State.ClusterNodes = make(map[string]NodeInfo)
+	}
 
-	State.ThisNode.NodeRole = "IBPMonitor"
-	State.ClusterNodes[State.NodeID] = State.ThisNode
-
+	// Subscribe to proposals, votes, finalization
 	if _, err := Subscribe(State.SubjectPropose, handleProposal); err != nil {
 		return err
 	}
@@ -32,30 +42,38 @@ func EnableMonitorRole() error {
 	if _, err := Subscribe(State.SubjectFinalize, handleFinalize); err != nil {
 		return err
 	}
+
+	// Subscribe to cluster membership
 	if _, err := Subscribe(State.SubjectCluster, handleClusterMessage); err != nil {
 		return err
 	}
+
+	// Subscribe to requests for downtime (monitors respond to "monitor.stats.getDowntime")
 	if _, err := Subscribe("monitor.stats.getDowntime", handleMonitorStatsRequest); err != nil {
 		return err
 	}
 
+	// Set node role and store in cluster
+	State.ThisNode.NodeRole = "IBPMonitor"
+	State.ClusterNodes[State.NodeID] = State.ThisNode
+
+	// Begin proposal garbage collection
 	StartGarbageCollection()
+
 	log.Log(log.Info, "[NATS] Monitor role enabled.")
+
+	// Announce our presence to the cluster
 	broadcastClusterJoin()
 	return nil
 }
 
-// EnableDnsRole configures NATS subscriptions for an IBPDns node.
+// EnableDnsRole configures NATS subscriptions for a DNS node (IBPDns).
+// This includes:
+//   - Subscribing to "consensus.cluster" to learn about membership
+//   - Subscribing to "dns.usage.getUsage" so it can handle usage requests
+//   - Broadcasting its join event
 func EnableDnsRole() error {
-	// Listen for usage requests
-	if _, err := Subscribe("dns.usage.getUsage", handleDnsUsageRequest); err != nil {
-		return err
-	}
-
 	State.SubjectCluster = "consensus.cluster"
-	if _, err := Subscribe(State.SubjectCluster, handleClusterMessage); err != nil {
-		return err
-	}
 
 	if State.Proposals == nil {
 		State.Proposals = make(map[ProposalID]*ProposalTracking)
@@ -64,22 +82,97 @@ func EnableDnsRole() error {
 		State.ClusterNodes = make(map[string]NodeInfo)
 	}
 
+	// Subscribe to cluster membership
+	if _, err := Subscribe(State.SubjectCluster, handleClusterMessage); err != nil {
+		return err
+	}
+
+	// DNS node should handle usage requests
+	if _, err := Subscribe("dns.usage.getUsage", handleDnsUsageRequest); err != nil {
+		return err
+	}
+
 	State.ThisNode.NodeRole = "IBPDns"
 	State.ClusterNodes[State.NodeID] = State.ThisNode
 
 	log.Log(log.Info, "[NATS] IBPDns role enabled.")
+
+	// Broadcast our join
 	broadcastClusterJoin()
 	return nil
 }
 
-// EnableCollatorRole configures NATS subscriptions for a collator node.
+// EnableCollatorRole configures NATS subscriptions for a Collator node.
+// This includes:
+//   - Subscribing to "consensus.cluster" to learn about membership
+//   - Subscribing to fallback usage data ("dns.usage.usageData")
+//   - Subscribing to fallback downtime data ("monitor.stats.downtimeData")
+//   - Broadcasting its join event so older nodes will see it
+//   - (Optionally) garbage collection if you want to track proposals in collator
 func EnableCollatorRole() error {
+	State.SubjectCluster = "consensus.cluster"
+
+	if State.Proposals == nil {
+		State.Proposals = make(map[ProposalID]*ProposalTracking)
+	}
+	if State.ClusterNodes == nil {
+		State.ClusterNodes = make(map[string]NodeInfo)
+	}
+
+	// Subscribe to cluster membership
+	if _, err := Subscribe(State.SubjectCluster, handleClusterMessage); err != nil {
+		return err
+	}
+
+	// Collator might receive fallback usage or downtime data if no ephemeral reply is used
+	if _, err := Subscribe("dns.usage.usageData", handleDnsUsageData); err != nil {
+		return err
+	}
+	if _, err := Subscribe("monitor.stats.downtimeData", handleMonitorStatsData); err != nil {
+		return err
+	}
+
 	State.ThisNode.NodeRole = "IBPCollator"
+	State.ClusterNodes[State.NodeID] = State.ThisNode
+
 	log.Log(log.Info, "[NATS] Collator role enabled.")
+
+	// (Optional) start garbage collection if collator also tracks proposals
+	StartGarbageCollection()
+
+	// Announce our presence
+	broadcastClusterJoin()
 	return nil
 }
 
-// StartGarbageCollection periodically cleans old proposals
+// handleDnsUsageData is a fallback for usage data broadcast (if no reply subject).
+// Collators might want to gather usage data from DNS nodes in broadcast form.
+func handleDnsUsageData(m *nats.Msg) {
+	var resp UsageResponse
+	if err := json.Unmarshal(m.Data, &resp); err != nil {
+		log.Log(log.Error, "[NATS] handleDnsUsageData: unmarshal error: %v", err)
+		return
+	}
+	log.Log(log.Debug, "[NATS] handleDnsUsageData: got %d usage records from node=%s",
+		len(resp.UsageRecords), resp.NodeID)
+
+	// TODO: Merge or store usage data in collator aggregator
+}
+
+// handleMonitorStatsData is a fallback for downtime data broadcast
+func handleMonitorStatsData(m *nats.Msg) {
+	var resp DowntimeResponse
+	if err := json.Unmarshal(m.Data, &resp); err != nil {
+		log.Log(log.Error, "[NATS] handleMonitorStatsData: unmarshal error: %v", err)
+		return
+	}
+	log.Log(log.Debug, "[NATS] handleMonitorStatsData: got %d downtime events from node=%s",
+		len(resp.Events), resp.NodeID)
+
+	// TODO: Merge or store downtime events in collator aggregator
+}
+
+// StartGarbageCollection periodically cleans up old proposals
 func StartGarbageCollection() {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
@@ -90,7 +183,7 @@ func StartGarbageCollection() {
 	}()
 }
 
-// cleanOldProposals removes proposals older than 900s
+// cleanOldProposals removes proposals older than 900 seconds
 func cleanOldProposals() {
 	State.Mu.Lock()
 	defer State.Mu.Unlock()
@@ -117,12 +210,12 @@ func handleClusterMessage(m *nats.Msg) {
 
 	switch msg.Type {
 	case "join":
-		// The new node joined. We see them. But they don’t see us yet.
-		// So we broadcast membership.
+		// Another node joined
 		addNode(msg.Sender)
 		broadcastClusterMembership()
 
 	case "membership":
+		// Another node is broadcasting membership; merge it
 		mergeClusterMembership(msg.Members)
 
 	default:
@@ -130,7 +223,7 @@ func handleClusterMessage(m *nats.Msg) {
 	}
 }
 
-// broadcastClusterJoin announces that THIS node joined
+// broadcastClusterJoin announces THIS node joined
 func broadcastClusterJoin() {
 	msg := ClusterMessage{
 		Type:   "join",
@@ -142,7 +235,7 @@ func broadcastClusterJoin() {
 	}
 }
 
-// broadcastClusterMembership sends out a membership list so the joiner can merge it
+// broadcastClusterMembership sends out a membership list so joiner can merge it
 func broadcastClusterMembership() {
 	State.Mu.RLock()
 	defer State.Mu.RUnlock()
@@ -163,7 +256,7 @@ func broadcastClusterMembership() {
 	}
 }
 
-// mergeClusterMembership merges inbound membership into our cluster
+// mergeClusterMembership merges an inbound membership list into our cluster map
 func mergeClusterMembership(inMembers []NodeInfo) {
 	State.Mu.Lock()
 	defer State.Mu.Unlock()
