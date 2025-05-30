@@ -5,10 +5,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nats-io/nats.go"
-
 	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
+
+	"github.com/nats-io/nats.go"
 )
 
 var (
@@ -16,24 +16,20 @@ var (
 	connectionMu sync.Mutex
 )
 
-// Connect initializes a global NATS connection from the config.json data.
 func Connect() error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
 
-	// If we already have a live connection, skip
 	if nc != nil && !nc.IsClosed() {
 		log.Log(log.Debug, "[NATS] Already connected.")
 		return nil
 	}
 
-	// Pull from your config package
 	c := cfg.GetConfig()
 	url := c.Local.Nats.Url
 	user := c.Local.Nats.User
 	pass := c.Local.Nats.Pass
 
-	// Build NATS options
 	opts := []nats.Option{
 		nats.UserInfo(user, pass),
 		nats.MaxReconnects(30),
@@ -57,7 +53,6 @@ func Connect() error {
 		}),
 	}
 
-	// Attempt connection
 	conn, err := nats.Connect(url, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to connect to NATS: %w", err)
@@ -68,7 +63,6 @@ func Connect() error {
 	return nil
 }
 
-// Disconnect closes the global NATS connection, if open.
 func Disconnect() {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -79,7 +73,6 @@ func Disconnect() {
 	}
 }
 
-// Publish sends data to a subject (fire-and-forget).
 func Publish(subject string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -89,7 +82,6 @@ func Publish(subject string, data []byte) error {
 	return nc.Publish(subject, data)
 }
 
-// PublishMsg sends a raw nats.Msg (if you want to set .Reply or .Header).
 func PublishMsg(msg *nats.Msg) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -100,7 +92,6 @@ func PublishMsg(msg *nats.Msg) error {
 	return nc.PublishMsg(msg)
 }
 
-// PublishMsgWithReply builds a nats.Msg with subject+reply+data, then publishes it.
 func PublishMsgWithReply(subject, reply string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -116,7 +107,6 @@ func PublishMsgWithReply(subject, reply string, data []byte) error {
 	return nc.PublishMsg(msg)
 }
 
-// Subscribe creates a subscription to a subject with a callback.
 func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -132,7 +122,6 @@ func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	return sub, nil
 }
 
-// Request is a convenience for a single request/reply with timeout.
 func Request(subject string, data []byte, timeout time.Duration) (*nats.Msg, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -141,4 +130,18 @@ func Request(subject string, data []byte, timeout time.Duration) (*nats.Msg, err
 		return nil, nats.ErrConnectionClosed
 	}
 	return nc.Request(subject, data, timeout)
+}
+
+// WaitForNodesByRole waits until we detect at least minCount nodes of a given role
+// or the specified timeout elapses. Returns true if found, false otherwise.
+func WaitForNodesByRole(role string, minCount int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		c := countNodesByRole(role)
+		if c >= minCount {
+			return true
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	return false
 }
