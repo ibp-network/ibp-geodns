@@ -1,41 +1,41 @@
 package nats
 
 import (
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/nats-io/nats.go"
+
 	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
-
-	"github.com/nats-io/nats.go"
 )
 
-// nc is the global NATS connection
 var (
 	nc           *nats.Conn
 	connectionMu sync.Mutex
 )
 
-// Connect initializes a global NATS connection from config.json
+// Connect initializes a global NATS connection from the config.json data.
 func Connect() error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
 
+	// If we already have a live connection, skip
 	if nc != nil && !nc.IsClosed() {
 		log.Log(log.Debug, "[NATS] Already connected.")
 		return nil
 	}
 
+	// Pull from your config package
 	c := cfg.GetConfig()
 	url := c.Local.Nats.Url
 	user := c.Local.Nats.User
 	pass := c.Local.Nats.Pass
 
+	// Build NATS options
 	opts := []nats.Option{
 		nats.UserInfo(user, pass),
-		// Changed from -1 (infinite) to a finite number, e.g. 30 attempts:
 		nats.MaxReconnects(30),
 		nats.ReconnectWait(2 * time.Second),
 		nats.DisconnectErrHandler(func(conn *nats.Conn, err error) {
@@ -57,17 +57,18 @@ func Connect() error {
 		}),
 	}
 
-	connection, err := nats.Connect(url, opts...)
+	// Attempt connection
+	conn, err := nats.Connect(url, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to connect to NATS: %w", err)
 	}
-	nc = connection
+	nc = conn
 
 	log.Log(log.Info, "[NATS] Connected successfully to %s", url)
 	return nil
 }
 
-// Disconnect closes the global NATS connection, if open
+// Disconnect closes the global NATS connection, if open.
 func Disconnect() {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -78,7 +79,7 @@ func Disconnect() {
 	}
 }
 
-// Publish sends data on a subject (no reply)
+// Publish sends data to a subject (fire-and-forget).
 func Publish(subject string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -88,10 +89,22 @@ func Publish(subject string, data []byte) error {
 	return nc.Publish(subject, data)
 }
 
-// PublishMsgWithReply creates and sends a message with subject, reply, and data
+// PublishMsg sends a raw nats.Msg (if you want to set .Reply or .Header).
+func PublishMsg(msg *nats.Msg) error {
+	connectionMu.Lock()
+	defer connectionMu.Unlock()
+
+	if nc == nil || nc.IsClosed() {
+		return nats.ErrConnectionClosed
+	}
+	return nc.PublishMsg(msg)
+}
+
+// PublishMsgWithReply builds a nats.Msg with subject+reply+data, then publishes it.
 func PublishMsgWithReply(subject, reply string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
+
 	if nc == nil || nc.IsClosed() {
 		return nats.ErrConnectionClosed
 	}
@@ -103,10 +116,11 @@ func PublishMsgWithReply(subject, reply string, data []byte) error {
 	return nc.PublishMsg(msg)
 }
 
-// Subscribe to a subject with a callback
+// Subscribe creates a subscription to a subject with a callback.
 func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
+
 	if nc == nil || nc.IsClosed() {
 		return nil, nats.ErrConnectionClosed
 	}
@@ -118,18 +132,13 @@ func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	return sub, nil
 }
 
-// Request is a convenience for a single request/reply with a timeout
+// Request is a convenience for a single request/reply with timeout.
 func Request(subject string, data []byte, timeout time.Duration) (*nats.Msg, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
+
 	if nc == nil || nc.IsClosed() {
 		return nil, nats.ErrConnectionClosed
 	}
 	return nc.Request(subject, data, timeout)
-}
-
-// PublishFinalize is used by the monitor voting finalization
-func PublishFinalize(msg FinalizeMessage) error {
-	bytes, _ := json.Marshal(msg)
-	return Publish(State.SubjectFinalize, bytes)
 }

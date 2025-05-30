@@ -45,11 +45,13 @@ func EnableMonitorRole() error {
 	return nil
 }
 
-// EnableIBPDnsRole configures NATS subscriptions for a IBPDns node.
+// EnableDnsRole configures NATS subscriptions for an IBPDns node.
 func EnableDnsRole() error {
+	// Listen for usage requests
 	if _, err := Subscribe("dns.usage.getUsage", handleDnsUsageRequest); err != nil {
 		return err
 	}
+
 	State.SubjectCluster = "consensus.cluster"
 	if _, err := Subscribe(State.SubjectCluster, handleClusterMessage); err != nil {
 		return err
@@ -70,27 +72,10 @@ func EnableDnsRole() error {
 	return nil
 }
 
+// EnableCollatorRole configures NATS subscriptions for a collator node.
 func EnableCollatorRole() error {
-	State.SubjectCluster = "consensus.cluster"
-
-	if _, err := Subscribe(State.SubjectCluster, handleClusterMessage); err != nil {
-		return err
-	}
-
-	if State.Proposals == nil {
-		State.Proposals = make(map[ProposalID]*ProposalTracking)
-	}
-	if State.ClusterNodes == nil {
-		State.ClusterNodes = make(map[string]NodeInfo)
-	}
-
 	State.ThisNode.NodeRole = "IBPCollator"
-	State.ClusterNodes[State.NodeID] = State.ThisNode
-
 	log.Log(log.Info, "[NATS] Collator role enabled.")
-
-	// Announce our presence to the cluster:
-	broadcastClusterJoin()
 	return nil
 }
 
@@ -105,7 +90,7 @@ func StartGarbageCollection() {
 	}()
 }
 
-// cleanOldProposals removes proposals that exceed a time threshold
+// cleanOldProposals removes proposals older than 900s
 func cleanOldProposals() {
 	State.Mu.Lock()
 	defer State.Mu.Unlock()
@@ -132,16 +117,20 @@ func handleClusterMessage(m *nats.Msg) {
 
 	switch msg.Type {
 	case "join":
+		// The new node joined. We see them. But they don’t see us yet.
+		// So we broadcast membership.
 		addNode(msg.Sender)
 		broadcastClusterMembership()
+
 	case "membership":
 		mergeClusterMembership(msg.Members)
+
 	default:
 		log.Log(log.Warn, "[NATS] handleClusterMessage: unknown type=%s", msg.Type)
 	}
 }
 
-// broadcastClusterJoin sends a message indicating this node is joining.
+// broadcastClusterJoin announces that THIS node joined
 func broadcastClusterJoin() {
 	msg := ClusterMessage{
 		Type:   "join",
@@ -153,12 +142,12 @@ func broadcastClusterJoin() {
 	}
 }
 
-// broadcastClusterMembership sends out a membership list so the joiner can merge it.
+// broadcastClusterMembership sends out a membership list so the joiner can merge it
 func broadcastClusterMembership() {
 	State.Mu.RLock()
 	defer State.Mu.RUnlock()
 
-	nodes := make([]NodeInfo, 0, len(State.ClusterNodes))
+	var nodes []NodeInfo
 	for _, node := range State.ClusterNodes {
 		nodes = append(nodes, node)
 	}
@@ -174,7 +163,7 @@ func broadcastClusterMembership() {
 	}
 }
 
-// mergeClusterMembership merges the inbound membership
+// mergeClusterMembership merges inbound membership into our cluster
 func mergeClusterMembership(inMembers []NodeInfo) {
 	State.Mu.Lock()
 	defer State.Mu.Unlock()
@@ -197,10 +186,13 @@ func addNode(node NodeInfo) {
 	}
 	if _, exists := State.ClusterNodes[node.NodeID]; !exists {
 		State.ClusterNodes[node.NodeID] = node
-		log.Log(log.Info, "[NATS] Added node %s with role=%s to cluster", node.NodeID, node.NodeRole)
+		log.Log(log.Info,
+			"[NATS] Added node %s with role=%s to cluster",
+			node.NodeID, node.NodeRole)
 	}
 }
 
+// countNodesByRole returns how many nodes currently have the given role
 func countNodesByRole(role string) int {
 	State.Mu.RLock()
 	defer State.Mu.RUnlock()

@@ -50,10 +50,16 @@ func main() {
 		log.Log(log.Fatal, "Failed to connect to NATS: %v", err)
 		os.Exit(1)
 	}
+
+	// Make sure we set NodeID and ThisNode BEFORE enabling the role
 	natsCommon.State.NodeID = c.Local.Nats.NodeID
 	natsCommon.State.ThisNode = natsCommon.NodeInfo{
 		NodeID: c.Local.Nats.NodeID,
+		// If you want, also set ListenPort, PublicAddress, etc.
+		ListenAddress: "0.0.0.0",
+		ListenPort:    "0",
 	}
+
 	if err := natsCommon.EnableDnsRole(); err != nil {
 		log.Log(log.Fatal, "Failed to enable DNSApi role: %v", err)
 		os.Exit(1)
