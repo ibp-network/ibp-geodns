@@ -1,9 +1,12 @@
 package nats
 
 import (
+	"encoding/json"
 	"time"
 
 	log "ibp-geodns/src/common/logging"
+
+	"github.com/nats-io/nats.go"
 )
 
 // EnableMonitorRole configures NATS subscriptions for a serviceMonitor node.
@@ -16,9 +19,10 @@ func EnableMonitorRole() error {
 
 	State.Proposals = make(map[ProposalID]*ProposalTracking)
 	State.ClusterNodes = make(map[string]NodeInfo)
+
+	State.ThisNode.NodeRole = "monitor"
 	State.ClusterNodes[State.NodeID] = State.ThisNode
 
-	// Subscriptions for monitor voting
 	if _, err := Subscribe(State.SubjectPropose, handleProposal); err != nil {
 		return err
 	}
@@ -28,32 +32,47 @@ func EnableMonitorRole() error {
 	if _, err := Subscribe(State.SubjectFinalize, handleFinalize); err != nil {
 		return err
 	}
-
-	// Stats requests (Monitor <-> Collator)
+	if _, err := Subscribe(State.SubjectCluster, handleClusterMessage); err != nil {
+		return err
+	}
 	if _, err := Subscribe("monitor.stats.getDowntime", handleMonitorStatsRequest); err != nil {
 		return err
 	}
 
-	// Start background garbage-collection for old proposals
 	StartGarbageCollection()
-
 	log.Log(log.Info, "[NATS] Monitor role enabled.")
+	broadcastClusterJoin()
 	return nil
 }
 
 // EnableDNSApiRole configures NATS subscriptions for a dnsApi node.
 func EnableDNSApiRole() error {
-	// For usage requests (DNS Api <-> Collator)
 	if _, err := Subscribe("dns.usage.getUsage", handleDnsUsageRequest); err != nil {
 		return err
 	}
+	State.SubjectCluster = "consensus.cluster"
+	if _, err := Subscribe(State.SubjectCluster, handleClusterMessage); err != nil {
+		return err
+	}
+
+	if State.Proposals == nil {
+		State.Proposals = make(map[ProposalID]*ProposalTracking)
+	}
+	if State.ClusterNodes == nil {
+		State.ClusterNodes = make(map[string]NodeInfo)
+	}
+
+	State.ThisNode.NodeRole = "dnsApi"
+	State.ClusterNodes[State.NodeID] = State.ThisNode
+
 	log.Log(log.Info, "[NATS] DNSApi role enabled.")
+	broadcastClusterJoin()
 	return nil
 }
 
 // EnableCollatorRole configures NATS subscriptions for a collator node.
 func EnableCollatorRole() error {
-	// Typically collator doesn't subscribe to a well-known subject; it uses ephemeral inboxes.
+	State.ThisNode.NodeRole = "collator"
 	log.Log(log.Info, "[NATS] Collator role enabled.")
 	return nil
 }
@@ -84,4 +103,97 @@ func cleanOldProposals() {
 			}
 		}
 	}
+}
+
+// handleClusterMessage processes membership messages on "consensus.cluster".
+func handleClusterMessage(m *nats.Msg) {
+	var msg ClusterMessage
+	if err := json.Unmarshal(m.Data, &msg); err != nil {
+		log.Log(log.Error, "[NATS] handleClusterMessage: unmarshal error: %v", err)
+		return
+	}
+
+	switch msg.Type {
+	case "join":
+		addNode(msg.Sender)
+		broadcastClusterMembership()
+	case "membership":
+		mergeClusterMembership(msg.Members)
+	default:
+		log.Log(log.Warn, "[NATS] handleClusterMessage: unknown type=%s", msg.Type)
+	}
+}
+
+// broadcastClusterJoin sends a message indicating this node is joining.
+func broadcastClusterJoin() {
+	msg := ClusterMessage{
+		Type:   "join",
+		Sender: State.ThisNode,
+	}
+	data, _ := json.Marshal(msg)
+	if err := Publish(State.SubjectCluster, data); err != nil {
+		log.Log(log.Error, "[NATS] Failed to publish cluster join: %v", err)
+	}
+}
+
+// broadcastClusterMembership sends out a membership list so the joiner can merge it.
+func broadcastClusterMembership() {
+	State.Mu.RLock()
+	defer State.Mu.RUnlock()
+
+	nodes := make([]NodeInfo, 0, len(State.ClusterNodes))
+	for _, node := range State.ClusterNodes {
+		nodes = append(nodes, node)
+	}
+
+	msg := ClusterMessage{
+		Type:    "membership",
+		Sender:  State.ThisNode,
+		Members: nodes,
+	}
+	data, _ := json.Marshal(msg)
+	if err := Publish(State.SubjectCluster, data); err != nil {
+		log.Log(log.Error, "[NATS] Failed to broadcast membership: %v", err)
+	}
+}
+
+// mergeClusterMembership merges the inbound membership
+func mergeClusterMembership(inMembers []NodeInfo) {
+	State.Mu.Lock()
+	defer State.Mu.Unlock()
+
+	for _, m := range inMembers {
+		if m.NodeID == "" {
+			continue
+		}
+		State.ClusterNodes[m.NodeID] = m
+	}
+}
+
+// addNode inserts a single node if not present
+func addNode(node NodeInfo) {
+	State.Mu.Lock()
+	defer State.Mu.Unlock()
+
+	if node.NodeID == "" {
+		return
+	}
+	if _, exists := State.ClusterNodes[node.NodeID]; !exists {
+		State.ClusterNodes[node.NodeID] = node
+		log.Log(log.Info, "[NATS] Added node %s with role=%s to cluster", node.NodeID, node.NodeRole)
+	}
+}
+
+// CountMonitorNodes returns how many nodes have NodeRole == "monitor"
+func CountMonitorNodes() int {
+	State.Mu.RLock()
+	defer State.Mu.RUnlock()
+
+	count := 0
+	for _, n := range State.ClusterNodes {
+		if n.NodeRole == "monitor" {
+			count++
+		}
+	}
+	return count
 }

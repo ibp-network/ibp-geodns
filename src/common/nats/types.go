@@ -30,6 +30,7 @@ type NodeInfo struct {
 	PublicAddress string `json:"PublicAddress"`
 	ListenAddress string `json:"ListenAddress"`
 	ListenPort    string `json:"ListenPort"`
+	NodeRole      string `json:"NodeRole"` // "monitor", "dnsApi", "collator", etc.
 }
 
 // Monitor Voting
@@ -114,4 +115,11 @@ type DowntimeEvent struct {
 type DowntimeResponse struct {
 	NodeID string          `json:"nodeID"`
 	Events []DowntimeEvent `json:"events"`
+}
+
+// Cluster membership messages
+type ClusterMessage struct {
+	Type    string     `json:"type"` // "join", "membership"
+	Sender  NodeInfo   `json:"sender"`
+	Members []NodeInfo `json:"members"` // populated for "membership" broadcasts
 }

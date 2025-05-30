@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 
-	// For local checks and official updates
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 )
@@ -47,7 +46,9 @@ func Propose(
 	dataMap map[string]interface{},
 ) (ProposalID, error) {
 
+	// Use google/uuid for the proposal ID
 	pid := ProposalID(uuid.New().String())
+
 	prop := Proposal{
 		ID:             pid,
 		CheckType:      checkType,
@@ -101,7 +102,6 @@ func handleProposal(m *nats.Msg) {
 	}
 	State.Mu.Unlock()
 
-	// evaluate local status asynchronously
 	go func(pr Proposal) {
 		found, localStatus := checkLocalStatus(pr.CheckType, pr.CheckName, pr.MemberName, pr.DomainName, pr.Endpoint)
 		if !found {
@@ -134,23 +134,23 @@ func handleVote(m *nats.Msg) {
 	}
 
 	pt.Votes[vote.NodeID] = vote.Agree
-	totalNodes := len(State.ClusterNodes)
-	majority := (totalNodes / 2) + 1
-	if majority < 2 {
-		majority = 2
-	}
+
+	monitorCount := CountMonitorNodes()
+	majority := (monitorCount / 2) + 1
 
 	yesCount := 0
 	noCount := 0
-	for _, v := range pt.Votes {
-		if v {
-			yesCount++
-		} else {
-			noCount++
+	for nodeID, v := range pt.Votes {
+		node, inMap := State.ClusterNodes[nodeID]
+		if inMap && node.NodeRole == "monitor" {
+			if v {
+				yesCount++
+			} else {
+				noCount++
+			}
 		}
 	}
 
-	// Early finalize if majority reached
 	if yesCount >= majority && !pt.Finalized {
 		pt.Finalized = true
 		State.Mu.Unlock()
@@ -163,8 +163,7 @@ func handleVote(m *nats.Msg) {
 		return
 	}
 
-	// If all nodes voted, finalize
-	if len(pt.Votes) == totalNodes && !pt.Finalized {
+	if len(pt.Votes) == monitorCount && !pt.Finalized {
 		pt.Finalized = true
 		State.Mu.Unlock()
 		finalizeVote(vote.ProposalID)
@@ -185,7 +184,6 @@ func handleFinalize(m *nats.Msg) {
 	State.Mu.RLock()
 	pt, exists := State.Proposals[fm.ProposalID]
 	State.Mu.RUnlock()
-
 	if exists && !pt.Finalized {
 		State.Mu.Lock()
 		pt.Finalized = true
@@ -205,20 +203,23 @@ func finalizeVote(pid ProposalID) {
 	if pt.Timer != nil {
 		pt.Timer.Stop()
 	}
-
-	totalNodes := len(State.ClusterNodes)
-	majority := (totalNodes / 2) + 1
+	monitorCount := CountMonitorNodes()
 
 	yesCount := 0
 	noCount := 0
-	for _, v := range pt.Votes {
-		if v {
-			yesCount++
-		} else {
-			noCount++
+	for nodeID, v := range pt.Votes {
+		node, inMap := State.ClusterNodes[nodeID]
+		if inMap && node.NodeRole == "monitor" {
+			if v {
+				yesCount++
+			} else {
+				noCount++
+			}
 		}
 	}
-	finalStatus := false
+	majority := (monitorCount / 2) + 1
+
+	var finalStatus bool
 	if yesCount >= majority {
 		finalStatus = true
 	} else if noCount >= majority {
@@ -227,10 +228,10 @@ func finalizeVote(pid ProposalID) {
 		finalStatus = (yesCount > noCount)
 	}
 	pt.FinalStatus = finalStatus
+	pt.Finalized = true
 	State.Mu.Unlock()
 
 	if finalStatus {
-		// apply official up
 		go applyOfficialChanges(pt.Proposal, true)
 		_ = PublishFinalize(FinalizeMessage{
 			ProposalID:  pid,
@@ -238,7 +239,6 @@ func finalizeVote(pid ProposalID) {
 			DecidedAt:   time.Now().UTC(),
 		})
 	} else {
-		// apply official down
 		go applyOfficialChanges(pt.Proposal, false)
 		_ = PublishFinalize(FinalizeMessage{
 			ProposalID:  pid,
@@ -252,7 +252,6 @@ func finalizeVote(pid ProposalID) {
 
 // checkLocalStatus consults local data about site/domain/endpoint
 func checkLocalStatus(checkType, checkName, memberName, domainName, endpoint string) (bool, bool) {
-	// Use data from data/results_Local.go
 	switch checkType {
 	case "site":
 		found, status := dat.GetLocalSiteStatus(checkName, memberName)
@@ -268,21 +267,18 @@ func checkLocalStatus(checkType, checkName, memberName, domainName, endpoint str
 	}
 }
 
-// applyOfficialChanges updates data.Official with up/down status (no "FromProposal" calls).
+// applyOfficialChanges updates data.Official with up/down status
 func applyOfficialChanges(prop Proposal, final bool) {
-	// 1) Find the relevant check from config
 	chk, chkOk := findCheckByName(prop.CheckName, prop.CheckType)
 	if !chkOk {
 		log.Log(log.Warn, "applyOfficialChanges: no check named %s (type=%s)", prop.CheckName, prop.CheckType)
 		return
 	}
-	// 2) Find the member
 	mem, memOk := findMemberByName(prop.MemberName)
 	if !memOk {
 		log.Log(log.Warn, "applyOfficialChanges: no member named %s found", prop.MemberName)
 		return
 	}
-	// 3) Possibly find the service if domain or endpoint
 	var svc cfg.Service
 	if prop.CheckType == "domain" || prop.CheckType == "endpoint" {
 		serviceObj, ok := findServiceForDomain(prop.DomainName)
@@ -292,7 +288,6 @@ func applyOfficialChanges(prop Proposal, final bool) {
 		}
 		svc = serviceObj
 	}
-
 	status := final
 	errorMsg := prop.ErrorText
 	dataMap := prop.Data
@@ -301,16 +296,13 @@ func applyOfficialChanges(prop Proposal, final bool) {
 	case "site":
 		log.Log(log.Info, "Finalizing site check for member=%s => %t", prop.MemberName, status)
 		dat.UpdateOfficialSiteResult(chk, mem, status, errorMsg, dataMap)
-
 	case "domain":
 		log.Log(log.Info, "Finalizing domain check for member=%s => %t domain=%s", prop.MemberName, status, prop.DomainName)
 		dat.UpdateOfficialDomainResult(chk, mem, svc, prop.DomainName, status, errorMsg, dataMap)
-
 	case "endpoint":
 		log.Log(log.Info, "Finalizing endpoint check for member=%s => %t domain=%s endpoint=%s",
 			prop.MemberName, status, prop.DomainName, prop.Endpoint)
 		dat.UpdateOfficialEndpointResult(chk, mem, svc, prop.DomainName, prop.Endpoint, status, errorMsg, dataMap)
-
 	default:
 		log.Log(log.Warn, "applyOfficialChanges: unrecognized checkType=%s", prop.CheckType)
 	}
