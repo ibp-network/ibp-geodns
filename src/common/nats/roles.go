@@ -70,10 +70,27 @@ func EnableDnsRole() error {
 	return nil
 }
 
-// EnableCollatorRole configures NATS subscriptions for a collator node.
 func EnableCollatorRole() error {
+	State.SubjectCluster = "consensus.cluster"
+
+	if _, err := Subscribe(State.SubjectCluster, handleClusterMessage); err != nil {
+		return err
+	}
+
+	if State.Proposals == nil {
+		State.Proposals = make(map[ProposalID]*ProposalTracking)
+	}
+	if State.ClusterNodes == nil {
+		State.ClusterNodes = make(map[string]NodeInfo)
+	}
+
 	State.ThisNode.NodeRole = "IBPCollator"
+	State.ClusterNodes[State.NodeID] = State.ThisNode
+
 	log.Log(log.Info, "[NATS] Collator role enabled.")
+
+	// Announce our presence to the cluster:
+	broadcastClusterJoin()
 	return nil
 }
 
