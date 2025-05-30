@@ -2,6 +2,8 @@ package nats
 
 import (
 	"encoding/json"
+	"fmt"
+	"sync"
 	"time"
 
 	dat "ibp-geodns/src/common/data"
@@ -11,8 +13,9 @@ import (
 )
 
 // handleMonitorStatsRequest responds to downtime requests: "monitor.stats.getDowntime"
+// (PASSIVE side: whenever we RECEIVE a request, we handle it here)
 func handleMonitorStatsRequest(m *nats.Msg) {
-	log.Log(log.Debug, "[NATS] handleMonitorStatsRequest: received request on subject=%s from reply=%s", m.Subject, m.Reply)
+	log.Log(log.Debug, "[NATS] handleMonitorStatsRequest: subject=%s reply=%s", m.Subject, m.Reply)
 
 	var req DowntimeRequest
 	if err := json.Unmarshal(m.Data, &req); err != nil {
@@ -49,7 +52,7 @@ func retrieveLocalDowntimeEvents(memberName string, start, end time.Time) ([]Dow
 	log.Log(log.Debug, "[NATS] retrieveLocalDowntimeEvents: memberName=%s start=%v end=%v", memberName, start, end)
 	rawEvents, err := dat.GetMemberEvents(memberName, "", start, end)
 	if err != nil {
-		log.Log(log.Error, "[NATS] retrieveLocalDowntimeEvents: error from data.GetMemberEvents: %v", err)
+		log.Log(log.Error, "[NATS] retrieveLocalDowntimeEvents: data.GetMemberEvents error: %v", err)
 		return nil, err
 	}
 
@@ -68,7 +71,80 @@ func retrieveLocalDowntimeEvents(memberName string, start, end time.Time) ([]Dow
 			Data:       e.Data,
 		})
 	}
-
 	log.Log(log.Debug, "[NATS] retrieveLocalDowntimeEvents: returning %d events", len(results))
 	return results, nil
+}
+
+// RequestAllMonitorsDowntime sends a DowntimeRequest to "monitor.stats.getDowntime",
+// then waits for ALL IBPMonitor nodes to reply or until timeout. Returns aggregated events.
+func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]DowntimeEvent, error) {
+	// The 'EnableMonitorRole' function sets NodeRole="IBPMonitor"
+	// So let's count how many nodes have that role
+	monitorCount := countNodesByRole("IBPMonitor")
+	if monitorCount == 0 {
+		return nil, fmt.Errorf("no IBPMonitor nodes found, cannot gather downtime")
+	}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("downtime request marshal error: %w", err)
+	}
+
+	inbox := fmt.Sprintf("%s.downtimeReply.%d", State.NodeID, time.Now().UnixNano())
+	responseChan := make(chan []DowntimeEvent, monitorCount)
+
+	sub, subErr := Subscribe(inbox, func(msg *nats.Msg) {
+		var resp DowntimeResponse
+		if unErr := json.Unmarshal(msg.Data, &resp); unErr != nil {
+			log.Log(log.Error, "[NATS] RequestAllMonitorsDowntime: unmarshal error: %v", unErr)
+			return
+		}
+		responseChan <- resp.Events
+	})
+	if subErr != nil {
+		return nil, fmt.Errorf("subscribe error: %w", subErr)
+	}
+
+	err = PublishMsgWithReply("monitor.stats.getDowntime", inbox, data)
+	if err != nil {
+		sub.Unsubscribe()
+		return nil, fmt.Errorf("publish downtime request error: %w", err)
+	}
+
+	log.Log(log.Debug, "[NATS] RequestAllMonitorsDowntime: expecting %d replies from IBPMonitor nodes", monitorCount)
+
+	aggregated := make([]DowntimeEvent, 0, monitorCount*10)
+	timer := time.NewTimer(timeout)
+	var mu sync.Mutex
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		received := 0
+		for {
+			select {
+			case evts := <-responseChan:
+				received++
+				mu.Lock()
+				aggregated = append(aggregated, evts...)
+				mu.Unlock()
+
+				if received >= monitorCount {
+					return
+				}
+			case <-timer.C:
+				return
+			}
+		}
+	}()
+
+	<-done
+	sub.Unsubscribe()
+	close(responseChan)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	log.Log(log.Debug, "[NATS] RequestAllMonitorsDowntime: done collecting => total events=%d", len(aggregated))
+	return aggregated, nil
 }

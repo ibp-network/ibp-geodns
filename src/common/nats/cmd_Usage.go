@@ -14,9 +14,9 @@ import (
 )
 
 // handleDnsUsageRequest responds to "dns.usage.getUsage" requests
-// (Passive side: whenever we RECEIVE a usage request, we handle it here)
+// (PASSIVE side: whenever we RECEIVE a usage request, we handle it here)
 func handleDnsUsageRequest(m *nats.Msg) {
-	log.Log(log.Debug, "[NATS] handleDnsUsageRequest: received request on subject=%s from reply=%s", m.Subject, m.Reply)
+	log.Log(log.Debug, "[NATS] handleDnsUsageRequest: subject=%s reply=%s", m.Subject, m.Reply)
 
 	var req UsageRequest
 	if err := json.Unmarshal(m.Data, &req); err != nil {
@@ -130,14 +130,16 @@ func parseDate(d string) time.Time {
 	return t
 }
 
-// ---------------------------------------------------------------------
-// ACTIVE aggregator function to request usage from all "IBPDns" nodes
-// This logic is typically called from a Collator or aggregator node.
-// ---------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+// ACTIVE aggregator function to request usage from all IBPDns nodes
+// Typically used by Collator or any aggregator node that wants all usage data.
+// -----------------------------------------------------------------------------------
 
 // RequestAllDnsUsage sends a usage request to "dns.usage.getUsage" with a unique inbox,
 // waits for ALL IBPDns nodes to reply, or until timeout. Returns aggregated usage records.
 func RequestAllDnsUsage(req UsageRequest, timeout time.Duration) ([]UsageRecord, error) {
+	// The 'EnableDnsRole' sets NodeRole="IBPDns"
+	// Let's see how many nodes have that role:
 	dnsCount := countNodesByRole("IBPDns")
 	if dnsCount == 0 {
 		return nil, fmt.Errorf("no IBPDns nodes found, cannot gather usage")
@@ -154,7 +156,7 @@ func RequestAllDnsUsage(req UsageRequest, timeout time.Duration) ([]UsageRecord,
 	sub, subErr := Subscribe(inbox, func(msg *nats.Msg) {
 		var resp UsageResponse
 		if unErr := json.Unmarshal(msg.Data, &resp); unErr != nil {
-			log.Log(log.Error, "[NATS] aggregator: unmarshal error: %v", unErr)
+			log.Log(log.Error, "[NATS] RequestAllDnsUsage: unmarshal error: %v", unErr)
 			return
 		}
 		responseChan <- resp.UsageRecords
@@ -203,6 +205,6 @@ func RequestAllDnsUsage(req UsageRequest, timeout time.Duration) ([]UsageRecord,
 	mu.Lock()
 	defer mu.Unlock()
 
-	log.Log(log.Debug, "[NATS] RequestAllDnsUsage: done collecting (got %d total usage records).", len(aggregated))
+	log.Log(log.Debug, "[NATS] RequestAllDnsUsage: done collecting => total usage records=%d", len(aggregated))
 	return aggregated, nil
 }
