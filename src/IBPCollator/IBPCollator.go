@@ -47,10 +47,10 @@ func main() {
 	// We'll create usage and downtime requests, then gather data from the cluster.
 
 	// 1) Usage request (all dnsApi)
-	log.Log(log.Info, "[Collator] Requesting usage data from all dnsApi nodes...")
+	log.Log(log.Info, "[Collator] Requesting usage data from all IBPDns nodes...")
 	usageReq := nconn.UsageRequest{
-		StartDate:  "2024-01-01",
-		EndDate:    "2024-01-31",
+		StartDate:  "2025-05-30",
+		EndDate:    "2025-05-30",
 		Domain:     "", // all domains
 		MemberName: "", // all members
 		Country:    "", // all countries
@@ -65,10 +65,10 @@ func main() {
 	}
 
 	// 2) Downtime request (all monitor)
-	log.Log(log.Info, "[Collator] Requesting downtime data from all monitor nodes...")
+	log.Log(log.Info, "[Collator] Requesting downtime data from all IBPMonitor nodes...")
 	dtReq := nconn.DowntimeRequest{
-		StartTime:  time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		EndTime:    time.Date(2024, 1, 31, 23, 59, 59, 0, time.UTC),
+		StartTime:  time.Date(2025, 05, 30, 0, 0, 0, 0, time.UTC),
+		EndTime:    time.Date(2025, 05, 30, 23, 59, 59, 0, time.UTC),
 		MemberName: "", // all members
 	}
 	dtTimeout := 5 * time.Second
