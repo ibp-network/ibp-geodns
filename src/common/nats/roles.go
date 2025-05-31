@@ -11,7 +11,6 @@ import (
 )
 
 func EnableMonitorRole() error {
-	// Setup standard references
 	State.SubjectPropose = "consensus.propose"
 	State.SubjectVote = "consensus.vote"
 	State.SubjectFinalize = "consensus.finalize"
@@ -25,7 +24,6 @@ func EnableMonitorRole() error {
 		State.ClusterNodes = make(map[string]NodeInfo)
 	}
 
-	// Single wildcard subscription
 	_, err := Subscribe(">", handleAllMessages)
 	if err != nil {
 		return err
@@ -89,23 +87,39 @@ func EnableCollatorRole() error {
 
 func handleAllMessages(m *nats.Msg) {
 	subj := m.Subject
+
+	// Only IBPDns nodes should handle dns.usage.getUsage
+	// Only IBPMonitor nodes should handle monitor.stats.getDowntime
+	// Collator does not respond to these requests locally.
 	switch {
 	case subj == State.SubjectPropose:
 		handleProposal(m)
+
 	case subj == State.SubjectVote:
 		handleVote(m)
+
 	case subj == State.SubjectFinalize:
 		handleFinalize(m)
+
 	case subj == State.SubjectCluster:
 		handleClusterMessage(m)
+
+	// Monitor stats
 	case subj == "monitor.stats.getDowntime":
-		handleMonitorStatsRequest(m)
+		if State.ThisNode.NodeRole == "IBPMonitor" {
+			handleMonitorStatsRequest(m)
+		}
 	case subj == "monitor.stats.downtimeData":
-		handleMonitorStatsData(m)
+		handleMonitorStatsData(m) // anyone can receive the data
+
+	// DNS usage
 	case subj == "dns.usage.getUsage":
-		handleDnsUsageRequest(m)
+		if State.ThisNode.NodeRole == "IBPDns" {
+			handleDnsUsageRequest(m)
+		}
 	case subj == "dns.usage.usageData":
-		handleDnsUsageData(m)
+		handleDnsUsageData(m) // anyone can receive the data
+
 	default:
 		if strings.Contains(subj, "downtimeReply") {
 			handleMonitorStatsData(m)
