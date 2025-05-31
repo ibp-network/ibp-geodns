@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"ibp-geodns/src/IBPDns/api"
+	api "ibp-geodns/src/IBPDns/api"
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
@@ -28,36 +28,30 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 1) Load config
 	cfg.Init(*cfgFile)
-
-	// 2) Now parse the configured log level from the newly loaded config
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
 	log.Log(log.Info, "DNS API is running with log level: %s", c.Local.System.LogLevel)
 
-	// 3) Initialize data usage stats but NOT local/official caches
+	// Init data with usage stats
 	dat.Init(dat.InitOptions{
 		UseLocalOfficialCaches: false,
 		UseUsageStats:          true,
 	})
 
-	// 4) Initialize MaxMind
 	max.Init()
 
-	// 5) Connect to NATS and enable DNS API role (for usage requests, etc.)
 	if err := natsCommon.Connect(); err != nil {
 		log.Log(log.Fatal, "Failed to connect to NATS: %v", err)
 		os.Exit(1)
 	}
 
-	// Make sure we set NodeID and ThisNode BEFORE enabling the role
 	natsCommon.State.NodeID = c.Local.Nats.NodeID
 	natsCommon.State.ThisNode = natsCommon.NodeInfo{
-		NodeID: c.Local.Nats.NodeID,
-		// If you want, also set ListenPort, PublicAddress, etc.
+		NodeID:        c.Local.Nats.NodeID,
 		ListenAddress: "0.0.0.0",
 		ListenPort:    "0",
+		NodeRole:      "IBPDns",
 	}
 
 	if err := natsCommon.EnableDnsRole(); err != nil {
@@ -65,15 +59,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 6) Launch the DNS API. This spawns its own ListenAndServe goroutine.
+	// Launch DNS API
 	api.Init()
 
-	// 7) Start polling serviceMonitor for official results
+	// Start polling monitor
 	intervalSec := c.Local.DnsApi.RefreshIntervalSeconds
 	log.Log(log.Info, "Starting serviceMonitor poller every %d seconds", intervalSec)
 	startServiceMonitorPoller(intervalSec)
 
-	// 8) Keep running forever
 	for {
 		time.Sleep(60 * time.Second)
 	}

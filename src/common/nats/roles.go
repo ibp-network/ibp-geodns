@@ -2,6 +2,7 @@ package nats
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	log "ibp-geodns/src/common/logging"
@@ -10,6 +11,7 @@ import (
 )
 
 func EnableMonitorRole() error {
+	// Setup standard references
 	State.SubjectPropose = "consensus.propose"
 	State.SubjectVote = "consensus.vote"
 	State.SubjectFinalize = "consensus.finalize"
@@ -23,19 +25,9 @@ func EnableMonitorRole() error {
 		State.ClusterNodes = make(map[string]NodeInfo)
 	}
 
-	if _, err := Subscribe(State.SubjectPropose, handleProposal); err != nil {
-		return err
-	}
-	if _, err := Subscribe(State.SubjectVote, handleVote); err != nil {
-		return err
-	}
-	if _, err := Subscribe(State.SubjectFinalize, handleFinalize); err != nil {
-		return err
-	}
-	if _, err := Subscribe(State.SubjectCluster, handleClusterMessage); err != nil {
-		return err
-	}
-	if _, err := Subscribe("monitor.stats.getDowntime", handleMonitorStatsRequest); err != nil {
+	// Single wildcard subscription
+	_, err := Subscribe(">", handleAllMessages)
+	if err != nil {
 		return err
 	}
 
@@ -43,7 +35,6 @@ func EnableMonitorRole() error {
 	State.ClusterNodes[State.NodeID] = State.ThisNode
 
 	StartGarbageCollection()
-
 	log.Log(log.Info, "[NATS] Monitor role enabled.")
 	broadcastClusterJoin()
 	return nil
@@ -59,10 +50,9 @@ func EnableDnsRole() error {
 		State.ClusterNodes = make(map[string]NodeInfo)
 	}
 
-	if _, err := Subscribe(State.SubjectCluster, handleClusterMessage); err != nil {
-		return err
-	}
-	if _, err := Subscribe("dns.usage.getUsage", handleDnsUsageRequest); err != nil {
+	// Single wildcard subscription
+	_, err := Subscribe(">", handleAllMessages)
+	if err != nil {
 		return err
 	}
 
@@ -84,24 +74,49 @@ func EnableCollatorRole() error {
 		State.ClusterNodes = make(map[string]NodeInfo)
 	}
 
-	if _, err := Subscribe(State.SubjectCluster, handleClusterMessage); err != nil {
-		return err
-	}
-	if _, err := Subscribe("dns.usage.usageData", handleDnsUsageData); err != nil {
-		return err
-	}
-	if _, err := Subscribe("monitor.stats.downtimeData", handleMonitorStatsData); err != nil {
+	// Single wildcard subscription
+	_, err := Subscribe(">", handleAllMessages)
+	if err != nil {
 		return err
 	}
 
 	State.ThisNode.NodeRole = "IBPCollator"
 	State.ClusterNodes[State.NodeID] = State.ThisNode
 
-	log.Log(log.Info, "[NATS] Collator role enabled.")
 	StartGarbageCollection()
-
+	log.Log(log.Info, "[NATS] Collator role enabled.")
 	broadcastClusterJoin()
 	return nil
+}
+
+func handleAllMessages(m *nats.Msg) {
+	subj := m.Subject
+	switch {
+	case subj == State.SubjectPropose:
+		handleProposal(m)
+	case subj == State.SubjectVote:
+		handleVote(m)
+	case subj == State.SubjectFinalize:
+		handleFinalize(m)
+	case subj == State.SubjectCluster:
+		handleClusterMessage(m)
+	case subj == "monitor.stats.getDowntime":
+		handleMonitorStatsRequest(m)
+	case subj == "monitor.stats.downtimeData":
+		handleMonitorStatsData(m)
+	case subj == "dns.usage.getUsage":
+		handleDnsUsageRequest(m)
+	case subj == "dns.usage.usageData":
+		handleDnsUsageData(m)
+	default:
+		if strings.Contains(subj, "downtimeReply") {
+			handleMonitorStatsData(m)
+		} else if strings.Contains(subj, "usageReply") {
+			handleDnsUsageData(m)
+		} else {
+			log.Log(log.Debug, "[NATS] handleAllMessages: unhandled subject=%s", subj)
+		}
+	}
 }
 
 func handleDnsUsageData(m *nats.Msg) {
@@ -156,7 +171,6 @@ func handleClusterMessage(m *nats.Msg) {
 		log.Log(log.Error, "[NATS] handleClusterMessage: unmarshal error: %v", err)
 		return
 	}
-
 	switch msg.Type {
 	case "join":
 		addNode(msg.Sender)

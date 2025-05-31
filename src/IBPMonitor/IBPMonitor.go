@@ -29,48 +29,47 @@ func main() {
 
 	// 1) Initialize config
 	cfg.Init(*cfgFile)
-
-	// 2) Parse configured log level from config
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
 	log.Log(log.Info, "serviceMonitor is running with log level: %s", c.Local.System.LogLevel)
 
-	// 3) Initialize data with local/official caching but NO usage stats
+	// 2) Initialize data
 	dat.Init(dat.InitOptions{
 		UseLocalOfficialCaches: true,
 		UseUsageStats:          false,
 	})
 
-	// 4) Initialize MaxMind
+	// 3) Initialize MaxMind
 	max.Init()
 
-	// 5) Connect to NATS and enable Monitor role
+	// 4) Connect to NATS
 	if err := natsCommon.Connect(); err != nil {
 		log.Log(log.Fatal, "Failed to connect to NATS: %v", err)
 		os.Exit(1)
 	}
 
-	// Make sure we set NodeID and ThisNode BEFORE enabling the role
+	// 5) Set NodeID + ThisNode
 	natsCommon.State.NodeID = c.Local.Nats.NodeID
 	natsCommon.State.ThisNode = natsCommon.NodeInfo{
-		NodeID: c.Local.Nats.NodeID,
-		// If you want, also set ListenPort, PublicAddress, etc.
+		NodeID:        c.Local.Nats.NodeID,
 		ListenAddress: "0.0.0.0",
 		ListenPort:    "0",
+		NodeRole:      "IBPMonitor",
 	}
 
+	// 6) Enable Monitor role
 	if err := natsCommon.EnableMonitorRole(); err != nil {
 		log.Log(log.Fatal, "Failed to enable monitor role for NATS: %v", err)
 		os.Exit(1)
 	}
 
-	// 6) Start monitor checks
+	// 7) Start checks
 	monitor.Init()
 
-	// 7) Start the internal API to serve official results
+	// 8) Start serviceMonitor API
 	api.Init()
 
-	// 8) Keep alive
+	// 9) Keep alive
 	for {
 		time.Sleep(60 * time.Second)
 	}

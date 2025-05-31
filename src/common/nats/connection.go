@@ -85,7 +85,6 @@ func Publish(subject string, data []byte) error {
 func PublishMsg(msg *nats.Msg) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
-
 	if nc == nil || nc.IsClosed() {
 		return nats.ErrConnectionClosed
 	}
@@ -95,22 +94,16 @@ func PublishMsg(msg *nats.Msg) error {
 func PublishMsgWithReply(subject, reply string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
-
 	if nc == nil || nc.IsClosed() {
 		return nats.ErrConnectionClosed
 	}
-	msg := &nats.Msg{
-		Subject: subject,
-		Reply:   reply,
-		Data:    data,
-	}
+	msg := &nats.Msg{Subject: subject, Reply: reply, Data: data}
 	return nc.PublishMsg(msg)
 }
 
 func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
-
 	if nc == nil || nc.IsClosed() {
 		return nil, nats.ErrConnectionClosed
 	}
@@ -125,23 +118,8 @@ func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 func Request(subject string, data []byte, timeout time.Duration) (*nats.Msg, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
-
 	if nc == nil || nc.IsClosed() {
 		return nil, nats.ErrConnectionClosed
 	}
 	return nc.Request(subject, data, timeout)
-}
-
-// WaitForNodesByRole waits until we detect at least minCount nodes of a given role
-// or the specified timeout elapses. Returns true if found, false otherwise.
-func WaitForNodesByRole(role string, minCount int, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		c := countNodesByRole(role)
-		if c >= minCount {
-			return true
-		}
-		time.Sleep(300 * time.Millisecond)
-	}
-	return false
 }
