@@ -50,7 +50,6 @@ func EnableDnsRole() error {
 		State.ClusterNodes = make(map[string]NodeInfo)
 	}
 
-	// Single wildcard subscription
 	_, err := Subscribe(">", handleAllMessages)
 	if err != nil {
 		return err
@@ -74,7 +73,6 @@ func EnableCollatorRole() error {
 		State.ClusterNodes = make(map[string]NodeInfo)
 	}
 
-	// Single wildcard subscription
 	_, err := Subscribe(">", handleAllMessages)
 	if err != nil {
 		return err
@@ -171,11 +169,15 @@ func handleClusterMessage(m *nats.Msg) {
 		log.Log(log.Error, "[NATS] handleClusterMessage: unmarshal error: %v", err)
 		return
 	}
+
 	switch msg.Type {
 	case "join":
+		log.Log(log.Debug, "[NATS] handleClusterMessage: got join from node=%s; adding & broadcasting membership", msg.Sender.NodeID)
 		addNode(msg.Sender)
 		broadcastClusterMembership()
 	case "membership":
+		log.Log(log.Debug, "[NATS] handleClusterMessage: got membership with %d nodes from sender=%s",
+			len(msg.Members), msg.Sender.NodeID)
 		mergeClusterMembership(msg.Members)
 	default:
 		log.Log(log.Warn, "[NATS] handleClusterMessage: unknown type=%s", msg.Type)
@@ -195,18 +197,20 @@ func broadcastClusterJoin() {
 
 func broadcastClusterMembership() {
 	State.Mu.RLock()
-	defer State.Mu.RUnlock()
-
 	var nodes []NodeInfo
 	for _, node := range State.ClusterNodes {
 		nodes = append(nodes, node)
 	}
+	State.Mu.RUnlock()
+
 	msg := ClusterMessage{
 		Type:    "membership",
 		Sender:  State.ThisNode,
 		Members: nodes,
 	}
 	data, _ := json.Marshal(msg)
+
+	log.Log(log.Debug, "[NATS] broadcastClusterMembership: broadcasting membership of %d nodes", len(nodes))
 	if err := Publish(State.SubjectCluster, data); err != nil {
 		log.Log(log.Error, "[NATS] Failed to broadcast membership: %v", err)
 	}
@@ -216,12 +220,18 @@ func mergeClusterMembership(inMembers []NodeInfo) {
 	State.Mu.Lock()
 	defer State.Mu.Unlock()
 
+	countAdded := 0
 	for _, m := range inMembers {
 		if m.NodeID == "" {
 			continue
 		}
+		if _, exists := State.ClusterNodes[m.NodeID]; !exists {
+			countAdded++
+			log.Log(log.Info, "[NATS] Merging node=%s role=%s into cluster", m.NodeID, m.NodeRole)
+		}
 		State.ClusterNodes[m.NodeID] = m
 	}
+	log.Log(log.Debug, "[NATS] mergeClusterMembership: added %d new node(s)", countAdded)
 }
 
 func addNode(node NodeInfo) {
@@ -237,6 +247,7 @@ func addNode(node NodeInfo) {
 	}
 }
 
+// countNodesByRole is used by proposals for finalizing majority status.
 func countNodesByRole(role string) int {
 	State.Mu.RLock()
 	defer State.Mu.RUnlock()
