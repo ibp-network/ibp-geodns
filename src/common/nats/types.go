@@ -79,11 +79,15 @@ type UsageRequest struct {
 	Country    string `json:"country"`
 }
 
+// Updated UsageRecord struct to include ASN, network, and countryName
 type UsageRecord struct {
 	Date        string `json:"date"`
 	Domain      string `json:"domain"`
 	MemberName  string `json:"memberName"`
 	CountryCode string `json:"countryCode"`
+	Asn         string `json:"asn"`
+	NetworkName string `json:"networkName"`
+	CountryName string `json:"countryName"`
 	Hits        int    `json:"hits"`
 }
 

@@ -109,7 +109,7 @@ func GetUsageByDomainV6(domain string, start, end time.Time) ([]mysql.UsageRecor
 
 func getUsageByDomainV6(domain, startDate, endDate string) ([]mysql.UsageRecord, error) {
 	query := `
-SELECT usage_date, domain, country_code, SUM(hits) as hits
+SELECT usage_date, domain, country_code, asn, network_name, country_name SUM(hits) as hits
 FROM usage_daily_v6
 WHERE domain = ? AND usage_date BETWEEN ? AND ?
 GROUP BY usage_date, domain, country_code
