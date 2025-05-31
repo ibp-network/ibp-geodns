@@ -88,7 +88,7 @@ func Propose(
 	})
 
 	dataBytes, _ := json.Marshal(prop)
-	err := Publish(State.SubjectPropose, dataBytes) // using connection.go’s Publish
+	err := Publish(State.SubjectPropose, dataBytes)
 	if err != nil {
 		log.Log(log.Error, "[NATS] Propose: failed to publish proposal ID=%s: %v", pid, err)
 	} else {
@@ -143,7 +143,7 @@ func handleProposal(m *nats.Msg) {
 			Timestamp:  time.Now().UTC(),
 		}
 		data, _ := json.Marshal(v)
-		_ = Publish(State.SubjectVote, data) // using connection.go’s Publish
+		_ = Publish(State.SubjectVote, data)
 
 		log.Log(log.Debug,
 			"[NATS] handleProposal: node=%s voted (agree=%v) for proposal ID=%s",
@@ -322,7 +322,7 @@ func finalizeVote(pid ProposalID) {
 		DecidedAt:   time.Now().UTC(),
 	}
 	data, _ := json.Marshal(fm)
-	_ = Publish(State.SubjectFinalize, data) // just use connection.go’s Publish
+	_ = Publish(State.SubjectFinalize, data)
 
 	log.Log(log.Info,
 		"[NATS] finalizeVote: proposal ID=%s => final status=%v", pid, finalStatus)

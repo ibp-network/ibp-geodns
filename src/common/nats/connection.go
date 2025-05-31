@@ -16,6 +16,7 @@ var (
 	connectionMu sync.Mutex
 )
 
+// Connect initializes a NATS connection using the config in cfg.GetConfig().
 func Connect() error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -63,6 +64,7 @@ func Connect() error {
 	return nil
 }
 
+// Disconnect closes the NATS connection.
 func Disconnect() {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -73,6 +75,7 @@ func Disconnect() {
 	}
 }
 
+// Publish wraps nc.Publish.
 func Publish(subject string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -82,6 +85,7 @@ func Publish(subject string, data []byte) error {
 	return nc.Publish(subject, data)
 }
 
+// PublishMsg wraps nc.PublishMsg.
 func PublishMsg(msg *nats.Msg) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -91,6 +95,7 @@ func PublishMsg(msg *nats.Msg) error {
 	return nc.PublishMsg(msg)
 }
 
+// PublishMsgWithReply publishes a message with a reply subject.
 func PublishMsgWithReply(subject, reply string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -101,6 +106,7 @@ func PublishMsgWithReply(subject, reply string, data []byte) error {
 	return nc.PublishMsg(msg)
 }
 
+// Subscribe wraps nc.Subscribe.
 func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -115,6 +121,7 @@ func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	return sub, nil
 }
 
+// Request wraps nc.Request.
 func Request(subject string, data []byte, timeout time.Duration) (*nats.Msg, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()

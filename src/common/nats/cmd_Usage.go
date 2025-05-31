@@ -77,7 +77,6 @@ func retrieveLocalUsageRecords(
 
 	var results []UsageRecord
 
-	// We call data-layer usage queries (from data/usage.go -> data/mysql/usage.go)
 	if domain != "" && member != "" {
 		recs, err := dat.GetUsageByMember(domain, member, parseDate(sd), parseDate(ed))
 		if err != nil {
