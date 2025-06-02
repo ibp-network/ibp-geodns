@@ -242,7 +242,7 @@ func mergeClusterMembership(inMembers []NodeInfo) {
 		}
 		if _, exists := State.ClusterNodes[m.NodeID]; !exists {
 			countAdded++
-			log.Log(log.Info, "[NATS] Merging node=%s role=%s into cluster", m.NodeID, m.NodeRole)
+			log.Log(log.Debug, "[NATS] Merging node=%s role=%s into cluster", m.NodeID, m.NodeRole)
 		}
 		State.ClusterNodes[m.NodeID] = m
 	}
@@ -258,7 +258,7 @@ func addNode(node NodeInfo) {
 	}
 	if _, exists := State.ClusterNodes[node.NodeID]; !exists {
 		State.ClusterNodes[node.NodeID] = node
-		log.Log(log.Info, "[NATS] Added node %s with role=%s to cluster", node.NodeID, node.NodeRole)
+		log.Log(log.Debug, "[NATS] Added node %s with role=%s to cluster", node.NodeID, node.NodeRole)
 	}
 }
 

@@ -324,7 +324,7 @@ func finalizeVote(pid ProposalID) {
 	data, _ := json.Marshal(fm)
 	_ = Publish(State.SubjectFinalize, data)
 
-	log.Log(log.Info,
+	log.Log(log.Debug,
 		"[NATS] finalizeVote: proposal ID=%s => final status=%v", pid, finalStatus)
 }
 
@@ -380,19 +380,19 @@ func applyOfficialChanges(prop Proposal, final bool) {
 
 	switch prop.CheckType {
 	case "site":
-		log.Log(log.Info,
+		log.Log(log.Debug,
 			"[NATS] applyOfficialChanges: final site check for member=%s => %t",
 			prop.MemberName, status)
 		dat.UpdateOfficialSiteResult(chk, mem, status, errorMsg, dataMap)
 
 	case "domain":
-		log.Log(log.Info,
+		log.Log(log.Debug,
 			"[NATS] applyOfficialChanges: final domain check for member=%s => %t domain=%s",
 			prop.MemberName, status, prop.DomainName)
 		dat.UpdateOfficialDomainResult(chk, mem, svc, prop.DomainName, status, errorMsg, dataMap)
 
 	case "endpoint":
-		log.Log(log.Info,
+		log.Log(log.Debug,
 			"[NATS] applyOfficialChanges: final endpoint check for member=%s => %t domain=%s endpoint=%s",
 			prop.MemberName, status, prop.DomainName, prop.Endpoint)
 		dat.UpdateOfficialEndpointResult(chk, mem, svc, prop.DomainName, prop.Endpoint,

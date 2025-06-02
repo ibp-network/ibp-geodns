@@ -12,7 +12,7 @@ import (
 var logger *log.Logger
 
 // logLevel sets the current logging level
-var logLevel LogLevel = Debug
+var logLevel LogLevel = Info
 
 // init initializes the logger
 func init() {
