@@ -11,7 +11,7 @@ import (
 	nconn "ibp-geodns/src/common/nats"
 )
 
-var version = "0.7.0"
+var version = "0.3.1"
 
 func main() {
 	log.Log(log.Info, "IBP-GeoDNS Collator v%s starting...", version)
