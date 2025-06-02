@@ -131,6 +131,7 @@ func handleAllMessages(m *nats.Msg) {
 	}
 }
 
+// handleDnsUsageData is invoked when we receive usage data from a node on "dns.usage.usageData"
 func handleDnsUsageData(m *nats.Msg) {
 	var resp UsageResponse
 	if err := json.Unmarshal(m.Data, &resp); err != nil {

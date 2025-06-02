@@ -61,7 +61,6 @@ func handleDnsUsageRequest(m *nats.Msg) {
 func retrieveLocalUsageRecords(
 	startDate, endDate, domain, member, country string,
 ) ([]UsageRecord, error) {
-
 	log.Log(log.Debug,
 		"[NATS] retrieveLocalUsageRecords: start=%s end=%s domain=%s member=%s country=%s",
 		startDate, endDate, domain, member, country)
@@ -77,63 +76,67 @@ func retrieveLocalUsageRecords(
 
 	var results []UsageRecord
 
+	// Convert date strings to time.Time
+	sTime, _ := time.Parse("2006-01-02", sd)
+	eTime, _ := time.Parse("2006-01-02", ed)
+
+	// If domain != "" and member != ""
 	if domain != "" && member != "" {
-		recs, err := dat.GetUsageByMember(domain, member, parseDate(sd), parseDate(ed))
+		recs, err := dat.GetUsageByMember(domain, member, sTime, eTime)
 		if err != nil {
 			return nil, err
 		}
 		for _, r := range recs {
 			if country == "" || strings.EqualFold(country, r.CountryCode) {
-				res := UsageRecord{
+				results = append(results, UsageRecord{
 					Date:        r.Date,
 					Domain:      r.Domain,
+					MemberName:  r.MemberName,
 					CountryCode: r.CountryCode,
+					Asn:         r.Asn,
+					NetworkName: r.NetworkName,
+					CountryName: r.CountryName,
 					Hits:        r.Hits,
-				}
-				if r.MemberName.Valid {
-					res.MemberName = r.MemberName.String
-				}
-				results = append(results, res)
+				})
 			}
 		}
-
 	} else if domain != "" {
-		recs, err := dat.GetUsageByDomain(domain, parseDate(sd), parseDate(ed))
+		recs, err := dat.GetUsageByDomain(domain, sTime, eTime)
 		if err != nil {
 			return nil, err
 		}
 		for _, r := range recs {
 			if country == "" || strings.EqualFold(country, r.CountryCode) {
-				res := UsageRecord{
+				results = append(results, UsageRecord{
 					Date:        r.Date,
 					Domain:      r.Domain,
+					MemberName:  r.MemberName,
 					CountryCode: r.CountryCode,
+					Asn:         r.Asn,
+					NetworkName: r.NetworkName,
+					CountryName: r.CountryName,
 					Hits:        r.Hits,
-				}
-				if r.MemberName.Valid {
-					res.MemberName = r.MemberName.String
-				}
-				results = append(results, res)
+				})
 			}
 		}
-
 	} else {
 		// no domain => global query
-		recs, err := dat.GetUsageByCountry(parseDate(sd), parseDate(ed))
+		recs, err := dat.GetUsageByCountry(sTime, eTime)
 		if err != nil {
 			return nil, err
 		}
 		for _, r := range recs {
 			if country == "" || strings.EqualFold(country, r.CountryCode) {
-				res := UsageRecord{
+				results = append(results, UsageRecord{
 					Date:        r.Date,
+					Domain:      r.Domain,
+					MemberName:  r.MemberName,
 					CountryCode: r.CountryCode,
+					Asn:         r.Asn,
+					NetworkName: r.NetworkName,
+					CountryName: r.CountryName,
 					Hits:        r.Hits,
-				}
-				if r.MemberName.Valid {
-					res.MemberName = r.MemberName.String
-				}
-				results = append(results, res)
+				})
 			}
 		}
 	}
@@ -142,11 +145,6 @@ func retrieveLocalUsageRecords(
 		"[NATS] retrieveLocalUsageRecords: returning %d usage records",
 		len(results))
 	return results, nil
-}
-
-func parseDate(d string) time.Time {
-	t, _ := time.Parse("2006-01-02", d)
-	return t
 }
 
 // RequestAllDnsUsage sends a usage request to "dns.usage.getUsage" with a unique inbox.

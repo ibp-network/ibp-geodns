@@ -1,51 +1,40 @@
 package data
 
 import (
-	"database/sql"
 	cfg "ibp-geodns/src/common/config"
 	mysql "ibp-geodns/src/common/data/mysql"
 	log "ibp-geodns/src/common/logging"
 	"time"
 )
 
-// InitOptions allows selective initialization of data subsystems.
+// InitOptions allows selective initialization of data subsystems (caches, etc.).
+// The usage stats flush is now always started unconditionally.
 type InitOptions struct {
 	UseLocalOfficialCaches bool // if true, load/save local+official results
-	UseUsageStats          bool // if true, track usage daily stats
+	UseUsageStats          bool // if true, track usage daily stats (for future checks)
 }
 
 // Init selectively initializes data subsystems based on InitOptions.
 func Init(opts InitOptions) {
 	log.Log(log.Debug, "[data.Init] Starting with options: %+v", opts)
 
-	// Always initialize MySQL (for events, usage records, etc).
+	// Always initialize MySQL (for events, usage records, etc.).
 	go mysql.Init()
 
 	// (1) Set the global flags for saving caches:
 	SetCacheOptions(opts.UseLocalOfficialCaches, opts.UseUsageStats)
 
-	// Initialize the global Stats struct (IPv4)
-	Stats = &StatMap{
-		Data: make(map[string]map[string]*DailyStats),
-	}
-
-	// Initialize the global Stats6 struct (IPv6)
-	Stats6 = &StatMap{
-		Data: make(map[string]map[string]*DailyStats),
-	}
-
-	// If we have local/official caching or usage stats, load them now, then save them.
-	if opts.UseLocalOfficialCaches || opts.UseUsageStats {
+	// Load caches if needed (local official caches).
+	if opts.UseLocalOfficialCaches {
 		LoadAllCaches()
 		SaveAllCaches()
-		// auto-save official & local caches
+		// auto-save official & local caches periodically
 		go startAutoUpdate()
 	}
 
-	// If usage is needed, start daily usage processing
-	if opts.UseUsageStats {
-		go startDailyUsageProcessor()
-	}
+	// (2) Always start the periodic usage flush every 5 minutes, regardless of UseUsageStats.
+	// The daily flush for "yesterday" is removed since we flush frequently.
+	go startPeriodicUsageFlush()
 }
 
 // MemberEnable sets Override=false on a member and records an event.
@@ -167,130 +156,13 @@ func startAutoUpdate() {
 	}()
 }
 
-// startDailyUsageProcessor processes daily usage at 00:05 UTC each day.
-func startDailyUsageProcessor() {
-	go func() {
-		for {
-			now := time.Now().UTC()
-			// Wait until next 00:05 UTC
-			next := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 5, 0, 0, time.UTC)
-			time.Sleep(time.Until(next))
-
-			// We process usage for "yesterday"
-			y := now.AddDate(0, 0, -1).Format("2006-01-02")
-			log.Log(log.Info, "startDailyUsageProcessor: processing daily usage for %s", y)
-
-			ProcessDailyUsage(y)
-		}
-	}()
-}
-
-// ProcessDailyUsage handles both IPv4 and IPv6 stats for the given date.
-func ProcessDailyUsage(date string) {
-	processDailyUsageV4(date)
-	processDailyUsageV6(date)
-}
-
-// processDailyUsageV4 writes IPv4 stats from memory to usage_daily in DB.
-func processDailyUsageV4(date string) {
-	Stats.Mu.Lock()
-	dailyMap, ok := Stats.Data[date]
-	if !ok {
-		log.Log(log.Info, "processDailyUsageV4: no IPv4 usage found for %s", date)
-		Stats.Mu.Unlock()
-		return
+// startPeriodicUsageFlush flushes the current day's usage to the DB every 5 minutes.
+func startPeriodicUsageFlush() {
+	ticker := time.NewTicker(5 * time.Minute)
+	for {
+		<-ticker.C
+		today := time.Now().UTC().Format("2006-01-02")
+		log.Log(log.Info, "[startPeriodicUsageFlush] Flushing usage for today: %s", today)
+		FlushUsageToDatabase(today)
 	}
-
-	log.Log(log.Info, "processDailyUsageV4: found IPv4 usage entries for date %s", date)
-
-	for domain, dailyStats := range dailyMap {
-		// Overall usage: no specific member => (none)
-		for countryCode, hits := range dailyStats.ClientStats.Countries {
-			rec := UsageRecord{
-				Date:        date,
-				Domain:      domain,
-				MemberName:  sql.NullString{Valid: false},
-				CountryCode: countryCode,
-				Hits:        hits,
-			}
-			err := UpsertUsageRecord(rec)
-			if err != nil {
-				log.Log(log.Error, "processDailyUsageV4 upsert error: %v", err)
-			}
-		}
-		// Per-member usage
-		for memberName, ms := range dailyStats.MemberStats {
-			for countryCode, hits := range ms.Countries {
-				rec := UsageRecord{
-					Date:        date,
-					Domain:      domain,
-					MemberName:  sql.NullString{Valid: true, String: memberName},
-					CountryCode: countryCode,
-					Hits:        hits,
-				}
-				err := UpsertUsageRecord(rec)
-				if err != nil {
-					log.Log(log.Error, "processDailyUsageV4 upsert error: %v", err)
-				}
-			}
-		}
-	}
-
-	// Remove processed data from memory
-	delete(Stats.Data, date)
-	Stats.Mu.Unlock()
-
-	log.Log(log.Info, "processDailyUsageV4: done writing IPv4 usage for %s", date)
-}
-
-// processDailyUsageV6 writes IPv6 stats from memory to usage_daily_v6 in DB.
-func processDailyUsageV6(date string) {
-	Stats6.Mu.Lock()
-	dailyMap, ok := Stats6.Data[date]
-	if !ok {
-		log.Log(log.Info, "processDailyUsageV6: no IPv6 usage found for %s", date)
-		Stats6.Mu.Unlock()
-		return
-	}
-
-	log.Log(log.Info, "processDailyUsageV6: found IPv6 usage entries for date %s", date)
-
-	for domain, dailyStats := range dailyMap {
-		// Overall usage: no specific member => (none)
-		for countryCode, hits := range dailyStats.ClientStats.Countries {
-			rec := UsageRecord{
-				Date:        date,
-				Domain:      domain,
-				MemberName:  sql.NullString{Valid: false},
-				CountryCode: countryCode,
-				Hits:        hits,
-			}
-			err := UpsertUsageRecordV6(rec)
-			if err != nil {
-				log.Log(log.Error, "processDailyUsageV6 upsert error: %v", err)
-			}
-		}
-		// Per-member usage
-		for memberName, ms := range dailyStats.MemberStats {
-			for countryCode, hits := range ms.Countries {
-				rec := UsageRecord{
-					Date:        date,
-					Domain:      domain,
-					MemberName:  sql.NullString{Valid: true, String: memberName},
-					CountryCode: countryCode,
-					Hits:        hits,
-				}
-				err := UpsertUsageRecordV6(rec)
-				if err != nil {
-					log.Log(log.Error, "processDailyUsageV6 upsert error: %v", err)
-				}
-			}
-		}
-	}
-
-	// Remove processed data from memory
-	delete(Stats6.Data, date)
-	Stats6.Mu.Unlock()
-
-	log.Log(log.Info, "processDailyUsageV6: done writing IPv6 usage for %s", date)
 }

@@ -21,7 +21,7 @@ var (
 const (
 	officialCacheFile = "official.cache.json"
 	localCacheFile    = "local.cache.json"
-	statsCacheFile    = "stats.cache.json"
+	// statsCacheFile  = "stats.cache.json" -- Removed usage, no longer used
 )
 
 // SetCacheOptions is called from data.Init() to indicate whether
@@ -88,12 +88,11 @@ func SaveCache(filePath string, data interface{}) error {
 	return nil
 }
 
-// LoadAllCaches selectively loads Official, Local, and Stats caches
-// depending on allowLocalOfficial & allowStats.
+// LoadAllCaches selectively loads Official, Local caches depending on allowLocalOfficial.
+// Stats caching is removed, so we do not load stats data from disk.
 func LoadAllCaches() {
 	muCacheOptions.Lock()
 	useLocal := allowLocalOfficial
-	useStats := allowStats
 	muCacheOptions.Unlock()
 
 	c := cfg.GetConfig()
@@ -101,7 +100,7 @@ func LoadAllCaches() {
 
 	officialFile := filepath.Join(workDir, "tmp", officialCacheFile)
 	localFile := filepath.Join(workDir, "tmp", localCacheFile)
-	statsFile := filepath.Join(workDir, "tmp", statsCacheFile)
+	// statsFile := filepath.Join(workDir, "tmp", statsCacheFile)
 
 	if useLocal {
 		log.Log(log.Debug, "[LoadAllCaches] Loading official cache from %s", officialFile)
@@ -119,22 +118,17 @@ func LoadAllCaches() {
 		Local.Mu.Unlock()
 	}
 
-	if useStats {
-		log.Log(log.Debug, "[LoadAllCaches] Loading stats cache from %s", statsFile)
-		Stats.Mu.Lock()
-		if err := LoadCache(statsFile, &Stats.Data); err != nil {
-			log.Log(log.Error, "[LoadAllCaches] Stats load error: %v", err)
-		}
-		Stats.Mu.Unlock()
-	}
+	// We no longer load or save stats from disk, so ignore the old logic here.
 }
 
+// SaveAllCaches saves the Official and Local caches if enabled.
+// We do not save usage stats to disk anymore.
 func SaveAllCaches() {
 	log.Log(log.Debug, "[SaveAllCaches] Entry: Attempting to save caches...")
 
 	muCacheOptions.Lock()
 	useLocal := allowLocalOfficial
-	useStats := allowStats
+	// useStats := allowStats  (no effect now)
 	muCacheOptions.Unlock()
 
 	c := cfg.GetConfig()
@@ -142,7 +136,7 @@ func SaveAllCaches() {
 
 	officialFile := filepath.Join(workDir, "tmp", officialCacheFile)
 	localFile := filepath.Join(workDir, "tmp", localCacheFile)
-	statsFile := filepath.Join(workDir, "tmp", statsCacheFile)
+	// statsFile := filepath.Join(workDir, "tmp", statsCacheFile)
 
 	if useLocal {
 		Official.Mu.Lock()
@@ -167,16 +161,6 @@ func SaveAllCaches() {
 		Local.Mu.Unlock()
 		if err != nil {
 			log.Log(log.Error, "[SaveAllCaches] Local save error: %v", err)
-		}
-	}
-
-	if useStats {
-		Stats.Mu.Lock()
-		log.Log(log.Debug, "[SaveAllCaches] stats: date entries = %d", len(Stats.Data))
-		err := SaveCache(statsFile, &Stats.Data)
-		Stats.Mu.Unlock()
-		if err != nil {
-			log.Log(log.Error, "[SaveAllCaches] Stats save error: %v", err)
 		}
 	}
 

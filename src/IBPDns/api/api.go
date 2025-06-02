@@ -61,7 +61,7 @@ func handleManualUsageProcess(w http.ResponseWriter, r *http.Request) {
 	log.Log(log.Info, "Manual usage processing triggered for date: %s", dateParam)
 
 	// Run usage processing for the specified date
-	dat.ProcessDailyUsage(dateParam)
+	dat.FlushUsageToDatabase(dateParam)
 
 	// Respond with a JSON status
 	w.Header().Set("Content-Type", "application/json")

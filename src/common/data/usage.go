@@ -1,71 +1,211 @@
 package data
 
 import (
+	"database/sql"
+	"fmt"
 	"time"
 
 	mysql "ibp-geodns/src/common/data/mysql"
 )
 
-// We make our UsageRecord an alias of mysql.UsageRecord.
-// This way, "rec" is exactly the same type as "mysql.UsageRecord".
-type UsageRecord = mysql.UsageRecord
-
-// --------------------------------------------------------------------
-// IPv4 usage
-// --------------------------------------------------------------------
-
-// UpsertUsageRecord stores an IPv4 usage record into usage_daily.
-func UpsertUsageRecord(rec UsageRecord) error {
-	return mysql.UpsertUsageRecord(rec)
+// UsageRecord now includes all fields that match usage_daily structure.
+type UsageRecord struct {
+	Date        string
+	Domain      string
+	MemberName  string
+	CountryCode string
+	Asn         string
+	NetworkName string
+	CountryName string
+	Hits        int
 }
 
-// GetUsageByDomain fetches IPv4 usage records for a domain in [start, end].
+// UpsertUsageRecord stores a usage record into usage_daily.
+func UpsertUsageRecord(rec UsageRecord) error {
+	q := `
+INSERT INTO usage_daily
+(usage_date, domain, member_name, country_code, asn, network_name, country_name, hits)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+  hits = hits + VALUES(hits)
+`
+	_, err := mysql.DB.Exec(
+		q,
+		rec.Date,
+		rec.Domain,
+		nullOrString(rec.MemberName),
+		nullOrString(rec.CountryCode),
+		nullOrString(rec.Asn),
+		nullOrString(rec.NetworkName),
+		nullOrString(rec.CountryName),
+		rec.Hits,
+	)
+	if err != nil {
+		return fmt.Errorf("failed UpsertUsageRecord: %w", err)
+	}
+	return nil
+}
+
+// GetUsageByDomain returns usage records for a domain in [startDate, endDate].
 func GetUsageByDomain(domain string, start, end time.Time) ([]UsageRecord, error) {
 	startDate := start.Format("2006-01-02")
 	endDate := end.Format("2006-01-02")
-	return mysql.GetUsageByDomain(domain, startDate, endDate)
+
+	q := `
+SELECT
+  usage_date,
+  domain,
+  IFNULL(member_name,'') AS member_name,
+  IFNULL(country_code,'') AS country_code,
+  IFNULL(asn,'') as asn,
+  IFNULL(network_name,'') as network_name,
+  IFNULL(country_name,'') as country_name,
+  SUM(hits) AS hits
+FROM usage_daily
+WHERE domain = ?
+  AND usage_date BETWEEN ? AND ?
+GROUP BY usage_date, domain, member_name, country_code, asn, network_name, country_name
+ORDER BY usage_date
+`
+	rows, err := mysql.DB.Query(q, domain, startDate, endDate)
+	if err != nil {
+		return nil, fmt.Errorf("GetUsageByDomain query error: %w", err)
+	}
+	defer rows.Close()
+
+	var results []UsageRecord
+	for rows.Next() {
+		var r UsageRecord
+		var mName, cCode, a, netName, cName sql.NullString
+
+		var dateStr, dom string
+		var hits int
+
+		if err := rows.Scan(&dateStr, &dom, &mName, &cCode, &a, &netName, &cName, &hits); err != nil {
+			return nil, fmt.Errorf("GetUsageByDomain scan error: %w", err)
+		}
+		r.Date = dateStr
+		r.Domain = dom
+		r.MemberName = mName.String
+		r.CountryCode = cCode.String
+		r.Asn = a.String
+		r.NetworkName = netName.String
+		r.CountryName = cName.String
+		r.Hits = hits
+
+		results = append(results, r)
+	}
+	return results, nil
 }
 
-// GetUsageByMember fetches IPv4 usage records for a domain+member in [start, end].
+// GetUsageByMember fetches usage records for a domain+member in [start, end].
 func GetUsageByMember(domain, member string, start, end time.Time) ([]UsageRecord, error) {
 	startDate := start.Format("2006-01-02")
 	endDate := end.Format("2006-01-02")
-	return mysql.GetUsageByMember(domain, member, startDate, endDate)
+
+	q := `
+SELECT
+  usage_date,
+  domain,
+  IFNULL(member_name,'') AS member_name,
+  IFNULL(country_code,'') as country_code,
+  IFNULL(asn,'') as asn,
+  IFNULL(network_name,'') as network_name,
+  IFNULL(country_name,'') as country_name,
+  SUM(hits) AS hits
+FROM usage_daily
+WHERE domain = ?
+  AND member_name = ?
+  AND usage_date BETWEEN ? AND ?
+GROUP BY usage_date, domain, member_name, country_code, asn, network_name, country_name
+ORDER BY usage_date
+`
+	rows, err := mysql.DB.Query(q, domain, member, startDate, endDate)
+	if err != nil {
+		return nil, fmt.Errorf("GetUsageByMember query error: %w", err)
+	}
+	defer rows.Close()
+
+	var results []UsageRecord
+	for rows.Next() {
+		var r UsageRecord
+		var mName, cCode, a, netName, cName sql.NullString
+
+		var dateStr, dom string
+		var hits int
+
+		if err := rows.Scan(&dateStr, &dom, &mName, &cCode, &a, &netName, &cName, &hits); err != nil {
+			return nil, fmt.Errorf("GetUsageByMember scan error: %w", err)
+		}
+		r.Date = dateStr
+		r.Domain = dom
+		r.MemberName = mName.String
+		r.CountryCode = cCode.String
+		r.Asn = a.String
+		r.NetworkName = netName.String
+		r.CountryName = cName.String
+		r.Hits = hits
+
+		results = append(results, r)
+	}
+	return results, nil
 }
 
-// GetUsageByCountry fetches IPv4 usage grouped by date/domain/member/country in [start, end].
+// GetUsageByCountry fetches usage in [start, end], grouped by date/domain/member/country/etc.
 func GetUsageByCountry(start, end time.Time) ([]UsageRecord, error) {
 	startDate := start.Format("2006-01-02")
 	endDate := end.Format("2006-01-02")
-	return mysql.GetUsageByCountry(startDate, endDate)
+
+	q := `
+SELECT
+  usage_date,
+  domain,
+  IFNULL(member_name,'') AS member_name,
+  IFNULL(country_code,'') as country_code,
+  IFNULL(asn,'') as asn,
+  IFNULL(network_name,'') as network_name,
+  IFNULL(country_name,'') as country_name,
+  SUM(hits) AS hits
+FROM usage_daily
+WHERE usage_date BETWEEN ? AND ?
+GROUP BY usage_date, domain, member_name, country_code, asn, network_name, country_name
+ORDER BY usage_date
+`
+	rows, err := mysql.DB.Query(q, startDate, endDate)
+	if err != nil {
+		return nil, fmt.Errorf("GetUsageByCountry query error: %w", err)
+	}
+	defer rows.Close()
+
+	var results []UsageRecord
+	for rows.Next() {
+		var r UsageRecord
+		var mName, cCode, a, netName, cName sql.NullString
+
+		var dateStr, dom string
+		var hits int
+
+		if err := rows.Scan(&dateStr, &dom, &mName, &cCode, &a, &netName, &cName, &hits); err != nil {
+			return nil, fmt.Errorf("GetUsageByCountry scan error: %w", err)
+		}
+		r.Date = dateStr
+		r.Domain = dom
+		r.MemberName = mName.String
+		r.CountryCode = cCode.String
+		r.Asn = a.String
+		r.NetworkName = netName.String
+		r.CountryName = cName.String
+		r.Hits = hits
+
+		results = append(results, r)
+	}
+	return results, nil
 }
 
-// --------------------------------------------------------------------
-// IPv6 usage
-// --------------------------------------------------------------------
-
-// UpsertUsageRecordV6 stores an IPv6 usage record into usage_daily_v6.
-func UpsertUsageRecordV6(rec UsageRecord) error {
-	return mysql.UpsertUsageRecordV6(rec)
-}
-
-// GetUsageByDomainV6 fetches IPv6 usage records for a domain in [start, end].
-func GetUsageByDomainV6(domain string, start, end time.Time) ([]UsageRecord, error) {
-	startDate := start.Format("2006-01-02")
-	endDate := end.Format("2006-01-02")
-	return mysql.GetUsageByDomainV6(domain, startDate, endDate)
-}
-
-// GetUsageByMemberV6 fetches IPv6 usage records for a domain+member in [start, end].
-func GetUsageByMemberV6(domain, member string, start, end time.Time) ([]UsageRecord, error) {
-	startDate := start.Format("2006-01-02")
-	endDate := end.Format("2006-01-02")
-	return mysql.GetUsageByMemberV6(domain, member, startDate, endDate)
-}
-
-// GetUsageByCountryV6 fetches IPv6 usage grouped by date/domain/member/country in [start, end].
-func GetUsageByCountryV6(start, end time.Time) ([]UsageRecord, error) {
-	startDate := start.Format("2006-01-02")
-	endDate := end.Format("2006-01-02")
-	return mysql.GetUsageByCountryV6(startDate, endDate)
+// nullOrString returns nil if the input is empty, otherwise returns the string.
+func nullOrString(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
 }
