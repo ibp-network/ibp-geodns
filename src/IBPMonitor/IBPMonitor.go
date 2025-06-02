@@ -19,7 +19,7 @@ var version = "0.3.1"
 func main() {
 	log.Log(log.Info, "IBP-GeoDNS serviceMonitor v%s starting...", version)
 
-	cfgFile := flag.String("config", "config.json", "Path to the configuration file")
+	cfgFile := flag.String("config", "ibpmonitor.json", "Path to the configuration file")
 	flag.Parse()
 
 	if _, err := os.Stat(*cfgFile); os.IsNotExist(err) {

@@ -16,7 +16,7 @@ var version = "0.3.1"
 func main() {
 	log.Log(log.Info, "IBP-GeoDNS Collator v%s starting...", version)
 
-	configPath := flag.String("config", "config.json", "Path to config file")
+	configPath := flag.String("config", "ibpcollator.json", "Path to config file")
 	flag.Parse()
 
 	if _, err := os.Stat(*configPath); os.IsNotExist(err) {
