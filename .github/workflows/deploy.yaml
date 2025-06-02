@@ -1,0 +1,94 @@
+name: ${{ github.event.inputs.organization }} deploys geodns ${{ github.event.inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      organization:
+        description: 'Organization'
+        required: true
+        type: choice
+        options:
+          - ROTKO
+          - STAKEPLUS
+      server:
+        description: 'Target server'
+        required: true
+      version:
+        description: 'Git ref to deploy (tag/branch/commit)'
+        required: true
+        default: 'main'
+      restart_services:
+        description: 'Restart services after deploy'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.version }}
+    
+    - uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+    
+    - name: Build and Deploy
+      env:
+        DEPLOY_KEY_NAME: DEPLOY_KEY_${{ github.event.inputs.organization }}
+      run: |
+        set -o errexit -o nounset -o pipefail
+        
+        # Get version name
+        version="${{ inputs.version }}"
+        if [[ "$version" == "main" ]] || [[ "$version" == "master" ]]; then
+          version="$(git rev-parse --short HEAD)"
+        fi
+        
+        echo "Building and deploying version: $version"
+        
+        # Build
+        go mod tidy
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o IBPDns src/IBPDns/IBPDns.go
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o IBPMonitor src/IBPMonitor/IBPMonitor.go
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o IBPCollator src/IBPCollator/IBPCollator.go
+        
+        # Setup SSH
+        mkdir -p ~/.ssh
+        echo "${{ secrets[env.DEPLOY_KEY_NAME] }}" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        ssh-keyscan -H ${{ inputs.server }} >> ~/.ssh/known_hosts
+        
+        # Deploy to server
+        echo "Deploying to ${{ inputs.server }}..."
+        ssh geodns@${{ inputs.server }} "mkdir -p /opt/geodns/{$version,bin}"
+        rsync --chmod=755 IBPDns IBPMonitor IBPCollator geodns@${{ inputs.server }}:/opt/geodns/$version/
+        
+        # Update symlinks
+        ssh geodns@${{ inputs.server }} "
+          cd /opt/geodns
+          # Save current version for rollback
+          readlink -f bin/IBPDns 2>/dev/null | xargs basename > .previous-version 2>/dev/null || true
+          
+          # Update symlinks
+          ln -sfn $version/IBPDns bin/IBPDns
+          ln -sfn $version/IBPMonitor bin/IBPMonitor
+          ln -sfn $version/IBPCollator bin/IBPCollator
+          
+          echo 'Deployed version $version successfully'
+        "
+
+        # Restart services if requested
+        if [[ "${{ inputs.restart_services }}" == "true" ]]; then
+          echo "Restarting services..."
+          ssh geodns@${{ inputs.server }} "
+            # kill services to restart
+            pkill -u geodns -x IBPDns || true
+            pkill -u geodns -x IBPMonitor || true
+            pkill -u geodns -x IBPCollator || true
+          "
+        fi
+        
+        echo "Deployment completed!"
