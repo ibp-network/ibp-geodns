@@ -1,6 +1,8 @@
 package api
 
-import "strings"
+import (
+	"strings"
+)
 
 // IsMemberOnlineForDomain checks the *official* snapshot for a member’s site/domain/endpoint status
 func IsMemberOnlineForDomain(domain, memberName string) bool {
