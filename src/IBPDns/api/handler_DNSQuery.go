@@ -107,7 +107,7 @@ func handle_DNSQuery(req Request) Response {
 	}
 
 	if len(records) == 0 {
-		log.Log(log.Warn,
+		log.Log(log.Debug,
 			"handle_DNSQuery: returning 0 records for qname=%s qtype=%s => NXDOMAIN or REFUSE",
 			qname, qtype,
 		)
