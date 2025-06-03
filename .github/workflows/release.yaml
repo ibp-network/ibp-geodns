@@ -7,23 +7,54 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    
     - uses: actions/setup-go@v5
       with:
         go-version: '1.24'
-    - name: Get dependencies
-      run: go mod tidy
-    - name: Build
+    
+    - name: Verify dependencies
+      run: |
+        go mod download
+        go mod verify
+    
+    - name: Build all architectures
       run: |
         set -o errexit -o nounset -o pipefail
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o IBPDns src/IBPDns/IBPDns.go
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o IBPMonitor src/IBPMonitor/IBPMonitor.go
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o IBPCollator src/IBPCollator/IBPCollator.go
-        sha256sum IBPDns IBPMonitor IBPCollator > checksums.txt
+        
+        export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
+        
+        for arch in amd64 arm64; do
+          echo "Building for linux/$arch..."
+          
+          CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build \
+            -trimpath -ldflags="-s -w -buildid=" \
+            -o IBPDns-linux-$arch src/IBPDns/IBPDns.go
+            
+          CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build \
+            -trimpath -ldflags="-s -w -buildid=" \
+            -o IBPMonitor-linux-$arch src/IBPMonitor/IBPMonitor.go
+            
+          CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build \
+            -trimpath -ldflags="-s -w -buildid=" \
+            -o IBPCollator-linux-$arch src/IBPCollator/IBPCollator.go
+        done
+        
+        sha256sum IBPDns-* IBPMonitor-* IBPCollator-* > checksums.txt
+        
+        for arch in amd64 arm64; do
+          tar czf geodns-linux-$arch.tar.gz \
+            IBPDns-linux-$arch \
+            IBPMonitor-linux-$arch \
+            IBPCollator-linux-$arch \
+            checksums.txt
+        done
+    
     - name: Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          IBPDns
-          IBPMonitor
-          IBPCollator
+          geodns-linux-*.tar.gz
+          IBPDns-linux-*
+          IBPMonitor-linux-*
+          IBPCollator-linux-*
           checksums.txt

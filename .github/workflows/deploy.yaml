@@ -1,0 +1,160 @@
+name: ${{ github.event.inputs.organization }} deploys geodns ${{ github.event.inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      organization:
+        description: 'Organization'
+        required: true
+        type: choice
+        options:
+          - ROTKO
+          - STAKEPLUS
+      server:
+        description: 'Target server'
+        required: true
+      version:
+        description: 'Git ref to deploy (tag/branch/commit)'
+        required: true
+        default: 'main'
+      restart_services:
+        description: 'Restart services after deploy'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.version }}
+
+    - uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+
+    - name: Build
+      run: |
+        set -o errexit -o nounset -o pipefail
+
+        # Lock dependencies
+        go mod download
+        go mod verify
+
+        # Build with reproducible flags
+        export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -buildid=" -o IBPDns src/IBPDns/IBPDns.go
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -buildid=" -o IBPMonitor src/IBPMonitor/IBPMonitor.go
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -buildid=" -o IBPCollator src/IBPCollator/IBPCollator.go
+
+        # Generate checksums
+        sha256sum IBPDns IBPMonitor IBPCollator > checksums.txt
+
+    - name: Deploy
+      env:
+        DEPLOY_KEY_NAME: DEPLOY_KEY_${{ github.event.inputs.organization }}
+      run: |
+        set -o errexit -o nounset -o pipefail
+
+        # Get version name
+        version="${{ inputs.version }}"
+        if [[ "$version" == "main" ]] || [[ "$version" == "master" ]]; then
+          version="$(git rev-parse --short HEAD)"
+        fi
+
+        echo "Deploying version: $version"
+
+        # Setup SSH
+        mkdir -p ~/.ssh
+        echo "${{ secrets[env.DEPLOY_KEY_NAME] }}" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        ssh-keyscan -H ${{ inputs.server }} >> ~/.ssh/known_hosts
+
+        # Deploy atomically
+        ssh geodns@${{ inputs.server }} "
+          set -e
+          # Create staging directory
+          mkdir -p /opt/geodns/.staging/$version
+        "
+
+        # Transfer files
+        rsync --chmod=755 IBPDns IBPMonitor IBPCollator checksums.txt geodns@${{ inputs.server }}:/opt/geodns/.staging/$version/
+
+        # Atomic deployment with health checks
+        ssh geodns@${{ inputs.server }} "
+          set -e
+          cd /opt/geodns
+
+          # Verify checksums
+          cd .staging/$version
+          sha256sum -c checksums.txt
+          cd /opt/geodns
+
+          # Save current version for rollback
+          if [[ -L bin/IBPDns ]]; then
+            readlink bin/IBPDns | xargs dirname | xargs basename > .previous-version
+          fi
+
+          # Move staging to final location
+          mv .staging/$version $version
+
+          # Update symlinks atomically
+          ln -sfn ../$version/IBPDns bin/IBPDns.new
+          ln -sfn ../$version/IBPMonitor bin/IBPMonitor.new
+          ln -sfn ../$version/IBPCollator bin/IBPCollator.new
+
+          # Atomic rename
+          mv -Tf bin/IBPDns.new bin/IBPDns
+          mv -Tf bin/IBPMonitor.new bin/IBPMonitor
+          mv -Tf bin/IBPCollator.new bin/IBPCollator
+
+          echo 'Binaries deployed successfully'
+        "
+
+        # Restart services if requested
+        if [[ "${{ inputs.restart_services }}" == "true" ]]; then
+          echo "Restarting services with systemd..."
+          ssh geodns@${{ inputs.server }} "
+            set -e
+            # Restart services properly
+            systemctl --user daemon-reload
+            systemctl --user restart ibpdns ibpmonitor ibpcollator
+
+            # Wait for services to start
+            sleep 2
+
+            # Verify services are running
+            systemctl --user is-active ibpdns ibpmonitor ibpcollator
+          "
+        fi
+
+        echo "Deployment completed successfully!"
+
+    - name: Rollback on failure
+      if: failure() && github.event.inputs.restart_services == 'true'
+      env:
+        DEPLOY_KEY_NAME: DEPLOY_KEY_${{ github.event.inputs.organization }}
+      run: |
+        echo "Deployment failed, attempting rollback..."
+        ssh geodns@${{ inputs.server }} "
+          set -e
+          cd /opt/geodns
+          if [[ -f .previous-version ]]; then
+            prev_version=\$(cat .previous-version)
+            echo \"Rolling back to version: \$prev_version\"
+            
+            # Restore previous symlinks
+            ln -sfn ../\$prev_version/IBPDns bin/IBPDns
+            ln -sfn ../\$prev_version/IBPMonitor bin/IBPMonitor
+            ln -sfn ../\$prev_version/IBPCollator bin/IBPCollator
+            
+            # Restart services
+            systemctl --user restart ibpdns ibpmonitor ibpcollator
+            
+            echo 'Rollback completed'
+          else
+            echo 'No previous version found for rollback'
+          fi
+        "
