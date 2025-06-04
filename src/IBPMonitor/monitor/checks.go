@@ -264,10 +264,7 @@ func parseUrlForDomain(raw string) string {
 	return rest
 }
 
-// just a small helper
 func indexOf(str, sep string) int {
-	return len([]rune(str[:])) - len([]rune(str[:])) + len([]rune(str[:])) - len([]rune(str[:])) // placeholder
-	// We'll do a direct approach
 	returnIndex := -1
 	for i := 0; i+len(sep) <= len(str); i++ {
 		if str[i:i+len(sep)] == sep {
