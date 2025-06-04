@@ -13,7 +13,6 @@ var Official = OfficialResults{
 	Mu:              sync.RWMutex{},
 }
 
-// Official Results Functions
 func SetOfficialSiteResults(results []SiteResult) {
 	Official.Mu.Lock()
 	defer Official.Mu.Unlock()
@@ -38,62 +37,15 @@ func GetOfficialResults() (sites []SiteResult, domains []DomainResult, endpoints
 	return Official.SiteResults, Official.DomainResults, Official.EndpointResults
 }
 
-// GetOfficialSiteStatus returns the status of a specific site check for a given member.
-func GetOfficialSiteStatus(checkName string, memberName string) (found bool, status bool) {
-	officialSites, _, _ := GetOfficialResults()
-	for _, osr := range officialSites {
-		if osr.Check.Name == checkName {
-			for _, r := range osr.Results {
-				if r.Member.Details.Name == memberName {
-					return true, r.Status
-				}
-			}
-			break
-		}
-	}
-	return false, false
-}
+// Extended site/domain/endpoint updates that include isIPv6
 
-// GetOfficialDomainStatus returns the status of a specific domain check for a given member and domain.
-func GetOfficialDomainStatus(checkName string, memberName string, domain string) (found bool, status bool) {
-	_, officialDomains, _ := GetOfficialResults()
-	for _, od := range officialDomains {
-		if od.Check.Name == checkName && od.Domain == domain {
-			for _, r := range od.Results {
-				if r.Member.Details.Name == memberName {
-					return true, r.Status
-				}
-			}
-			break
-		}
-	}
-	return false, false
-}
-
-// GetOfficialEndpointStatus returns the status of a specific endpoint check for a given member, domain, and endpoint.
-func GetOfficialEndpointStatus(checkName string, memberName string, domain string, endpoint string) (found bool, status bool) {
-	_, _, officialEndpoints := GetOfficialResults()
-	for _, oe := range officialEndpoints {
-		if oe.Check.Name == checkName && oe.RpcUrl == endpoint && oe.Domain == domain {
-			for _, r := range oe.Results {
-				if r.Member.Details.Name == memberName {
-					return true, r.Status
-				}
-			}
-			break
-		}
-	}
-	return false, false
-}
-
-// UpdateOfficialSiteResult updates the official site results for a given check and member.
-func UpdateOfficialSiteResult(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}) {
+func UpdateOfficialSiteResult(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
 	Official.Mu.Lock()
 	defer Official.Mu.Unlock()
 
 	sIndex := -1
 	for i, sr := range Official.SiteResults {
-		if sr.Check.Name == check.Name {
+		if sr.Check.Name == check.Name && sr.IsIPv6 == isIPv6 {
 			sIndex = i
 			break
 		}
@@ -105,22 +57,20 @@ func UpdateOfficialSiteResult(check cfg.Check, member cfg.Member, status bool, e
 		Checktime: time.Now().UTC(),
 		ErrorText: errorMsg,
 		Data:      dataMap,
+		IsIPv6:    isIPv6,
 	}
 
 	if sIndex == -1 {
-		// Create a new site entry
 		Official.SiteResults = append(Official.SiteResults, SiteResult{
 			Check:   check,
+			IsIPv6:  isIPv6,
 			Results: []Result{newResult},
 		})
-
-		// If the site has been offline since startup, record an offline event
 		if !status {
-			go RecordEvent("site", check.Name, member.Details.Name, "", "", false, "Offline since startup", dataMap)
+			go RecordEvent("site", check.Name, member.Details.Name, "", "", false, errorMsg, dataMap, isIPv6)
 		}
 	} else {
 		sr := &Official.SiteResults[sIndex]
-
 		rIndex := -1
 		for i, res := range sr.Results {
 			if res.Member.Details.Name == member.Details.Name {
@@ -130,28 +80,27 @@ func UpdateOfficialSiteResult(check cfg.Check, member cfg.Member, status bool, e
 		}
 		if rIndex == -1 {
 			sr.Results = append(sr.Results, newResult)
-			// If the site has been offline since startup, record an offline event
 			if !status {
-				go RecordEvent("site", check.Name, member.Details.Name, "", "", false, "Offline since startup", dataMap)
+				go RecordEvent("site", check.Name, member.Details.Name, "", "", false, errorMsg, dataMap, isIPv6)
 			}
 		} else {
-			// Log the change if there's a status difference
 			if sr.Results[rIndex].Status != status {
-				go RecordEvent("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
+				go RecordEvent("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap, isIPv6)
 			}
 			sr.Results[rIndex] = newResult
 		}
 	}
 }
 
-// UpdateOfficialDomainResult updates the official domain results for a given check, domain, service, and member.
-func UpdateOfficialDomainResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string, status bool, errorMsg string, dataMap map[string]interface{}) {
+func UpdateOfficialDomainResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string,
+	status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
+
 	Official.Mu.Lock()
 	defer Official.Mu.Unlock()
 
 	dIndex := -1
 	for i, dr := range Official.DomainResults {
-		if dr.Check.Name == check.Name && dr.Domain == domain {
+		if dr.Check.Name == check.Name && dr.Domain == domain && dr.IsIPv6 == isIPv6 {
 			dIndex = i
 			break
 		}
@@ -163,24 +112,22 @@ func UpdateOfficialDomainResult(check cfg.Check, member cfg.Member, service cfg.
 		Checktime: time.Now().UTC(),
 		ErrorText: errorMsg,
 		Data:      dataMap,
+		IsIPv6:    isIPv6,
 	}
 
 	if dIndex == -1 {
-		// Create a new domain entry
 		Official.DomainResults = append(Official.DomainResults, DomainResult{
 			Check:   check,
 			Service: service,
 			Domain:  domain,
+			IsIPv6:  isIPv6,
 			Results: []Result{newResult},
 		})
-
-		// If the domain has been offline since startup, record an offline event
 		if !status {
-			go RecordEvent("domain", check.Name, member.Details.Name, domain, "", false, "Offline since startup", dataMap)
+			go RecordEvent("domain", check.Name, member.Details.Name, domain, "", false, "Offline since startup", dataMap, isIPv6)
 		}
 	} else {
 		dr := &Official.DomainResults[dIndex]
-
 		rIndex := -1
 		for i, res := range dr.Results {
 			if res.Member.Details.Name == member.Details.Name {
@@ -190,28 +137,27 @@ func UpdateOfficialDomainResult(check cfg.Check, member cfg.Member, service cfg.
 		}
 		if rIndex == -1 {
 			dr.Results = append(dr.Results, newResult)
-			// If the domain has been offline since startup, record an offline event
 			if !status {
-				go RecordEvent("domain", check.Name, member.Details.Name, domain, "", false, "Offline since startup", dataMap)
+				go RecordEvent("domain", check.Name, member.Details.Name, domain, "", false, "Offline since startup", dataMap, isIPv6)
 			}
 		} else {
-			// Log the change if there's a status difference
 			if dr.Results[rIndex].Status != status {
-				go RecordEvent("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
+				go RecordEvent("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap, isIPv6)
 			}
 			dr.Results[rIndex] = newResult
 		}
 	}
 }
 
-// UpdateOfficialEndpointResult updates the official endpoint results for a given check, endpoint, service, and member.
-func UpdateOfficialEndpointResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string, endpoint string, status bool, errorMsg string, dataMap map[string]interface{}) {
+func UpdateOfficialEndpointResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string, endpoint string,
+	status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
+
 	Official.Mu.Lock()
 	defer Official.Mu.Unlock()
 
 	eIndex := -1
 	for i, er := range Official.EndpointResults {
-		if er.Check.Name == check.Name && er.Domain == domain && er.RpcUrl == endpoint {
+		if er.Check.Name == check.Name && er.Domain == domain && er.RpcUrl == endpoint && er.IsIPv6 == isIPv6 {
 			eIndex = i
 			break
 		}
@@ -223,25 +169,23 @@ func UpdateOfficialEndpointResult(check cfg.Check, member cfg.Member, service cf
 		Checktime: time.Now().UTC(),
 		ErrorText: errorMsg,
 		Data:      dataMap,
+		IsIPv6:    isIPv6,
 	}
 
 	if eIndex == -1 {
-		// Create a new endpoint entry
 		Official.EndpointResults = append(Official.EndpointResults, EndpointResult{
 			Check:   check,
 			Service: service,
 			RpcUrl:  endpoint,
 			Domain:  domain,
+			IsIPv6:  isIPv6,
 			Results: []Result{newResult},
 		})
-
-		// If the endpoint has been offline since startup, record an offline event
 		if !status {
-			go RecordEvent("endpoint", check.Name, member.Details.Name, domain, endpoint, false, "Offline since startup", dataMap)
+			go RecordEvent("endpoint", check.Name, member.Details.Name, domain, endpoint, false, "Offline since startup", dataMap, isIPv6)
 		}
 	} else {
 		er := &Official.EndpointResults[eIndex]
-
 		rIndex := -1
 		for i, res := range er.Results {
 			if res.Member.Details.Name == member.Details.Name {
@@ -251,16 +195,57 @@ func UpdateOfficialEndpointResult(check cfg.Check, member cfg.Member, service cf
 		}
 		if rIndex == -1 {
 			er.Results = append(er.Results, newResult)
-			// If the endpoint has been offline since startup, record an offline event
 			if !status {
-				go RecordEvent("endpoint", check.Name, member.Details.Name, domain, endpoint, false, "Offline since startup", dataMap)
+				go RecordEvent("endpoint", check.Name, member.Details.Name, domain, endpoint, false, "Offline since startup", dataMap, isIPv6)
 			}
 		} else {
-			// Log the change if there's a status difference
 			if er.Results[rIndex].Status != status {
-				go RecordEvent("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap)
+				go RecordEvent("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap, isIPv6)
 			}
 			er.Results[rIndex] = newResult
 		}
 	}
+}
+
+// Additional queries for official isIPv6
+func GetOfficialSiteStatus(checkName, memberName string, isIPv6 bool) (bool, bool) {
+	officialSites, _, _ := GetOfficialResults()
+	for _, osr := range officialSites {
+		if osr.Check.Name == checkName && osr.IsIPv6 == isIPv6 {
+			for _, r := range osr.Results {
+				if r.Member.Details.Name == memberName {
+					return true, r.Status
+				}
+			}
+		}
+	}
+	return false, false
+}
+
+func GetOfficialDomainStatus(checkName, memberName, domain string, isIPv6 bool) (bool, bool) {
+	_, officialDomains, _ := GetOfficialResults()
+	for _, od := range officialDomains {
+		if od.Check.Name == checkName && od.Domain == domain && od.IsIPv6 == isIPv6 {
+			for _, r := range od.Results {
+				if r.Member.Details.Name == memberName {
+					return true, r.Status
+				}
+			}
+		}
+	}
+	return false, false
+}
+
+func GetOfficialEndpointStatus(checkName, memberName, domain, endpoint string, isIPv6 bool) (bool, bool) {
+	_, _, officialEndpoints := GetOfficialResults()
+	for _, oe := range officialEndpoints {
+		if oe.Check.Name == checkName && oe.Domain == domain && oe.RpcUrl == endpoint && oe.IsIPv6 == isIPv6 {
+			for _, r := range oe.Results {
+				if r.Member.Details.Name == memberName {
+					return true, r.Status
+				}
+			}
+		}
+	}
+	return false, false
 }

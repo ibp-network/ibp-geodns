@@ -46,7 +46,8 @@ func MemberEnable(name string) {
 	}
 	member.Override = false
 	cfg.SetMember(name, member)
-	RecordEvent("site", "MemberEnable", name, "", "", true, "Member has disabled override.", nil)
+	RecordEvent("site", "MemberEnable", name, "", "", true, "Member has disabled override.", nil, false)
+	RecordEvent("site", "MemberEnable", name, "", "", true, "Member has disabled override.", nil, true)
 }
 
 // MemberDisable sets Override=true on a member and records an event.
@@ -58,7 +59,8 @@ func MemberDisable(name string) {
 	}
 	member.Override = true
 	cfg.SetMember(name, member)
-	RecordEvent("site", "MemberDisable", name, "", "", false, "Member has enabled override.", nil)
+	RecordEvent("site", "MemberDisable", name, "", "", false, "Member has enabled override.", nil, false)
+	RecordEvent("site", "MemberDisable", name, "", "", false, "Member has enabled override.", nil, true)
 }
 
 // IsMemberOnlineForDomain checks official results for IPv4.

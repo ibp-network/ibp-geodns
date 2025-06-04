@@ -1,31 +1,22 @@
 package api
 
 import (
-	"strings"
-
 	cfg "ibp-geodns/src/common/config"
-	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
-	"net"
+	"strings"
 )
 
-// handle_DNSQuery processes incoming lookup requests from PowerDNS.
+// handle_DNSQuery processes "lookup" requests from PowerDNS.
+// We do not base it on the client IP for IPv6/IPv4 decisions. Instead, we see QType: "A", "AAAA", or "ANY".
+// Then we produce records accordingly.
 func handle_DNSQuery(req Request) Response {
 	params := req.Parameters
 	qname := strings.ToLower(strings.TrimSuffix(params.QName, "."))
 	qtype := params.QType
 
-	log.Log(log.Debug, "handle_DNSQuery: qname=%s, qtype=%s, remote=%s",
-		qname, qtype, params.Remote)
+	log.Log(log.Debug, "handle_DNSQuery: qname=%s, qtype=%s, remote=%s", qname, qtype, params.Remote)
 
-	// Identify if the client is IPv6
-	remoteIP := net.ParseIP(params.Remote)
-	isIPv6Client := false
-	if remoteIP != nil && remoteIP.To4() == nil {
-		isIPv6Client = true
-	}
-
-	// Identify TLDRecords index for domain.
+	// Find TLDRecords index for domain
 	var id int
 	TLDRecords.mu.RLock()
 	for key, tld := range TLDRecords.records {
@@ -36,83 +27,59 @@ func handle_DNSQuery(req Request) Response {
 	}
 	TLDRecords.mu.RUnlock()
 
-	var records []cfg.DNSRecord
+	var finalRecords []cfg.DNSRecord
 
-	// Collect standard static records
+	// Always gather the static records relevant for e.g. SOA, NS, ACME, etc.
 	SOA := ProcessSOA(params, id, qname)
-	records = appendUniqueRecords(records, SOA)
+	finalRecords = appendUniqueRecords(finalRecords, SOA)
 
 	ACME := ProcessACME(params, id, qname)
-	records = appendUniqueRecords(records, ACME)
+	finalRecords = appendUniqueRecords(finalRecords, ACME)
 
 	NS := ProcessNS(params, id, qname)
-	records = appendUniqueRecords(records, NS)
+	finalRecords = appendUniqueRecords(finalRecords, NS)
 
 	ANY := ProcessANY(params, id, qname)
-	records = appendUniqueRecords(records, ANY)
+	if qtype == "ANY" && len(ANY) > 0 {
+		// We'll keep these, except we'll also do dynamic IPv4/IPv6 below
+		finalRecords = appendUniqueRecords(finalRecords, ANY)
+	}
 
-	// Possibly gather dynamic records (A/AAAA, or ANY).
-	var chosenRecords []cfg.DNSRecord
-	var chosenMemberName string
-
+	// Next handle dynamic A, AAAA, or ANY
 	switch qtype {
 	case "A":
-		chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, false)
-
+		// Return only IPv4 dynamic records
+		records4, chosen4 := ProcessDynamic(params, id, qname, false)
+		if len(records4) > 0 {
+			finalRecords = appendUniqueRecords(finalRecords, records4)
+			log.Log(log.Debug, "handle_DNSQuery(A): chose member=%s, records=%d", chosen4, len(records4))
+		}
 	case "AAAA":
-		chosenRecords, chosenMemberName = ProcessDynamic(params, id, qname, true)
-
+		// Return only IPv6 dynamic records
+		records6, chosen6 := ProcessDynamic(params, id, qname, true)
+		if len(records6) > 0 {
+			finalRecords = appendUniqueRecords(finalRecords, records6)
+			log.Log(log.Debug, "handle_DNSQuery(AAAA): chose member=%s, records=%d", chosen6, len(records6))
+		}
 	case "ANY":
-		// For ANY queries, we gather dynamic IPv4 + IPv6.
-		v4Recs, v4Member := ProcessDynamic(params, id, qname, false)
-		v6Recs, v6Member := ProcessDynamic(params, id, qname, true)
-		chosenRecords = append(v4Recs, v6Recs...)
-
-		// If multiple families found a chosen member, we only take the last found.
-		if v6Member != "" {
-			chosenMemberName = v6Member
-		} else {
-			chosenMemberName = v4Member
+		// gather both IPv4 + IPv6
+		r4, c4 := ProcessDynamic(params, id, qname, false)
+		r6, c6 := ProcessDynamic(params, id, qname, true)
+		if len(r4) > 0 {
+			finalRecords = appendUniqueRecords(finalRecords, r4)
+			log.Log(log.Debug, "handle_DNSQuery(ANY): IPv4 from member=%s, recs=%d", c4, len(r4))
 		}
-
+		if len(r6) > 0 {
+			finalRecords = appendUniqueRecords(finalRecords, r6)
+			log.Log(log.Debug, "handle_DNSQuery(ANY): IPv6 from member=%s, recs=%d", c6, len(r6))
+		}
 	default:
-		// For NS, SOA, CNAME, etc. no dynamic resolution beyond what's above.
-		// Return existing static records (and not record usage).
-		if len(records) == 0 {
-			log.Log(log.Warn,
-				"handle_DNSQuery: returning 0 records for qname=%s qtype=%s => NXDOMAIN or REFUSE",
-				qname, qtype,
-			)
-			return Response{Result: []cfg.DNSRecord{}}
-		}
-		return Response{Result: records}
+		// handled above for static
 	}
 
-	if len(chosenRecords) > 0 {
-		log.Log(log.Debug, "handle_DNSQuery: Found %d dynamic records", len(chosenRecords))
-	}
-	records = appendUniqueRecords(records, chosenRecords)
-
-	// ============ USAGE RECORDING ============
-	// We only record usage if a member was assigned (chosenMemberName != "").
-	// That means the query actually returned a "closest" or valid member.
-	//
-	// This is independent of domain recognition (id != 0).
-	// If you DO want to enforce recognized domain, add "&& id != 0" here:
-	// if chosenMemberName != "" && id != 0 { ... }
-	//
-	// But per user request, we record usage for "any query that yields a non-empty chosen member."
-	if chosenMemberName != "" {
-		dat.RecordDnsHit(isIPv6Client, params.Remote, qname, chosenMemberName)
+	if len(finalRecords) == 0 {
+		log.Log(log.Debug, "handle_DNSQuery: returning 0 records => NXDOMAIN or REFUSE for q=%s", qname)
 	}
 
-	if len(records) == 0 {
-		log.Log(log.Debug,
-			"handle_DNSQuery: returning 0 records for qname=%s qtype=%s => NXDOMAIN or REFUSE",
-			qname, qtype,
-		)
-		return Response{Result: []cfg.DNSRecord{}}
-	}
-
-	return Response{Result: records}
+	return Response{Result: finalRecords}
 }

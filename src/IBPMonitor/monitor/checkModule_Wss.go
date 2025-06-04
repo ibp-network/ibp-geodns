@@ -32,7 +32,7 @@ func WssCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.
 
 	// If no IP is configured, fail immediately.
 	if ip4 == "" && ip6 == "" {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, "No IPv4 or IPv6 configured", nil)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, "No IPv4 or IPv6 configured", nil, false)
 		return
 	}
 
@@ -70,9 +70,7 @@ func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member 
 
 	c, _, err := dialer.Dial(reconstructedURL, nil)
 	if err != nil {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false,
-			fmt.Sprintf("Failed to connect on IP=%s => %v", ip, err),
-			nil)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Failed to connect on IP=%s => %v", ip, err), nil, false)
 		return
 	}
 	defer c.Close()
@@ -85,51 +83,43 @@ func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member 
 	}
 
 	if !sendJSONRPCRequest(c, request) {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Failed to send JSON RPC", nil)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Failed to send JSON RPC", nil, false)
 		return
 	}
 
 	_, _, err = c.ReadMessage()
 	if err != nil {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false,
-			fmt.Sprintf("Failed to read JSON-RPC response: %v", err),
-			nil)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Failed to read JSON-RPC response: %v", err), nil, false)
 		return
 	}
 
 	isFullArchive, err := checkFullArchive(c)
 	if err != nil {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false,
-			fmt.Sprintf("Full archive check failed: %v", err),
-			nil)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Full archive check failed: %v", err), nil, false)
 		return
 	}
 	if !isFullArchive {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Not a full archive node", nil)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Not a full archive node", nil, false)
 		return
 	}
 
 	isCorrectNetwork, err := checkNetwork(c, service.Configuration.NetworkName)
 	if err != nil {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false,
-			fmt.Sprintf("Network check failed: %v", err),
-			nil)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Network check failed: %v", err), nil, false)
 		return
 	}
 	if !isCorrectNetwork {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Wrong network", nil)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Wrong network", nil, false)
 		return
 	}
 
 	hasEnoughPeers, isSyncing, err := checkPeers(c)
 	if err != nil {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false,
-			fmt.Sprintf("Peer check failed: %v", err),
-			nil)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Peer check failed: %v", err), nil, false)
 		return
 	}
 	if !hasEnoughPeers || isSyncing {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Syncing or not enough peers", nil)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Syncing or not enough peers", nil, false)
 		return
 	}
 
@@ -139,7 +129,7 @@ func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member 
 			"Peers":   hasEnoughPeers,
 			"Network": isCorrectNetwork,
 			"Archive": isFullArchive,
-		})
+		}, false)
 }
 
 // The rest is unchanged

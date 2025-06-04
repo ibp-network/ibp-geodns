@@ -12,15 +12,17 @@ import (
 	log "ibp-geodns/src/common/logging"
 )
 
-// ProposeCheckStatus checks if there is an identical active proposal already.
-// If not, it calls Propose(...) to create a new one.
+// ProposeCheckStatus now includes isIPv6.
+// If the check we ran was IPv6, we include that in the proposal.
 func ProposeCheckStatus(
 	checkType, checkName, memberName, domainName, endpoint string,
 	status bool,
 	errorText string,
 	dataMap map[string]interface{},
+	isIPv6 bool,
 ) bool {
 
+	// Check if there's an identical active proposal
 	State.Mu.RLock()
 	for _, pt := range State.Proposals {
 		prop := pt.Proposal
@@ -30,30 +32,32 @@ func ProposeCheckStatus(
 			prop.MemberName == memberName &&
 			prop.DomainName == domainName &&
 			prop.Endpoint == endpoint &&
-			prop.ProposedStatus == status {
+			prop.ProposedStatus == status &&
+			prop.IsIPv6 == isIPv6 {
 			State.Mu.RUnlock()
 			log.Log(log.Debug,
-				"[NATS] ProposeCheckStatus skipped; identical active proposal for checkType=%s checkName=%s member=%s",
-				checkType, checkName, memberName)
+				"[NATS] ProposeCheckStatus skipped; identical active proposal for checkType=%s checkName=%s member=%s isIPv6=%v",
+				checkType, checkName, memberName, isIPv6)
 			return false
 		}
 	}
 	State.Mu.RUnlock()
 
 	log.Log(log.Debug,
-		"[NATS] ProposeCheckStatus creating new proposal for checkType=%s checkName=%s member=%s domain=%s endpoint=%s status=%v",
-		checkType, checkName, memberName, domainName, endpoint, status)
+		"[NATS] ProposeCheckStatus creating new proposal for checkType=%s checkName=%s member=%s domain=%s endpoint=%s status=%v isIPv6=%v",
+		checkType, checkName, memberName, domainName, endpoint, status, isIPv6)
 
-	Propose(checkType, checkName, memberName, domainName, endpoint, status, errorText, dataMap)
+	Propose(checkType, checkName, memberName, domainName, endpoint, status, errorText, dataMap, isIPv6)
 	return true
 }
 
-// Propose creates a new proposal, stores it, and publishes it to 'consensus.propose'.
+// Propose now includes isIPv6 in the Proposal struct.
 func Propose(
 	checkType, checkName, memberName, domainName, endpoint string,
 	proposedStatus bool,
 	errorText string,
 	data map[string]interface{},
+	isIPv6 bool,
 ) (ProposalID, error) {
 
 	pid := ProposalID(uuid.New().String())
@@ -67,6 +71,7 @@ func Propose(
 		ProposedStatus: proposedStatus,
 		ErrorText:      errorText,
 		Data:           data,
+		IsIPv6:         isIPv6,
 		Timestamp:      time.Now().UTC(),
 	}
 
@@ -74,14 +79,13 @@ func Propose(
 		Proposal: prop,
 		Votes:    make(map[string]bool),
 	}
-
 	State.Mu.Lock()
 	State.Proposals[pid] = pt
 	State.Mu.Unlock()
 
 	log.Log(log.Debug,
-		"[NATS] Propose: Stored new proposal ID=%s, checkType=%s, checkName=%s, domain=%s, endpoint=%s, status=%v",
-		pid, checkType, checkName, domainName, endpoint, proposedStatus)
+		"[NATS] Propose: Stored new proposal ID=%s, checkType=%s, checkName=%s, domain=%s, endpoint=%s, status=%v, isIPv6=%v",
+		pid, checkType, checkName, domainName, endpoint, proposedStatus, isIPv6)
 
 	pt.Timer = time.AfterFunc(State.ProposalTimeout, func() {
 		finalizeVote(pid)
@@ -94,6 +98,7 @@ func Propose(
 	} else {
 		log.Log(log.Debug, "[NATS] Propose: published proposal ID=%s -> subject=%s", pid, State.SubjectPropose)
 	}
+
 	return pid, err
 }
 
@@ -106,8 +111,8 @@ func handleProposal(m *nats.Msg) {
 	}
 
 	log.Log(log.Debug,
-		"[NATS] handleProposal: got proposal ID=%s, checkType=%s, checkName=%s, domain=%s, endpoint=%s, status=%v",
-		prop.ID, prop.CheckType, prop.CheckName, prop.DomainName, prop.Endpoint, prop.ProposedStatus)
+		"[NATS] handleProposal: got proposal ID=%s, checkType=%s, checkName=%s, domain=%s, endpoint=%s, status=%v, isIPv6=%v",
+		prop.ID, prop.CheckType, prop.CheckName, prop.DomainName, prop.Endpoint, prop.ProposedStatus, prop.IsIPv6)
 
 	State.Mu.Lock()
 	existingPT, exists := State.Proposals[prop.ID]
@@ -130,7 +135,7 @@ func handleProposal(m *nats.Msg) {
 
 	// Immediately vote based on local data
 	go func(pr Proposal) {
-		found, localStatus := checkLocalStatus(pr.CheckType, pr.CheckName, pr.MemberName, pr.DomainName, pr.Endpoint)
+		found, localStatus := checkLocalStatus(pr.CheckType, pr.CheckName, pr.MemberName, pr.DomainName, pr.Endpoint, pr.IsIPv6)
 		if !found {
 			log.Log(log.Debug,
 				"[NATS] handleProposal: local check not found for proposal ID=%s", pr.ID)
@@ -211,7 +216,6 @@ func handleVote(m *nats.Msg) {
 		log.Log(log.Debug, "[NATS] handleVote: finalizing proposal ID=%s => accepted", vote.ProposalID)
 		finalizeVote(vote.ProposalID)
 		return
-
 	} else if noCount >= majority && !pt.Finalized {
 		pt.Finalized = true
 		State.Mu.Unlock()
@@ -328,27 +332,28 @@ func finalizeVote(pid ProposalID) {
 		"[NATS] finalizeVote: proposal ID=%s => final status=%v", pid, finalStatus)
 }
 
-// checkLocalStatus consults local data about site/domain/endpoint
+// checkLocalStatus consults local data about site/domain/endpoint for either IPv4 or IPv6
 func checkLocalStatus(
 	checkType, checkName, memberName, domainName, endpoint string,
+	isIPv6 bool,
 ) (bool, bool) {
 
 	switch checkType {
 	case "site":
-		found, status := dat.GetLocalSiteStatus(checkName, memberName)
+		found, status := dat.GetLocalSiteStatusIPv4v6(checkName, memberName, isIPv6)
 		return found, status
 	case "domain":
-		found, status := dat.GetLocalDomainStatus(checkName, memberName, domainName)
+		found, status := dat.GetLocalDomainStatusIPv4v6(checkName, memberName, domainName, isIPv6)
 		return found, status
 	case "endpoint":
-		found, status := dat.GetLocalEndpointStatus(checkName, memberName, endpoint)
+		found, status := dat.GetLocalEndpointStatusIPv4v6(checkName, memberName, domainName, endpoint, isIPv6)
 		return found, status
 	default:
 		return false, false
 	}
 }
 
-// applyOfficialChanges updates data.Official with up/down status
+// applyOfficialChanges updates data.Official with up/down status including isIPv6.
 func applyOfficialChanges(prop Proposal, final bool) {
 	chk, chkOk := findCheckByName(prop.CheckName, prop.CheckType)
 	if !chkOk {
@@ -381,22 +386,22 @@ func applyOfficialChanges(prop Proposal, final bool) {
 	switch prop.CheckType {
 	case "site":
 		log.Log(log.Debug,
-			"[NATS] applyOfficialChanges: final site check for member=%s => %t",
-			prop.MemberName, status)
-		dat.UpdateOfficialSiteResult(chk, mem, status, errorMsg, dataMap)
+			"[NATS] applyOfficialChanges: final site check for member=%s => %t isIPv6=%v",
+			prop.MemberName, status, prop.IsIPv6)
+		dat.UpdateOfficialSiteResult(chk, mem, status, errorMsg, dataMap, prop.IsIPv6)
 
 	case "domain":
 		log.Log(log.Debug,
-			"[NATS] applyOfficialChanges: final domain check for member=%s => %t domain=%s",
-			prop.MemberName, status, prop.DomainName)
-		dat.UpdateOfficialDomainResult(chk, mem, svc, prop.DomainName, status, errorMsg, dataMap)
+			"[NATS] applyOfficialChanges: final domain check for member=%s => %t domain=%s isIPv6=%v",
+			prop.MemberName, status, prop.DomainName, prop.IsIPv6)
+		dat.UpdateOfficialDomainResult(chk, mem, svc, prop.DomainName, status, errorMsg, dataMap, prop.IsIPv6)
 
 	case "endpoint":
 		log.Log(log.Debug,
-			"[NATS] applyOfficialChanges: final endpoint check for member=%s => %t domain=%s endpoint=%s",
-			prop.MemberName, status, prop.DomainName, prop.Endpoint)
+			"[NATS] applyOfficialChanges: final endpoint check for member=%s => %t domain=%s endpoint=%s isIPv6=%v",
+			prop.MemberName, status, prop.DomainName, prop.Endpoint, prop.IsIPv6)
 		dat.UpdateOfficialEndpointResult(chk, mem, svc, prop.DomainName, prop.Endpoint,
-			status, errorMsg, dataMap)
+			status, errorMsg, dataMap, prop.IsIPv6)
 
 	default:
 		log.Log(log.Warn, "[NATS] applyOfficialChanges: unrecognized checkType=%s", prop.CheckType)

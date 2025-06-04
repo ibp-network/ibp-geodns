@@ -46,6 +46,7 @@ type Proposal struct {
 	ProposedStatus bool                   `json:"ProposedStatus"`
 	ErrorText      string                 `json:"ErrorText"`
 	Data           map[string]interface{} `json:"Data"`
+	IsIPv6         bool                   `json:"IsIPv6"`
 	Timestamp      time.Time              `json:"Timestamp"`
 }
 
@@ -79,7 +80,6 @@ type UsageRequest struct {
 	Country    string `json:"country"`
 }
 
-// Updated UsageRecord struct to include ASN, network, and countryName
 type UsageRecord struct {
 	Date        string `json:"date"`
 	Domain      string `json:"domain"`
@@ -114,6 +114,7 @@ type DowntimeEvent struct {
 	EndTime    time.Time              `json:"endTime"`
 	ErrorText  string                 `json:"errorText"`
 	Data       map[string]interface{} `json:"data"`
+	IsIPv6     bool                   `json:"isIPv6"`
 }
 
 type DowntimeResponse struct {
