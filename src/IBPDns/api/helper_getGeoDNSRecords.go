@@ -50,7 +50,7 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 				continue
 			}
 			// Official check for IPv6
-			isOnline := dat.IsMemberOnlineForDomainIPv6(domain, member.Details.Name)
+			isOnline := IsMemberOnlineForDomainIPv4v6(domain, member.Details.Name, true)
 			if !isOnline {
 				continue
 			}
@@ -59,7 +59,8 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 			if ipToUse == "" {
 				continue
 			}
-			isOnline := dat.IsMemberOnlineForDomain(domain, member.Details.Name)
+			// Official check for IPv4
+			isOnline := IsMemberOnlineForDomainIPv4v6(domain, member.Details.Name, false)
 			if !isOnline {
 				continue
 			}
@@ -112,7 +113,11 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 }
 
 // IsMemberOnlineForDomainIPv4v6 checks official data for the given domain and IP family
+// FIXED to actually call the correct IPv4 vs. IPv6 checks.
 func IsMemberOnlineForDomainIPv4v6(domain, memberName string, useIPv6 bool) bool {
+	if useIPv6 {
+		return dat.IsMemberOnlineForDomainIPv6(domain, memberName)
+	}
 	return dat.IsMemberOnlineForDomain(domain, memberName)
 }
 
