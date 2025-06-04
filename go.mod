@@ -9,7 +9,7 @@ require (
 	github.com/go-sql-driver/mysql v1.9.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/nats-io/nats.go v1.42.0
+	github.com/nats-io/nats.go v1.43.0
 	github.com/oschwald/maxminddb-golang v1.13.1
 	golang.org/x/net v0.40.0
 )
