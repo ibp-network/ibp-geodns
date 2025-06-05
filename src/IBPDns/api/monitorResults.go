@@ -40,6 +40,7 @@ type MonitorResultGeneric struct {
 	Status     bool                   `json:"Status"`
 	ErrorText  string                 `json:"ErrorText"`
 	Data       map[string]interface{} `json:"Data"`
+	IsIPv6     bool                   `json:"IsIPv6"`
 }
 
 // We rename the underlying variables to reflect they are official results
