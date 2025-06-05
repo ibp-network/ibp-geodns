@@ -38,17 +38,18 @@ func WssCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.
 
 	// Attempt WSS check over IPv4
 	if ip4 != "" {
-		runWssSingle(check, endpoint, service, member, ip4)
+		runWssSingle(check, endpoint, service, member, ip4, false)
 	}
 
 	// Attempt WSS check over IPv6
 	if ip6 != "" {
-		runWssSingle(check, endpoint, service, member, ip6)
+		runWssSingle(check, endpoint, service, member, ip6, true)
 	}
 }
 
 // runWssSingle tries a WSS dial to ip:443, then verifies it's a full archive node, correct network, etc.
-func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member, ip string) {
+// Added isIPv6 parameter to track whether this is an IPv6 check
+func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member, ip string, isIPv6 bool) {
 	u := max.ParseUrl(endpoint)
 	// Reconstruct the wss://... but substituting the IP for the domain
 	// so we dial the correct IP. We'll keep the same path as the original parse.
@@ -70,7 +71,7 @@ func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member 
 
 	c, _, err := dialer.Dial(reconstructedURL, nil)
 	if err != nil {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Failed to connect on IP=%s => %v", ip, err), nil, false)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Failed to connect on IP=%s => %v", ip, err), nil, isIPv6)
 		return
 	}
 	defer c.Close()
@@ -83,43 +84,43 @@ func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member 
 	}
 
 	if !sendJSONRPCRequest(c, request) {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Failed to send JSON RPC", nil, false)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Failed to send JSON RPC", nil, isIPv6)
 		return
 	}
 
 	_, _, err = c.ReadMessage()
 	if err != nil {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Failed to read JSON-RPC response: %v", err), nil, false)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Failed to read JSON-RPC response: %v", err), nil, isIPv6)
 		return
 	}
 
 	isFullArchive, err := checkFullArchive(c)
 	if err != nil {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Full archive check failed: %v", err), nil, false)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Full archive check failed: %v", err), nil, isIPv6)
 		return
 	}
 	if !isFullArchive {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Not a full archive node", nil, false)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Not a full archive node", nil, isIPv6)
 		return
 	}
 
 	isCorrectNetwork, err := checkNetwork(c, service.Configuration.NetworkName)
 	if err != nil {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Network check failed: %v", err), nil, false)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Network check failed: %v", err), nil, isIPv6)
 		return
 	}
 	if !isCorrectNetwork {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Wrong network", nil, false)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Wrong network", nil, isIPv6)
 		return
 	}
 
 	hasEnoughPeers, isSyncing, err := checkPeers(c)
 	if err != nil {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Peer check failed: %v", err), nil, false)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Peer check failed: %v", err), nil, isIPv6)
 		return
 	}
 	if !hasEnoughPeers || isSyncing {
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Syncing or not enough peers", nil, false)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Syncing or not enough peers", nil, isIPv6)
 		return
 	}
 
@@ -129,7 +130,7 @@ func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member 
 			"Peers":   hasEnoughPeers,
 			"Network": isCorrectNetwork,
 			"Archive": isFullArchive,
-		}, false)
+		}, isIPv6)
 }
 
 // The rest is unchanged

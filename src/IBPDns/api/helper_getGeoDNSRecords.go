@@ -22,8 +22,20 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 	clientIP := net.ParseIP(params.Remote)
 	var clientLat, clientLon float64
 	if clientIP != nil {
-		// Use the real MaxMind call to get client coordinates
-		clientLat, clientLon = max.GetClientCoordinates(clientIP.String())
+		// Check if the client IP is IPv6
+		isClientIPv6 := clientIP.To4() == nil
+
+		// Use appropriate geolocation based on client IP version
+		if isClientIPv6 {
+			// For IPv6 clients, we should ideally have a separate IPv6 geolocation method
+			// For now, we'll use the same method but log it
+			log.Log(log.Debug, "ProcessDynamic: Client is using IPv6: %s", clientIP.String())
+			clientLat, clientLon = max.GetClientCoordinates(clientIP.String())
+		} else {
+			// IPv4 client
+			log.Log(log.Debug, "ProcessDynamic: Client is using IPv4: %s", clientIP.String())
+			clientLat, clientLon = max.GetClientCoordinates(clientIP.String())
+		}
 	}
 
 	// Acquire the service configuration
@@ -49,9 +61,11 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 			if ipToUse == "" {
 				continue
 			}
-			// Official check for IPv6
-			isOnline := IsMemberOnlineForDomainIPv4v6(domain, member.Details.Name, true)
+			// FIXED: Use IPv6-specific status check
+			isOnline := IsMemberOnlineForDomainIPv6(domain, member.Details.Name)
 			if !isOnline {
+				log.Log(log.Debug, "ProcessDynamic: member %s is offline for IPv6 on domain %s",
+					member.Details.Name, domain)
 				continue
 			}
 		} else {
@@ -59,9 +73,11 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 			if ipToUse == "" {
 				continue
 			}
-			// Official check for IPv4
-			isOnline := IsMemberOnlineForDomainIPv4v6(domain, member.Details.Name, false)
+			// FIXED: Use IPv4-specific status check
+			isOnline := IsMemberOnlineForDomainIPv4(domain, member.Details.Name)
 			if !isOnline {
+				log.Log(log.Debug, "ProcessDynamic: member %s is offline for IPv4 on domain %s",
+					member.Details.Name, domain)
 				continue
 			}
 		}
@@ -96,6 +112,9 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 		}
 		records = append(records, rec)
 		chosenMemberName = closestMember.Details.Name
+
+		// Record the DNS hit for usage stats
+		dat.RecordDnsHit(true, params.Remote, domain, chosenMemberName)
 	} else {
 		rec := cfg.DNSRecord{
 			DomainID: id,
@@ -107,19 +126,19 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 		}
 		records = append(records, rec)
 		chosenMemberName = closestMember.Details.Name
+
+		// Record the DNS hit for usage stats
+		dat.RecordDnsHit(false, params.Remote, domain, chosenMemberName)
 	}
+
+	log.Log(log.Debug, "ProcessDynamic: selected member %s for %s query on domain %s",
+		chosenMemberName, boolToStr(useIPv6), domain)
 
 	return records, chosenMemberName
 }
 
-// IsMemberOnlineForDomainIPv4v6 checks official data for the given domain and IP family
-// FIXED to actually call the correct IPv4 vs. IPv6 checks.
-func IsMemberOnlineForDomainIPv4v6(domain, memberName string, useIPv6 bool) bool {
-	if useIPv6 {
-		return dat.IsMemberOnlineForDomainIPv6(domain, memberName)
-	}
-	return dat.IsMemberOnlineForDomain(domain, memberName)
-}
+// REMOVED: IsMemberOnlineForDomainIPv4v6 - this was the problematic function
+// Now we use the specific IPv4/IPv6 functions from helper_monitor.go
 
 func boolToStr(b bool) string {
 	if b {
