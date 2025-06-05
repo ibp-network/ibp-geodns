@@ -79,6 +79,7 @@ func handle_DNSQuery(req Request) Response {
 
 	if len(finalRecords) == 0 {
 		log.Log(log.Debug, "handle_DNSQuery: returning 0 records => NXDOMAIN or REFUSE for q=%s", qname)
+		return Response{Result: []cfg.DNSRecord{}}
 	}
 
 	return Response{Result: finalRecords}
