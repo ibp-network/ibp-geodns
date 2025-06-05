@@ -121,6 +121,7 @@ func handleProposal(m *nats.Msg) {
 			Proposal: prop,
 			Votes:    make(map[string]bool),
 		}
+
 		State.Proposals[prop.ID] = pt
 		pt.Timer = time.AfterFunc(State.ProposalTimeout, func() {
 			finalizeVote(prop.ID)
@@ -133,12 +134,11 @@ func handleProposal(m *nats.Msg) {
 	}
 	State.Mu.Unlock()
 
-	// Immediately vote based on local data
+	// Move this voting code OUTSIDE the exists check
 	go func(pr Proposal) {
 		found, localStatus := checkLocalStatus(pr.CheckType, pr.CheckName, pr.MemberName, pr.DomainName, pr.Endpoint, pr.IsIPv6)
 		if !found {
-			log.Log(log.Debug,
-				"[NATS] handleProposal: local check not found for proposal ID=%s", pr.ID)
+			log.Log(log.Debug, "[NATS] handleProposal: local check not found for proposal ID=%s", pr.ID)
 			return
 		}
 		v := Vote{
@@ -150,10 +150,8 @@ func handleProposal(m *nats.Msg) {
 		data, _ := json.Marshal(v)
 		_ = Publish(State.SubjectVote, data)
 
-		log.Log(log.Debug,
-			"[NATS] handleProposal: node=%s voted (agree=%v) for proposal ID=%s",
+		log.Log(log.Debug, "[NATS] handleProposal: node=%s voted (agree=%v) for proposal ID=%s",
 			State.NodeID, v.Agree, pr.ID)
-
 	}(prop)
 }
 
