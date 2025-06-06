@@ -74,13 +74,11 @@ func retrieveLocalUsageRecords(
 		return nil, nil
 	}
 
-	var results []UsageRecord
-
-	// Convert date strings to time.Time
 	sTime, _ := time.Parse("2006-01-02", sd)
 	eTime, _ := time.Parse("2006-01-02", ed)
 
-	// If domain != "" and member != ""
+	var results []UsageRecord
+
 	if domain != "" && member != "" {
 		recs, err := dat.GetUsageByMember(domain, member, sTime, eTime)
 		if err != nil {
@@ -222,4 +220,15 @@ func RequestAllDnsUsage(req UsageRequest, timeout time.Duration) ([]UsageRecord,
 		finalCount)
 
 	return aggregated, nil
+}
+
+// handleDnsUsageData is invoked when we receive usage data from a node on "dns.usage.usageData"
+func handleDnsUsageData(m *nats.Msg) {
+	var resp UsageResponse
+	if err := json.Unmarshal(m.Data, &resp); err != nil {
+		log.Log(log.Error, "[NATS] handleDnsUsageData: unmarshal error: %v", err)
+		return
+	}
+	log.Log(log.Debug, "[NATS] handleDnsUsageData: got %d usage records from node=%s",
+		len(resp.UsageRecords), resp.NodeID)
 }

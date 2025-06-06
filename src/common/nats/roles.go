@@ -10,6 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+// EnableMonitorRole sets up the node to handle proposals and votes as a Monitor.
 func EnableMonitorRole() error {
 	State.SubjectPropose = "consensus.propose"
 	State.SubjectVote = "consensus.vote"
@@ -30,14 +31,20 @@ func EnableMonitorRole() error {
 	}
 
 	State.ThisNode.NodeRole = "IBPMonitor"
+	State.ThisNode.LastHeard = time.Now().UTC()
+	State.Mu.Lock()
 	State.ClusterNodes[State.NodeID] = State.ThisNode
+	State.Mu.Unlock()
 
 	StartGarbageCollection()
+	StartHeartbeat() // so we broadcast ourselves regularly
+
 	log.Log(log.Info, "[NATS] Monitor role enabled.")
 	broadcastClusterJoin()
 	return nil
 }
 
+// EnableDnsRole sets up the node to still listen to all messages, but not propose checks.
 func EnableDnsRole() error {
 	State.SubjectCluster = "consensus.cluster"
 
@@ -54,13 +61,20 @@ func EnableDnsRole() error {
 	}
 
 	State.ThisNode.NodeRole = "IBPDns"
+	State.ThisNode.LastHeard = time.Now().UTC()
+	State.Mu.Lock()
 	State.ClusterNodes[State.NodeID] = State.ThisNode
+	State.Mu.Unlock()
+
+	StartGarbageCollection()
+	StartHeartbeat()
 
 	log.Log(log.Info, "[NATS] IBPDns role enabled.")
 	broadcastClusterJoin()
 	return nil
 }
 
+// EnableCollatorRole sets up the node to handle usage/downtime queries.
 func EnableCollatorRole() error {
 	State.SubjectCluster = "consensus.cluster"
 
@@ -77,20 +91,23 @@ func EnableCollatorRole() error {
 	}
 
 	State.ThisNode.NodeRole = "IBPCollator"
+	State.ThisNode.LastHeard = time.Now().UTC()
+	State.Mu.Lock()
 	State.ClusterNodes[State.NodeID] = State.ThisNode
+	State.Mu.Unlock()
 
 	StartGarbageCollection()
+	StartHeartbeat()
+
 	log.Log(log.Info, "[NATS] Collator role enabled.")
 	broadcastClusterJoin()
 	return nil
 }
 
+// handleAllMessages routes incoming NATS messages to the correct handler.
 func handleAllMessages(m *nats.Msg) {
 	subj := m.Subject
 
-	// Only IBPDns nodes should handle dns.usage.getUsage
-	// Only IBPMonitor nodes should handle monitor.stats.getDowntime
-	// Collator does not respond to these requests locally.
 	switch {
 	case subj == State.SubjectPropose:
 		handleProposal(m)
@@ -110,7 +127,7 @@ func handleAllMessages(m *nats.Msg) {
 			handleMonitorStatsRequest(m)
 		}
 	case subj == "monitor.stats.downtimeData":
-		handleMonitorStatsData(m) // anyone can receive the data
+		handleMonitorStatsData(m)
 
 	// DNS usage
 	case subj == "dns.usage.getUsage":
@@ -118,40 +135,23 @@ func handleAllMessages(m *nats.Msg) {
 			handleDnsUsageRequest(m)
 		}
 	case subj == "dns.usage.usageData":
-		handleDnsUsageData(m) // anyone can receive the data
+		handleDnsUsageData(m)
 
 	default:
+		// Possibly a reply subject, or unknown
 		if strings.Contains(subj, "downtimeReply") {
 			handleMonitorStatsData(m)
 		} else if strings.Contains(subj, "usageReply") {
 			handleDnsUsageData(m)
+		} else if subj == "consensus.heartbeat" {
+			handleHeartbeat(m)
 		} else {
 			log.Log(log.Debug, "[NATS] handleAllMessages: unhandled subject=%s", subj)
 		}
 	}
 }
 
-// handleDnsUsageData is invoked when we receive usage data from a node on "dns.usage.usageData"
-func handleDnsUsageData(m *nats.Msg) {
-	var resp UsageResponse
-	if err := json.Unmarshal(m.Data, &resp); err != nil {
-		log.Log(log.Error, "[NATS] handleDnsUsageData: unmarshal error: %v", err)
-		return
-	}
-	log.Log(log.Debug, "[NATS] handleDnsUsageData: got %d usage records from node=%s",
-		len(resp.UsageRecords), resp.NodeID)
-}
-
-func handleMonitorStatsData(m *nats.Msg) {
-	var resp DowntimeResponse
-	if err := json.Unmarshal(m.Data, &resp); err != nil {
-		log.Log(log.Error, "[NATS] handleMonitorStatsData: unmarshal error: %v", err)
-		return
-	}
-	log.Log(log.Debug, "[NATS] handleMonitorStatsData: got %d downtime events from node=%s",
-		len(resp.Events), resp.NodeID)
-}
-
+// StartGarbageCollection periodically cleans up old proposals.
 func StartGarbageCollection() {
 	go func() {
 		t := time.NewTicker(5 * time.Second)
@@ -178,12 +178,15 @@ func cleanOldProposals() {
 	}
 }
 
+// handleClusterMessage handles join/membership messages.
 func handleClusterMessage(m *nats.Msg) {
 	var msg ClusterMessage
 	if err := json.Unmarshal(m.Data, &msg); err != nil {
 		log.Log(log.Error, "[NATS] handleClusterMessage: unmarshal error: %v", err)
 		return
 	}
+	// Mark we heard from the sender
+	markNodeHeard(msg.Sender.NodeID)
 
 	switch msg.Type {
 	case "join":
@@ -191,8 +194,7 @@ func handleClusterMessage(m *nats.Msg) {
 		addNode(msg.Sender)
 		broadcastClusterMembership()
 	case "membership":
-		log.Log(log.Debug, "[NATS] handleClusterMessage: got membership with %d nodes from sender=%s",
-			len(msg.Members), msg.Sender.NodeID)
+		log.Log(log.Debug, "[NATS] handleClusterMessage: got membership with %d nodes from sender=%s", len(msg.Members), msg.Sender.NodeID)
 		mergeClusterMembership(msg.Members)
 	default:
 		log.Log(log.Warn, "[NATS] handleClusterMessage: unknown type=%s", msg.Type)
@@ -240,11 +242,22 @@ func mergeClusterMembership(inMembers []NodeInfo) {
 		if m.NodeID == "" {
 			continue
 		}
-		if _, exists := State.ClusterNodes[m.NodeID]; !exists {
+		if existing, exists := State.ClusterNodes[m.NodeID]; !exists {
 			countAdded++
 			log.Log(log.Debug, "[NATS] Merging node=%s role=%s into cluster", m.NodeID, m.NodeRole)
+			m.LastHeard = time.Now().UTC()
+			State.ClusterNodes[m.NodeID] = m
+		} else {
+			// update known node
+			if existing.NodeID == "" {
+				existing.NodeID = m.NodeID
+			}
+			existing.NodeRole = m.NodeRole
+			if existing.LastHeard.IsZero() {
+				existing.LastHeard = time.Now().UTC()
+			}
+			State.ClusterNodes[m.NodeID] = existing
 		}
-		State.ClusterNodes[m.NodeID] = m
 	}
 	log.Log(log.Debug, "[NATS] mergeClusterMembership: added %d new node(s)", countAdded)
 }
@@ -257,12 +270,20 @@ func addNode(node NodeInfo) {
 		return
 	}
 	if _, exists := State.ClusterNodes[node.NodeID]; !exists {
+		node.LastHeard = time.Now().UTC()
 		State.ClusterNodes[node.NodeID] = node
 		log.Log(log.Debug, "[NATS] Added node %s with role=%s to cluster", node.NodeID, node.NodeRole)
+	} else {
+		ex := State.ClusterNodes[node.NodeID]
+		ex.NodeRole = node.NodeRole
+		if ex.LastHeard.IsZero() {
+			ex.LastHeard = time.Now().UTC()
+		}
+		State.ClusterNodes[node.NodeID] = ex
 	}
 }
 
-// countNodesByRole is used by proposals for finalizing majority status.
+// countNodesByRole returns how many nodes (regardless of LastHeard) match the given role.
 func countNodesByRole(role string) int {
 	State.Mu.RLock()
 	defer State.Mu.RUnlock()
@@ -274,4 +295,83 @@ func countNodesByRole(role string) int {
 		}
 	}
 	return n
+}
+
+// countActiveMonitors returns how many "IBPMonitor" nodes are considered active (LastHeard <= 2 min).
+func countActiveMonitors() int {
+	State.Mu.RLock()
+	defer State.Mu.RUnlock()
+
+	n := 0
+	for _, node := range State.ClusterNodes {
+		if node.NodeRole == "IBPMonitor" && isNodeActive(node) {
+			n++
+		}
+	}
+	return n
+}
+
+// isNodeActive returns true if the node's LastHeard is within the last 2 minutes
+func isNodeActive(node NodeInfo) bool {
+	if node.LastHeard.IsZero() {
+		return false
+	}
+	if time.Since(node.LastHeard) > 2*time.Minute {
+		return false
+	}
+	return true
+}
+
+// markNodeHeard updates lastHeard for a given nodeID if it exists
+func markNodeHeard(nodeID string) {
+	if nodeID == "" {
+		return
+	}
+	State.Mu.Lock()
+	defer State.Mu.Unlock()
+
+	n, exists := State.ClusterNodes[nodeID]
+	if !exists {
+		// we do not have a record, create minimal
+		n = NodeInfo{
+			NodeID:   nodeID,
+			NodeRole: "",
+		}
+		log.Log(log.Debug, "[NATS] markNodeHeard: discovered new nodeID=%s with no role set", nodeID)
+	}
+	n.LastHeard = time.Now().UTC()
+	State.ClusterNodes[nodeID] = n
+}
+
+// StartHeartbeat periodically publishes a "consensus.heartbeat" from this node
+func StartHeartbeat() {
+	go func() {
+		t := time.NewTicker(30 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			sendHeartbeat()
+		}
+	}()
+}
+
+func sendHeartbeat() {
+	hb := NodeInfo{
+		NodeID:        State.NodeID,
+		PublicAddress: State.ThisNode.PublicAddress,
+		ListenAddress: State.ThisNode.ListenAddress,
+		ListenPort:    State.ThisNode.ListenPort,
+		NodeRole:      State.ThisNode.NodeRole,
+		LastHeard:     time.Now().UTC(),
+	}
+	data, _ := json.Marshal(hb)
+	_ = Publish("consensus.heartbeat", data)
+}
+
+func handleHeartbeat(m *nats.Msg) {
+	var node NodeInfo
+	if err := json.Unmarshal(m.Data, &node); err != nil {
+		log.Log(log.Error, "[NATS] handleHeartbeat: unmarshal error: %v", err)
+		return
+	}
+	markNodeHeard(node.NodeID)
 }

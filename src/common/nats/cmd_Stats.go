@@ -44,7 +44,6 @@ func handleMonitorStatsRequest(m *nats.Msg) {
 			"[NATS] handleMonitorStatsRequest: replying to %s with %d events",
 			m.Reply, len(events))
 		_ = PublishMsgWithReply(m.Reply, "", dataBytes)
-
 	} else {
 		// Otherwise, we can broadcast to "monitor.stats.downtimeData"
 		log.Log(log.Debug,
@@ -80,6 +79,7 @@ func retrieveLocalDowntimeEvents(memberName string, start, end time.Time) ([]Dow
 			EndTime:    e.EndTime,
 			ErrorText:  e.ErrorText,
 			Data:       e.Data,
+			IsIPv6:     e.IsIPv6,
 		})
 	}
 	log.Log(log.Debug,
@@ -92,6 +92,7 @@ func retrieveLocalDowntimeEvents(memberName string, start, end time.Time) ([]Dow
 // RequestAllMonitorsDowntime sends a DowntimeRequest to "monitor.stats.getDowntime"
 // with a unique inbox. Then we wait for all IBPMonitor nodes to reply or until timeout.
 func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]DowntimeEvent, error) {
+	// Some code still references countNodesByRole for the cluster
 	monitorCount := countNodesByRole("IBPMonitor")
 	if monitorCount == 0 {
 		return nil, fmt.Errorf("no IBPMonitor nodes found, cannot gather downtime")
@@ -102,11 +103,9 @@ func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]D
 		return nil, fmt.Errorf("downtime request marshal error: %w", err)
 	}
 
-	// We'll create a unique inbox subject where we expect replies
 	inbox := fmt.Sprintf("%s.downtimeReply.%d", State.NodeID, time.Now().UnixNano())
 	responseChan := make(chan []DowntimeEvent, monitorCount)
 
-	// Subscribe to that inbox
 	sub, subErr := Subscribe(inbox, func(msg *nats.Msg) {
 		var resp DowntimeResponse
 		if unErr := json.Unmarshal(msg.Data, &resp); unErr != nil {
@@ -119,7 +118,6 @@ func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]D
 		return nil, fmt.Errorf("subscribe error: %w", subErr)
 	}
 
-	// Publish the request to "monitor.stats.getDowntime", with our inbox as the reply subject
 	err = PublishMsgWithReply("monitor.stats.getDowntime", inbox, data)
 	if err != nil {
 		sub.Unsubscribe()
@@ -167,4 +165,15 @@ func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]D
 		finalCount)
 
 	return aggregated, nil
+}
+
+// handleMonitorStatsData is invoked when we receive downtime data from a node on "monitor.stats.downtimeData"
+func handleMonitorStatsData(m *nats.Msg) {
+	var resp DowntimeResponse
+	if err := json.Unmarshal(m.Data, &resp); err != nil {
+		log.Log(log.Error, "[NATS] handleMonitorStatsData: unmarshal error: %v", err)
+		return
+	}
+	log.Log(log.Debug, "[NATS] handleMonitorStatsData: got %d downtime events from node=%s",
+		len(resp.Events), resp.NodeID)
 }
