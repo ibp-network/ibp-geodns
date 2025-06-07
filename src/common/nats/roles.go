@@ -27,19 +27,35 @@ func EnableMonitorRole() error {
 		State.ClusterNodes = make(map[string]NodeInfo)
 	}
 
+	// Set our role and ensure it's properly initialized
+	State.ThisNode.NodeRole = "IBPMonitor"
+	State.ThisNode.NodeID = State.NodeID
+	State.ThisNode.LastHeard = time.Now().UTC()
+
+	// Add ourselves to cluster nodes BEFORE subscribing
+	State.Mu.Lock()
+	State.ClusterNodes[State.NodeID] = State.ThisNode
+	State.Mu.Unlock()
+
+	// Subscribe to all messages
 	_, err := Subscribe(">", handleAllMessages)
 	if err != nil {
 		return err
 	}
 
-	State.ThisNode.NodeRole = "IBPMonitor"
-	State.ClusterNodes[State.NodeID] = State.ThisNode
-
 	StartGarbageCollection()
-	startHeartbeat() // Add heartbeat
+	startHeartbeat()
 
-	log.Log(log.Info, "[NATS] Monitor role enabled.")
-	broadcastClusterJoin()
+	log.Log(log.Info, "[NATS] Monitor role enabled for node=%s", State.NodeID)
+
+	// Broadcast join multiple times to ensure it's received
+	go func() {
+		for i := 0; i < 3; i++ {
+			broadcastClusterJoin()
+			time.Sleep(500 * time.Millisecond)
+		}
+	}()
+
 	return nil
 }
 
@@ -56,18 +72,34 @@ func EnableDnsRole() error {
 		State.ClusterNodes = make(map[string]NodeInfo)
 	}
 
+	// Set our role and ensure it's properly initialized
+	State.ThisNode.NodeRole = "IBPDns"
+	State.ThisNode.NodeID = State.NodeID
+	State.ThisNode.LastHeard = time.Now().UTC()
+
+	// Add ourselves to cluster nodes BEFORE subscribing
+	State.Mu.Lock()
+	State.ClusterNodes[State.NodeID] = State.ThisNode
+	State.Mu.Unlock()
+
+	// Subscribe to all messages
 	_, err := Subscribe(">", handleAllMessages)
 	if err != nil {
 		return err
 	}
 
-	State.ThisNode.NodeRole = "IBPDns"
-	State.ClusterNodes[State.NodeID] = State.ThisNode
+	startHeartbeat()
 
-	startHeartbeat() // Add heartbeat
+	log.Log(log.Info, "[NATS] IBPDns role enabled for node=%s", State.NodeID)
 
-	log.Log(log.Info, "[NATS] IBPDns role enabled.")
-	broadcastClusterJoin()
+	// Broadcast join multiple times to ensure it's received
+	go func() {
+		for i := 0; i < 3; i++ {
+			broadcastClusterJoin()
+			time.Sleep(500 * time.Millisecond)
+		}
+	}()
+
 	return nil
 }
 
@@ -84,24 +116,44 @@ func EnableCollatorRole() error {
 		State.ClusterNodes = make(map[string]NodeInfo)
 	}
 
+	// Set our role and ensure it's properly initialized
+	State.ThisNode.NodeRole = "IBPCollator"
+	State.ThisNode.NodeID = State.NodeID
+	State.ThisNode.LastHeard = time.Now().UTC()
+
+	// Add ourselves to cluster nodes BEFORE subscribing
+	State.Mu.Lock()
+	State.ClusterNodes[State.NodeID] = State.ThisNode
+	State.Mu.Unlock()
+
+	// Subscribe to all messages
 	_, err := Subscribe(">", handleAllMessages)
 	if err != nil {
 		return err
 	}
 
-	State.ThisNode.NodeRole = "IBPCollator"
-	State.ClusterNodes[State.NodeID] = State.ThisNode
-
 	StartGarbageCollection()
-	startHeartbeat() // Add heartbeat
-	log.Log(log.Info, "[NATS] Collator role enabled.")
-	broadcastClusterJoin()
+	startHeartbeat()
+
+	log.Log(log.Info, "[NATS] Collator role enabled for node=%s", State.NodeID)
+
+	// Broadcast join multiple times to ensure it's received
+	go func() {
+		for i := 0; i < 3; i++ {
+			broadcastClusterJoin()
+			time.Sleep(500 * time.Millisecond)
+		}
+	}()
+
 	return nil
 }
 
 // startHeartbeat sends periodic cluster join messages to keep node visible
 func startHeartbeat() {
 	go func() {
+		// Initial delay to let everything initialize
+		time.Sleep(2 * time.Second)
+
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
@@ -188,11 +240,26 @@ func handleAllMessages(m *nats.Msg) {
 
 // broadcastClusterJoin publishes "join"
 func broadcastClusterJoin() {
+	// Ensure ThisNode has all required fields
+	if State.ThisNode.NodeID == "" {
+		log.Log(log.Error, "[NATS] broadcastClusterJoin: ThisNode.NodeID is empty!")
+		return
+	}
+	if State.ThisNode.NodeRole == "" {
+		log.Log(log.Error, "[NATS] broadcastClusterJoin: ThisNode.NodeRole is empty!")
+		return
+	}
+
 	msg := ClusterMessage{
 		Type:   "join",
 		Sender: State.ThisNode,
 	}
-	data, _ := json.Marshal(msg)
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Log(log.Error, "[NATS] Failed to marshal cluster join message: %v", err)
+		return
+	}
+
 	log.Log(log.Info, "[NATS] Broadcasting cluster join for node=%s role=%s to subject=%s",
 		State.ThisNode.NodeID, State.ThisNode.NodeRole, State.SubjectCluster)
 
@@ -233,18 +300,25 @@ func handleClusterMessage(m *nats.Msg) {
 		return
 	}
 
+	// Check if sender has required fields
+	if msg.Sender.NodeID == "" {
+		log.Log(log.Error, "[NATS] handleClusterMessage: received message with empty NodeID")
+		return
+	}
+
 	// Mark we heard from the cluster sender
 	markNodeHeard(msg.Sender.NodeID)
 
 	switch msg.Type {
 	case "join":
-		log.Log(log.Debug, "[NATS] handleClusterMessage: got join from node=%s; adding & broadcasting membership", msg.Sender.NodeID)
+		log.Log(log.Info, "[NATS] handleClusterMessage: got join from node=%s role=%s", msg.Sender.NodeID, msg.Sender.NodeRole)
 		addNode(msg.Sender)
+		// Always broadcast membership when we get a join
 		broadcastClusterMembership()
 
 	case "membership":
-		log.Log(log.Debug, "[NATS] handleClusterMessage: got membership with %d nodes from sender=%s",
-			len(msg.Members), msg.Sender.NodeID)
+		log.Log(log.Debug, "[NATS] handleClusterMessage: got membership with %d nodes from sender=%s role=%s",
+			len(msg.Members), msg.Sender.NodeID, msg.Sender.NodeRole)
 		mergeClusterMembership(msg.Members)
 
 	default:
@@ -258,19 +332,26 @@ func mergeClusterMembership(inMembers []NodeInfo) {
 	defer State.Mu.Unlock()
 
 	countAdded := 0
+	countUpdated := 0
 	for _, m := range inMembers {
 		if m.NodeID == "" {
 			continue
 		}
-		if _, exists := State.ClusterNodes[m.NodeID]; !exists {
+		existing, exists := State.ClusterNodes[m.NodeID]
+		if !exists {
 			State.ClusterNodes[m.NodeID] = m
 			countAdded++
-			log.Log(log.Debug, "[NATS] Merging node=%s role=%s into cluster", m.NodeID, m.NodeRole)
+			log.Log(log.Info, "[NATS] Added new node=%s role=%s to cluster", m.NodeID, m.NodeRole)
+		} else if existing.NodeRole == "" && m.NodeRole != "" {
+			// Update node if we didn't have its role before
+			State.ClusterNodes[m.NodeID] = m
+			countUpdated++
+			log.Log(log.Info, "[NATS] Updated node=%s with role=%s", m.NodeID, m.NodeRole)
 		}
 	}
-	log.Log(log.Debug, "[NATS] mergeClusterMembership: added %d new node(s)", countAdded)
+	log.Log(log.Debug, "[NATS] mergeClusterMembership: added %d new node(s), updated %d node(s)", countAdded, countUpdated)
 
-	// ADDITIONAL DEBUG: Log entire membership
+	// Log entire membership
 	log.Log(log.Debug, "[NATS] Current membership count is %d", len(State.ClusterNodes))
 	for idKey, nodeVal := range State.ClusterNodes {
 		log.Log(log.Debug,
@@ -287,9 +368,15 @@ func addNode(node NodeInfo) {
 	if node.NodeID == "" {
 		return
 	}
-	if _, exists := State.ClusterNodes[node.NodeID]; !exists {
+
+	existing, exists := State.ClusterNodes[node.NodeID]
+	if !exists {
 		State.ClusterNodes[node.NodeID] = node
-		log.Log(log.Debug, "[NATS] Added node=%s role=%s to cluster", node.NodeID, node.NodeRole)
+		log.Log(log.Info, "[NATS] Added node=%s role=%s to cluster", node.NodeID, node.NodeRole)
+	} else if existing.NodeRole == "" && node.NodeRole != "" {
+		// Update if we have better info
+		State.ClusterNodes[node.NodeID] = node
+		log.Log(log.Info, "[NATS] Updated node=%s with role=%s", node.NodeID, node.NodeRole)
 	}
 }
 
@@ -304,10 +391,10 @@ func markNodeHeard(nodeID string) {
 
 	ni, ok := State.ClusterNodes[nodeID]
 	if !ok {
-		log.Log(log.Debug, "[NATS] markNodeHeard: discovered new nodeID=%s with no role set", nodeID)
+		log.Log(log.Warn, "[NATS] markNodeHeard: discovered new nodeID=%s with no role set - node should announce itself!", nodeID)
 		ni = NodeInfo{
 			NodeID:        nodeID,
-			NodeRole:      "",
+			NodeRole:      "", // Empty role because node hasn't announced itself
 			ListenAddress: "",
 			ListenPort:    "",
 		}
@@ -357,7 +444,7 @@ func cleanStaleNodes() {
 			continue
 		}
 		if !node.LastHeard.IsZero() && now.Sub(node.LastHeard) > staleAfter {
-			log.Log(log.Debug, "[NATS] cleanStaleNodes: removing stale node=%s role=%s lastHeard=%v",
+			log.Log(log.Info, "[NATS] Removing stale node=%s role=%s lastHeard=%v",
 				nodeID, node.NodeRole, node.LastHeard)
 			delete(State.ClusterNodes, nodeID)
 		}
@@ -375,6 +462,7 @@ func countActiveMonitors() int {
 			n++
 		}
 	}
+	log.Log(log.Debug, "[NATS] countActiveMonitors: found %d active monitors", n)
 	return n
 }
 
