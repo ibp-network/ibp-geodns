@@ -162,7 +162,27 @@ func updateDNSMonitorSnapshot() {
 		}
 	}
 
-	// Similar for domains and endpoints...
+	// Check domain results
+	for _, dr := range tmp.DomainResults {
+		for _, r := range dr.Results {
+			if !r.Status {
+				offlineMembers[r.MemberName] = true
+				log.Log(log.Info, "[Monitor Poller] Member %s is OFFLINE (domain check %s, domain=%s, IPv6=%v): %s",
+					r.MemberName, dr.CheckName, dr.Domain, dr.IsIPv6, r.ErrorText)
+			}
+		}
+	}
+
+	// Check endpoint results
+	for _, er := range tmp.EndpointResults {
+		for _, r := range er.Results {
+			if !r.Status {
+				offlineMembers[r.MemberName] = true
+				log.Log(log.Info, "[Monitor Poller] Member %s is OFFLINE (endpoint check %s, endpoint=%s, IPv6=%v): %s",
+					r.MemberName, er.CheckName, er.RpcUrl, er.IsIPv6, r.ErrorText)
+			}
+		}
+	}
 
 	log.Log(log.Info, "[Monitor Poller] Snapshot updated: %d sites, %d domains, %d endpoints, %d members offline",
 		len(tmp.SiteResults), len(tmp.DomainResults), len(tmp.EndpointResults), len(offlineMembers))

@@ -120,17 +120,37 @@ func handleResults(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log some debug info
-	offlineCount := 0
+	offlineMembers := make(map[string]bool)
+
+	// Check site results
 	for _, site := range sites {
 		for _, result := range site.Results {
 			if !result.Status {
-				offlineCount++
-				log.Log(log.Debug, "Monitor API: Returning offline member %s for site check %s",
-					result.Member.Details.Name, site.Check.Name)
+				offlineMembers[result.Member.Details.Name] = true
 			}
 		}
 	}
-	log.Log(log.Debug, "Monitor API: Returning %d site results with %d offline members", len(sites), offlineCount)
+
+	// Check domain results
+	for _, domain := range domains {
+		for _, result := range domain.Results {
+			if !result.Status {
+				offlineMembers[result.Member.Details.Name] = true
+			}
+		}
+	}
+
+	// Check endpoint results
+	for _, endpoint := range endpoints {
+		for _, result := range endpoint.Results {
+			if !result.Status {
+				offlineMembers[result.Member.Details.Name] = true
+			}
+		}
+	}
+
+	log.Log(log.Debug, "Monitor API: Returning %d site results, %d domain results, %d endpoint results with %d offline members",
+		len(sites), len(domains), len(endpoints), len(offlineMembers))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(out)
