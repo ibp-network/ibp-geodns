@@ -229,17 +229,3 @@ func handleDnsUsageData(m *nats.Msg) {
 	log.Log(log.Debug, "[NATS] handleDnsUsageData: got %d usage records from node=%s",
 		len(resp.UsageRecords), resp.NodeID)
 }
-
-// countActiveDns is optional if you want to do a similar majority-based finalization for DNS
-func countActiveDns() int {
-	State.Mu.RLock()
-	defer State.Mu.RUnlock()
-
-	n := 0
-	for _, node := range State.ClusterNodes {
-		if node.NodeRole == "IBPDns" && isNodeActive(node) {
-			n++
-		}
-	}
-	return n
-}
