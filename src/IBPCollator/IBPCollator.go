@@ -54,8 +54,8 @@ func main() {
 
 	log.Log(log.Info, "[Collator] Requesting usage data from all IBPDns nodes...")
 	usageReq := nconn.UsageRequest{
-		StartDate:  "2025-06-03",
-		EndDate:    "2025-06-03",
+		StartDate:  "2025-06-07",
+		EndDate:    "2025-06-07",
 		Domain:     "",
 		MemberName: "",
 		Country:    "",
@@ -69,8 +69,8 @@ func main() {
 
 	log.Log(log.Info, "[Collator] Requesting downtime data from all IBPMonitor nodes...")
 	dtReq := nconn.DowntimeRequest{
-		StartTime:  time.Date(2025, 6, 03, 0, 0, 0, 0, time.UTC),
-		EndTime:    time.Date(2025, 6, 03, 23, 59, 59, 0, time.UTC),
+		StartTime:  time.Date(2025, 6, 07, 0, 0, 0, 0, time.UTC),
+		EndTime:    time.Date(2025, 6, 07, 23, 59, 59, 0, time.UTC),
 		MemberName: "",
 	}
 	dtEvents, err := nconn.RequestAllMonitorsDowntime(dtReq, 5*time.Second)

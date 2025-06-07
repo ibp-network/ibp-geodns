@@ -210,7 +210,7 @@ func runDomainCheck(check cfg.Check, fn CheckDomainFunc) {
 				for dom := range domainsSet {
 					// We'll do separate calls for IPv4 vs IPv6 if present
 					go domainCheckWrapper(check, fn, dom, svc, member)
-					time.Sleep(10 * time.Millisecond)
+					time.Sleep(30 * time.Millisecond)
 				}
 			}
 		}
@@ -344,7 +344,7 @@ func runEndpointCheck(check cfg.Check, fn CheckEndpointFunc) {
 							for _, provider := range svc.Providers {
 								for _, url := range provider.RpcUrls {
 									go endpointCheckWrapper(check, fn, url, svc, member)
-									time.Sleep(10 * time.Millisecond)
+									time.Sleep(30 * time.Millisecond)
 								}
 							}
 						}
