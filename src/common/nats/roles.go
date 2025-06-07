@@ -345,7 +345,6 @@ func mergeClusterMembership(inMembers []NodeInfo) {
 			log.Log(log.Debug, "[NATS] Updated node=%s with role=%s", m.NodeID, m.NodeRole)
 		}
 	}
-	log.Log(log.Debug, "[NATS] mergeClusterMembership: added %d new node(s), updated %d node(s)", countAdded, countUpdated)
 }
 
 // addNode adds a single node
