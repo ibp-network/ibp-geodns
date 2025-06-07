@@ -435,15 +435,34 @@ func cleanStaleNodes() {
 	State.Mu.Lock()
 	defer State.Mu.Unlock()
 
+	var toRemove []string
 	for nodeID, node := range State.ClusterNodes {
 		if nodeID == State.NodeID {
 			continue
 		}
 		if !node.LastHeard.IsZero() && now.Sub(node.LastHeard) > staleAfter {
-			log.Log(log.Info, "[NATS] Removing stale node=%s role=%s lastHeard=%v",
-				nodeID, node.NodeRole, node.LastHeard)
-			delete(State.ClusterNodes, nodeID)
+			toRemove = append(toRemove, nodeID)
 		}
+	}
+
+	// Remove stale nodes
+	for _, nodeID := range toRemove {
+		node := State.ClusterNodes[nodeID]
+		log.Log(log.Info, "[NATS] Removing stale node=%s role=%s lastHeard=%v (age=%v)",
+			nodeID, node.NodeRole, node.LastHeard, now.Sub(node.LastHeard))
+		delete(State.ClusterNodes, nodeID)
+	}
+
+	if len(toRemove) > 0 {
+		// Log current active nodes
+		activeCount := 0
+		for nodeID, node := range State.ClusterNodes {
+			if isNodeActive(node) {
+				activeCount++
+				log.Log(log.Debug, "[NATS] Active node: %s role=%s", nodeID, node.NodeRole)
+			}
+		}
+		log.Log(log.Info, "[NATS] After cleanup: %d active nodes, %d total nodes", activeCount, len(State.ClusterNodes))
 	}
 }
 
