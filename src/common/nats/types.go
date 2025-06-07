@@ -94,11 +94,6 @@ type UsageRecord struct {
 	Hits        int    `json:"hits"`
 }
 
-type UsageResponse struct {
-	NodeID       string        `json:"nodeID"`
-	UsageRecords []UsageRecord `json:"usageRecords"`
-}
-
 // Monitor Stats / Downtime
 type DowntimeRequest struct {
 	StartTime  time.Time `json:"startTime"`
@@ -120,14 +115,23 @@ type DowntimeEvent struct {
 	IsIPv6     bool                   `json:"isIPv6"`
 }
 
-type DowntimeResponse struct {
-	NodeID string          `json:"nodeID"`
-	Events []DowntimeEvent `json:"events"`
-}
-
 // Cluster membership messages
 type ClusterMessage struct {
 	Type    string     `json:"type"` // "join", "membership"
 	Sender  NodeInfo   `json:"sender"`
 	Members []NodeInfo `json:"members"` // populated for "membership" broadcasts
+}
+
+// Update DowntimeResponse to include Error field
+type DowntimeResponse struct {
+	NodeID string          `json:"nodeID"`
+	Events []DowntimeEvent `json:"events"`
+	Error  string          `json:"error,omitempty"`
+}
+
+// Update UsageResponse to include Error field
+type UsageResponse struct {
+	NodeID       string        `json:"nodeID"`
+	UsageRecords []UsageRecord `json:"usageRecords"`
+	Error        string        `json:"error,omitempty"`
 }
