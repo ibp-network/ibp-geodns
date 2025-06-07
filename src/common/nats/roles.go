@@ -307,14 +307,13 @@ func handleClusterMessage(m *nats.Msg) {
 
 	switch msg.Type {
 	case "join":
-		log.Log(log.Debug, "[NATS] handleClusterMessage: got join from node=%s role=%s", msg.Sender.NodeID, msg.Sender.NodeRole)
+		//log.Log(log.Debug, "[NATS] handleClusterMessage: got join from node=%s role=%s", msg.Sender.NodeID, msg.Sender.NodeRole)
 		addNode(msg.Sender)
 		// Always broadcast membership when we get a join
 		broadcastClusterMembership()
 
 	case "membership":
-		log.Log(log.Debug, "[NATS] handleClusterMessage: got membership with %d nodes from sender=%s role=%s",
-			len(msg.Members), msg.Sender.NodeID, msg.Sender.NodeRole)
+		//log.Log(log.Debug, "[NATS] handleClusterMessage: got membership with %d nodes from sender=%s role=%s", len(msg.Members), msg.Sender.NodeID, msg.Sender.NodeRole)
 		mergeClusterMembership(msg.Members)
 
 	default:
