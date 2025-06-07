@@ -346,14 +346,6 @@ func mergeClusterMembership(inMembers []NodeInfo) {
 		}
 	}
 	log.Log(log.Debug, "[NATS] mergeClusterMembership: added %d new node(s), updated %d node(s)", countAdded, countUpdated)
-
-	// Log entire membership
-	log.Log(log.Debug, "[NATS] Current membership count is %d", len(State.ClusterNodes))
-	for idKey, nodeVal := range State.ClusterNodes {
-		log.Log(log.Debug,
-			"[NATS]   -> NodeID=%s Role=%s LastHeard=%v",
-			idKey, nodeVal.NodeRole, nodeVal.LastHeard)
-	}
 }
 
 // addNode adds a single node
@@ -430,7 +422,7 @@ func cleanOldProposals() {
 func cleanStaleNodes() {
 	// remove nodes not heard from in e.g. 2 minutes
 	now := time.Now().UTC()
-	staleAfter := 2 * time.Minute
+	staleAfter := 15 * time.Minute
 
 	State.Mu.Lock()
 	defer State.Mu.Unlock()
