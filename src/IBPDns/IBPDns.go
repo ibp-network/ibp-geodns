@@ -46,6 +46,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Start polling monitor
+	intervalSec := c.Local.DnsApi.RefreshIntervalSeconds
+	log.Log(log.Info, "Starting serviceMonitor poller every %d seconds", intervalSec)
+	go startServiceMonitorPoller(intervalSec)
+
 	natsCommon.State.NodeID = c.Local.Nats.NodeID
 	natsCommon.State.ThisNode = natsCommon.NodeInfo{
 		NodeID:        c.Local.Nats.NodeID,
@@ -61,11 +66,6 @@ func main() {
 
 	// Launch DNS API
 	api.Init()
-
-	// Start polling monitor
-	intervalSec := c.Local.DnsApi.RefreshIntervalSeconds
-	log.Log(log.Info, "Starting serviceMonitor poller every %d seconds", intervalSec)
-	startServiceMonitorPoller(intervalSec)
 
 	for {
 		time.Sleep(60 * time.Second)
