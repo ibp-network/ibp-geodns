@@ -352,7 +352,7 @@ func finalizeVote(pid ProposalID) {
 	pt.Finalized = true
 	State.Mu.Unlock()
 
-	log.Log(log.Info,
+	log.Log(log.Debug,
 		"[NATS] finalizeVote: FINALIZED proposal ID=%s => finalStatus=%v (yes=%d no=%d monitors=%d majority=%d)",
 		pid, finalStatus, yesCount, noCount, monitorCount, majority)
 
@@ -431,19 +431,19 @@ func applyOfficialChanges(prop Proposal, final bool) {
 
 	switch prop.CheckType {
 	case "site":
-		log.Log(log.Info,
+		log.Log(log.Debug,
 			"[NATS] applyOfficialChanges: APPLYING site check for member=%s => %t isIPv6=%v",
 			prop.MemberName, status, prop.IsIPv6)
 		dat.UpdateOfficialSiteResult(chk, mem, status, errorMsg, dataMap, prop.IsIPv6)
 
 	case "domain":
-		log.Log(log.Info,
+		log.Log(log.Debug,
 			"[NATS] applyOfficialChanges: APPLYING domain check for member=%s => %t domain=%s isIPv6=%v",
 			prop.MemberName, status, prop.DomainName, prop.IsIPv6)
 		dat.UpdateOfficialDomainResult(chk, mem, svc, prop.DomainName, status, errorMsg, dataMap, prop.IsIPv6)
 
 	case "endpoint":
-		log.Log(log.Info,
+		log.Log(log.Debug,
 			"[NATS] applyOfficialChanges: APPLYING endpoint check for member=%s => %t domain=%s endpoint=%s isIPv6=%v",
 			prop.MemberName, status, prop.DomainName, prop.Endpoint, prop.IsIPv6)
 		dat.UpdateOfficialEndpointResult(chk, mem, svc, prop.DomainName, prop.Endpoint, status, errorMsg, dataMap, prop.IsIPv6)

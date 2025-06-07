@@ -110,7 +110,7 @@ func retrieveLocalDowntimeEvents(memberName string, start, end time.Time) ([]Dow
 		}
 	}
 
-	log.Log(log.Info,
+	log.Log(log.Debug,
 		"[NATS] retrieveLocalDowntimeEvents: found %d total events, returning %d downtime events for member=%s",
 		len(rawEvents), len(results), memberName)
 
@@ -124,7 +124,7 @@ func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]D
 		return nil, fmt.Errorf("no active IBPMonitor nodes found")
 	}
 
-	log.Log(log.Info, "[NATS] RequestAllMonitorsDowntime: requesting from %d active monitors", monitorCount)
+	log.Log(log.Debug, "[NATS] RequestAllMonitorsDowntime: requesting from %d active monitors", monitorCount)
 
 	data, err := json.Marshal(req)
 	if err != nil {
@@ -211,7 +211,7 @@ done:
 		aggregated = append(aggregated, events...)
 	}
 
-	log.Log(log.Info,
+	log.Log(log.Debug,
 		"[NATS] RequestAllMonitorsDowntime: completed with %d total events from %d nodes",
 		len(aggregated), len(responseMap))
 

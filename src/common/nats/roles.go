@@ -256,13 +256,13 @@ func broadcastClusterJoin() {
 		return
 	}
 
-	log.Log(log.Info, "[NATS] Broadcasting cluster join for node=%s role=%s to subject=%s",
+	log.Log(log.Debug, "[NATS] Broadcasting cluster join for node=%s role=%s to subject=%s",
 		State.ThisNode.NodeID, State.ThisNode.NodeRole, State.SubjectCluster)
 
 	if err := Publish(State.SubjectCluster, data); err != nil {
 		log.Log(log.Error, "[NATS] Failed to publish cluster join: %v", err)
 	} else {
-		log.Log(log.Info, "[NATS] Successfully published cluster join message")
+		log.Log(log.Debug, "[NATS] Successfully published cluster join message")
 	}
 }
 
@@ -307,7 +307,7 @@ func handleClusterMessage(m *nats.Msg) {
 
 	switch msg.Type {
 	case "join":
-		log.Log(log.Info, "[NATS] handleClusterMessage: got join from node=%s role=%s", msg.Sender.NodeID, msg.Sender.NodeRole)
+		log.Log(log.Debug, "[NATS] handleClusterMessage: got join from node=%s role=%s", msg.Sender.NodeID, msg.Sender.NodeRole)
 		addNode(msg.Sender)
 		// Always broadcast membership when we get a join
 		broadcastClusterMembership()
@@ -337,12 +337,12 @@ func mergeClusterMembership(inMembers []NodeInfo) {
 		if !exists {
 			State.ClusterNodes[m.NodeID] = m
 			countAdded++
-			log.Log(log.Info, "[NATS] Added new node=%s role=%s to cluster", m.NodeID, m.NodeRole)
+			log.Log(log.Debug, "[NATS] Added new node=%s role=%s to cluster", m.NodeID, m.NodeRole)
 		} else if existing.NodeRole == "" && m.NodeRole != "" {
 			// Update node if we didn't have its role before
 			State.ClusterNodes[m.NodeID] = m
 			countUpdated++
-			log.Log(log.Info, "[NATS] Updated node=%s with role=%s", m.NodeID, m.NodeRole)
+			log.Log(log.Debug, "[NATS] Updated node=%s with role=%s", m.NodeID, m.NodeRole)
 		}
 	}
 	log.Log(log.Debug, "[NATS] mergeClusterMembership: added %d new node(s), updated %d node(s)", countAdded, countUpdated)
@@ -368,11 +368,11 @@ func addNode(node NodeInfo) {
 	existing, exists := State.ClusterNodes[node.NodeID]
 	if !exists {
 		State.ClusterNodes[node.NodeID] = node
-		log.Log(log.Info, "[NATS] Added node=%s role=%s to cluster", node.NodeID, node.NodeRole)
+		log.Log(log.Debug, "[NATS] Added node=%s role=%s to cluster", node.NodeID, node.NodeRole)
 	} else if existing.NodeRole == "" && node.NodeRole != "" {
 		// Update if we have better info
 		State.ClusterNodes[node.NodeID] = node
-		log.Log(log.Info, "[NATS] Updated node=%s with role=%s", node.NodeID, node.NodeRole)
+		log.Log(log.Debug, "[NATS] Updated node=%s with role=%s", node.NodeID, node.NodeRole)
 	}
 }
 
@@ -448,7 +448,7 @@ func cleanStaleNodes() {
 	// Remove stale nodes
 	for _, nodeID := range toRemove {
 		node := State.ClusterNodes[nodeID]
-		log.Log(log.Info, "[NATS] Removing stale node=%s role=%s lastHeard=%v (age=%v)",
+		log.Log(log.Debug, "[NATS] Removing stale node=%s role=%s lastHeard=%v (age=%v)",
 			nodeID, node.NodeRole, node.LastHeard, now.Sub(node.LastHeard))
 		delete(State.ClusterNodes, nodeID)
 	}
@@ -462,7 +462,7 @@ func cleanStaleNodes() {
 				log.Log(log.Debug, "[NATS] Active node: %s role=%s", nodeID, node.NodeRole)
 			}
 		}
-		log.Log(log.Info, "[NATS] After cleanup: %d active nodes, %d total nodes", activeCount, len(State.ClusterNodes))
+		log.Log(log.Debug, "[NATS] After cleanup: %d active nodes, %d total nodes", activeCount, len(State.ClusterNodes))
 	}
 }
 

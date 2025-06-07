@@ -175,7 +175,7 @@ func retrieveLocalUsageRecords(
 		}
 	}
 
-	log.Log(log.Info,
+	log.Log(log.Debug,
 		"[NATS] retrieveLocalUsageRecords: returning %d usage records",
 		len(results))
 	return results, nil
@@ -188,7 +188,7 @@ func RequestAllDnsUsage(req UsageRequest, timeout time.Duration) ([]UsageRecord,
 		return nil, fmt.Errorf("no active IBPDns nodes found")
 	}
 
-	log.Log(log.Info, "[NATS] RequestAllDnsUsage: requesting from %d active DNS nodes", dnsCount)
+	log.Log(log.Debug, "[NATS] RequestAllDnsUsage: requesting from %d active DNS nodes", dnsCount)
 
 	data, err := json.Marshal(req)
 	if err != nil {
@@ -296,7 +296,7 @@ done:
 		aggregated = append(aggregated, rec)
 	}
 
-	log.Log(log.Info,
+	log.Log(log.Debug,
 		"[NATS] RequestAllDnsUsage: completed with %d unique records from %d nodes",
 		len(aggregated), len(responseMap))
 
