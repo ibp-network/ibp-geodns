@@ -178,63 +178,59 @@ func handleAllMessages(m *nats.Msg) {
 		subj := m.Subject
 		dataLen := len(m.Data)
 
-		log.Log(log.Debug, "[NATS] Processing message: subject=%s len(data)=%d", subj, dataLen)
-
-		// For cluster membership
+		// Always handle cluster messages regardless of role
 		if subj == State.SubjectCluster {
+			log.Log(log.Debug, "[NATS] Processing cluster message: subject=%s len(data)=%d", subj, dataLen)
 			handleClusterMessage(m)
 			return
 		}
 
-		// For proposals
-		if subj == State.SubjectPropose {
-			handleProposal(m)
-			return
-		}
-		// For votes
-		if subj == State.SubjectVote {
-			handleVote(m)
-			return
-		}
-		// For finalize
-		if subj == State.SubjectFinalize {
-			handleFinalize(m)
-			return
-		}
-
-		// Possibly more usage/stats
-		if subj == "monitor.stats.getDowntime" {
-			if State.ThisNode.NodeRole == "IBPMonitor" {
+		// Role-specific message handling
+		switch State.ThisNode.NodeRole {
+		case "IBPMonitor":
+			// Monitors handle consensus and stats requests
+			switch subj {
+			case State.SubjectPropose:
+				log.Log(log.Debug, "[NATS] Monitor processing proposal: subject=%s len(data)=%d", subj, dataLen)
+				handleProposal(m)
+			case State.SubjectVote:
+				log.Log(log.Debug, "[NATS] Monitor processing vote: subject=%s len(data)=%d", subj, dataLen)
+				handleVote(m)
+			case State.SubjectFinalize:
+				log.Log(log.Debug, "[NATS] Monitor processing finalize: subject=%s len(data)=%d", subj, dataLen)
+				handleFinalize(m)
+			case "monitor.stats.getDowntime":
+				log.Log(log.Debug, "[NATS] Monitor processing downtime request: subject=%s len(data)=%d", subj, dataLen)
 				handleMonitorStatsRequest(m)
+			default:
+				if strings.Contains(subj, "downtimeReply") {
+					handleMonitorStatsData(m)
+				}
 			}
-			return
-		}
-		if subj == "monitor.stats.downtimeData" {
-			handleMonitorStatsData(m)
-			return
-		}
-		if subj == "dns.usage.getUsage" {
-			if State.ThisNode.NodeRole == "IBPDns" {
+
+		case "IBPDns":
+			// DNS nodes don't participate in consensus, only handle usage requests
+			switch subj {
+			case "dns.usage.getUsage":
+				log.Log(log.Debug, "[NATS] DNS processing usage request: subject=%s len(data)=%d", subj, dataLen)
 				handleDnsUsageRequest(m)
+			default:
+				if strings.Contains(subj, "usageReply") {
+					handleDnsUsageData(m)
+				}
 			}
-			return
-		}
-		if subj == "dns.usage.usageData" {
-			handleDnsUsageData(m)
-			return
-		}
 
-		// Possibly request/reply for usage
-		if strings.Contains(subj, "downtimeReply") {
-			handleMonitorStatsData(m)
-			return
+		case "IBPCollator":
+			// Collators only handle responses to their requests
+			switch {
+			case subj == "monitor.stats.downtimeData" || strings.Contains(subj, "downtimeReply"):
+				log.Log(log.Debug, "[NATS] Collator processing downtime data: subject=%s len(data)=%d", subj, dataLen)
+				handleMonitorStatsData(m)
+			case subj == "dns.usage.usageData" || strings.Contains(subj, "usageReply"):
+				log.Log(log.Debug, "[NATS] Collator processing usage data: subject=%s len(data)=%d", subj, dataLen)
+				handleDnsUsageData(m)
+			}
 		}
-		if strings.Contains(subj, "usageReply") {
-			handleDnsUsageData(m)
-			return
-		}
-
-		log.Log(log.Debug, "[NATS] handleAllMessages: unhandled subject=%s", subj)
 	}()
 }
 
@@ -451,23 +447,23 @@ func cleanStaleNodes() {
 	}
 }
 
-// countActiveMonitors returns how many IBPMonitor nodes are not stale.
-func countActiveMonitors() int {
+// CountActiveMonitors returns how many IBPMonitor nodes are not stale.
+func CountActiveMonitors() int {
 	State.Mu.RLock()
 	defer State.Mu.RUnlock()
 
 	n := 0
 	for _, node := range State.ClusterNodes {
-		if node.NodeRole == "IBPMonitor" && isNodeActive(node) {
+		if node.NodeRole == "IBPMonitor" && IsNodeActive(node) {
 			n++
 		}
 	}
-	log.Log(log.Debug, "[NATS] countActiveMonitors: found %d active monitors", n)
+	log.Log(log.Debug, "[NATS] CountActiveMonitors: found %d active monitors", n)
 	return n
 }
 
-// isNodeActive checks LastHeard with 2-min threshold
-func isNodeActive(ni NodeInfo) bool {
+// IsNodeActive checks LastHeard with 2-min threshold
+func IsNodeActive(ni NodeInfo) bool {
 	if ni.NodeID == "" {
 		return false
 	}
@@ -480,16 +476,24 @@ func isNodeActive(ni NodeInfo) bool {
 	return true
 }
 
-// countActiveDns is optional if you want to do a similar majority-based finalization for DNS
-func countActiveDns() int {
+// CountActiveDns returns how many IBPDns nodes are active
+func CountActiveDns() int {
 	State.Mu.RLock()
 	defer State.Mu.RUnlock()
 
 	n := 0
 	for _, node := range State.ClusterNodes {
-		if node.NodeRole == "IBPDns" && isNodeActive(node) {
+		if node.NodeRole == "IBPDns" && IsNodeActive(node) {
 			n++
 		}
 	}
+	log.Log(log.Debug, "[NATS] CountActiveDns: found %d active DNS nodes", n)
 	return n
 }
+
+// Expose internal functions for package use
+var (
+	countActiveMonitors = CountActiveMonitors
+	countActiveDns      = CountActiveDns
+	isNodeActive        = IsNodeActive
+)
