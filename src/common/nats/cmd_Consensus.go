@@ -34,8 +34,7 @@ func ProposeCheckStatus(
 			prop.DomainName == domainName &&
 			prop.Endpoint == endpoint &&
 			prop.ProposedStatus == status &&
-			prop.IsIPv6 == isIPv6 &&
-			prop.SenderNodeID == State.NodeID {
+			prop.IsIPv6 == isIPv6 {
 			log.Log(log.Debug,
 				"[NATS] ProposeCheckStatus skipped; identical active proposal for checkType=%s checkName=%s member=%s isIPv6=%v from same node=%s",
 				checkType, checkName, memberName, isIPv6, State.NodeID)
