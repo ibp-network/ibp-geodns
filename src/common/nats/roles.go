@@ -36,10 +36,16 @@ func EnableMonitorRole() error {
 
 	State.ThisNode.NodeRole = "IBPMonitor"
 	State.ClusterNodes[State.NodeID] = State.ThisNode
+
 	StartGarbageCollection()
 	log.Log(log.Info, "[NATS] Monitor role enabled.")
 
+	// 1) Immediately broadcast we are joining
 	broadcastClusterJoin()
+
+	// 2) Request membership from existing nodes, so we get the full membership set
+	requestClusterMembership()
+
 	return nil
 }
 
@@ -70,7 +76,13 @@ func EnableDnsRole() error {
 	State.ClusterNodes[State.NodeID] = State.ThisNode
 
 	log.Log(log.Info, "[NATS] IBPDns role enabled.")
+
+	// 1) Immediately broadcast we are joining
 	broadcastClusterJoin()
+
+	// 2) Request membership from existing nodes
+	requestClusterMembership()
+
 	return nil
 }
 
@@ -99,10 +111,16 @@ func EnableCollatorRole() error {
 
 	State.ThisNode.NodeRole = "IBPCollator"
 	State.ClusterNodes[State.NodeID] = State.ThisNode
+
 	StartGarbageCollection()
 	log.Log(log.Info, "[NATS] Collator role enabled.")
 
+	// 1) Immediately broadcast we are joining
 	broadcastClusterJoin()
+
+	// 2) Request membership from existing nodes
+	requestClusterMembership()
+
 	return nil
 }
 
@@ -114,7 +132,7 @@ func handleAllMessages(m *nats.Msg) {
 
 	log.Log(log.Debug, "[NATS] Subscription received subject=%s len(data)=%d", subj, dataLen)
 
-	// 1) Cluster membership messages (all node roles handle these)
+	// 1) Cluster membership or membership request
 	if subj == State.SubjectCluster {
 		handleClusterMessage(m)
 		return
@@ -190,7 +208,19 @@ func broadcastClusterJoin() {
 	}
 }
 
-// broadcastClusterMembership publishes "membership"
+// requestClusterMembership publishes a 'requestMembership' to ask existing nodes for their membership
+func requestClusterMembership() {
+	msg := ClusterMessage{
+		Type:   "requestMembership",
+		Sender: State.ThisNode,
+	}
+	data, _ := json.Marshal(msg)
+	if err := Publish(State.SubjectCluster, data); err != nil {
+		log.Log(log.Error, "[NATS] Failed to publish requestMembership: %v", err)
+	}
+}
+
+// broadcastClusterMembership publishes "membership" with our current known cluster
 func broadcastClusterMembership() {
 	State.Mu.RLock()
 	var nodes []NodeInfo
@@ -212,7 +242,7 @@ func broadcastClusterMembership() {
 	}
 }
 
-// handleClusterMessage processes "join" or "membership"
+// handleClusterMessage processes "join", "membership", or "requestMembership"
 func handleClusterMessage(m *nats.Msg) {
 	var msg ClusterMessage
 	if err := json.Unmarshal(m.Data, &msg); err != nil {
@@ -233,6 +263,11 @@ func handleClusterMessage(m *nats.Msg) {
 		log.Log(log.Debug, "[NATS] handleClusterMessage: got membership with %d nodes from sender=%s",
 			len(msg.Members), msg.Sender.NodeID)
 		mergeClusterMembership(msg.Members)
+
+	case "requestMembership":
+		// If we receive a requestMembership, we respond with our membership
+		log.Log(log.Debug, "[NATS] handleClusterMessage: node=%s requests membership => broadcasting membership", msg.Sender.NodeID)
+		broadcastClusterMembership()
 
 	default:
 		log.Log(log.Warn, "[NATS] handleClusterMessage: unknown type=%s", msg.Type)
