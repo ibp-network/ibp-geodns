@@ -27,7 +27,6 @@ func EnableMonitorRole() error {
 		State.ClusterNodes = make(map[string]NodeInfo)
 	}
 
-	// We subscribe to ">" so we catch everything
 	_, err := Subscribe(">", handleAllMessages)
 	if err != nil {
 		return err
@@ -108,6 +107,7 @@ func handleAllMessages(m *nats.Msg) {
 		handleClusterMessage(m)
 		return
 	}
+
 	// For proposals
 	if subj == State.SubjectPropose {
 		handleProposal(m)
@@ -124,8 +124,7 @@ func handleAllMessages(m *nats.Msg) {
 		return
 	}
 
-	// Possibly more
-	// If we do usage or stats:
+	// Possibly more usage/stats
 	if subj == "monitor.stats.getDowntime" {
 		if State.ThisNode.NodeRole == "IBPMonitor" {
 			handleMonitorStatsRequest(m)
@@ -210,10 +209,12 @@ func handleClusterMessage(m *nats.Msg) {
 		log.Log(log.Debug, "[NATS] handleClusterMessage: got join from node=%s; adding & broadcasting membership", msg.Sender.NodeID)
 		addNode(msg.Sender)
 		broadcastClusterMembership()
+
 	case "membership":
 		log.Log(log.Debug, "[NATS] handleClusterMessage: got membership with %d nodes from sender=%s",
 			len(msg.Members), msg.Sender.NodeID)
 		mergeClusterMembership(msg.Members)
+
 	default:
 		log.Log(log.Warn, "[NATS] handleClusterMessage: unknown type=%s", msg.Type)
 	}
@@ -236,6 +237,14 @@ func mergeClusterMembership(inMembers []NodeInfo) {
 		}
 	}
 	log.Log(log.Debug, "[NATS] mergeClusterMembership: added %d new node(s)", countAdded)
+
+	// ADDITIONAL DEBUG: Log entire membership
+	log.Log(log.Debug, "[NATS] Current membership count is %d", len(State.ClusterNodes))
+	for idKey, nodeVal := range State.ClusterNodes {
+		log.Log(log.Debug,
+			"[NATS]   -> NodeID=%s Role=%s LastHeard=%v",
+			idKey, nodeVal.NodeRole, nodeVal.LastHeard)
+	}
 }
 
 // addNode adds a single node
@@ -316,7 +325,8 @@ func cleanStaleNodes() {
 			continue
 		}
 		if !node.LastHeard.IsZero() && now.Sub(node.LastHeard) > staleAfter {
-			log.Log(log.Debug, "[NATS] cleanStaleNodes: removing stale node=%s role=%s lastHeard=%v", nodeID, node.NodeRole, node.LastHeard)
+			log.Log(log.Debug, "[NATS] cleanStaleNodes: removing stale node=%s role=%s lastHeard=%v",
+				nodeID, node.NodeRole, node.LastHeard)
 			delete(State.ClusterNodes, nodeID)
 		}
 	}
@@ -348,4 +358,18 @@ func isNodeActive(ni NodeInfo) bool {
 		return false
 	}
 	return true
+}
+
+// countActiveDns is optional if you want to do a similar majority-based finalization for DNS
+func countActiveDns() int {
+	State.Mu.RLock()
+	defer State.Mu.RUnlock()
+
+	n := 0
+	for _, node := range State.ClusterNodes {
+		if node.NodeRole == "IBPDns" && isNodeActive(node) {
+			n++
+		}
+	}
+	return n
 }
