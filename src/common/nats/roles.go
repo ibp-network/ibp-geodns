@@ -10,7 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// EnableMonitorRole sets up the node to handle proposals and votes as a Monitor.
+// EnableMonitorRole sets the subject constants and does Subscribe(">", handleAllMessages).
 func EnableMonitorRole() error {
 	State.SubjectPropose = "consensus.propose"
 	State.SubjectVote = "consensus.vote"
@@ -25,6 +25,7 @@ func EnableMonitorRole() error {
 		State.ClusterNodes = make(map[string]NodeInfo)
 	}
 
+	// Subscribe to everything so we definitely get proposals from remote nodes
 	_, err := Subscribe(">", handleAllMessages)
 	if err != nil {
 		return err
@@ -37,17 +38,16 @@ func EnableMonitorRole() error {
 	State.Mu.Unlock()
 
 	StartGarbageCollection()
-	StartHeartbeat() // so we broadcast ourselves regularly
+	StartHeartbeat()
 
 	log.Log(log.Info, "[NATS] Monitor role enabled.")
 	broadcastClusterJoin()
 	return nil
 }
 
-// EnableDnsRole sets up the node to still listen to all messages, but not propose checks.
+// EnableDnsRole sets up the node as IBPDns if needed.
 func EnableDnsRole() error {
 	State.SubjectCluster = "consensus.cluster"
-
 	if State.Proposals == nil {
 		State.Proposals = make(map[ProposalID]*ProposalTracking)
 	}
@@ -74,10 +74,9 @@ func EnableDnsRole() error {
 	return nil
 }
 
-// EnableCollatorRole sets up the node to handle usage/downtime queries.
+// EnableCollatorRole sets up the node as IBPCollator if needed.
 func EnableCollatorRole() error {
 	State.SubjectCluster = "consensus.cluster"
-
 	if State.Proposals == nil {
 		State.Proposals = make(map[ProposalID]*ProposalTracking)
 	}
@@ -104,9 +103,11 @@ func EnableCollatorRole() error {
 	return nil
 }
 
-// handleAllMessages routes incoming NATS messages to the correct handler.
+// handleAllMessages is a universal subscription callback for ">".
 func handleAllMessages(m *nats.Msg) {
 	subj := m.Subject
+	// Debug log for every message
+	log.Log(log.Debug, "[NATS] handleAllMessages: subject=%s, dataLen=%d", subj, len(m.Data))
 
 	switch {
 	case subj == State.SubjectPropose:
@@ -121,24 +122,21 @@ func handleAllMessages(m *nats.Msg) {
 	case subj == State.SubjectCluster:
 		handleClusterMessage(m)
 
-	// Monitor stats
 	case subj == "monitor.stats.getDowntime":
+		// Only a monitor node responds
 		if State.ThisNode.NodeRole == "IBPMonitor" {
 			handleMonitorStatsRequest(m)
 		}
 	case subj == "monitor.stats.downtimeData":
 		handleMonitorStatsData(m)
 
-	// DNS usage
 	case subj == "dns.usage.getUsage":
-		if State.ThisNode.NodeRole == "IBPDns" {
-			handleDnsUsageRequest(m)
-		}
+		// Typically only DNS roles respond, but if you want monitors to see it, keep it as is
+		handleDnsUsageRequest(m)
 	case subj == "dns.usage.usageData":
 		handleDnsUsageData(m)
 
 	default:
-		// Possibly a reply subject, or unknown
 		if strings.Contains(subj, "downtimeReply") {
 			handleMonitorStatsData(m)
 		} else if strings.Contains(subj, "usageReply") {
@@ -178,14 +176,13 @@ func cleanOldProposals() {
 	}
 }
 
-// handleClusterMessage handles join/membership messages.
+// handleClusterMessage handles membership messages (join/membership).
 func handleClusterMessage(m *nats.Msg) {
 	var msg ClusterMessage
 	if err := json.Unmarshal(m.Data, &msg); err != nil {
 		log.Log(log.Error, "[NATS] handleClusterMessage: unmarshal error: %v", err)
 		return
 	}
-	// Mark we heard from the sender
 	markNodeHeard(msg.Sender.NodeID)
 
 	switch msg.Type {
@@ -242,7 +239,8 @@ func mergeClusterMembership(inMembers []NodeInfo) {
 		if m.NodeID == "" {
 			continue
 		}
-		if existing, exists := State.ClusterNodes[m.NodeID]; !exists {
+		existing, exists := State.ClusterNodes[m.NodeID]
+		if !exists {
 			countAdded++
 			log.Log(log.Debug, "[NATS] Merging node=%s role=%s into cluster", m.NodeID, m.NodeRole)
 			m.LastHeard = time.Now().UTC()
@@ -269,81 +267,22 @@ func addNode(node NodeInfo) {
 	if node.NodeID == "" {
 		return
 	}
-	if _, exists := State.ClusterNodes[node.NodeID]; !exists {
+	existing, ok := State.ClusterNodes[node.NodeID]
+	if !ok {
 		node.LastHeard = time.Now().UTC()
 		State.ClusterNodes[node.NodeID] = node
 		log.Log(log.Debug, "[NATS] Added node %s with role=%s to cluster", node.NodeID, node.NodeRole)
 	} else {
-		ex := State.ClusterNodes[node.NodeID]
-		ex.NodeRole = node.NodeRole
-		if ex.LastHeard.IsZero() {
-			ex.LastHeard = time.Now().UTC()
+		existing.NodeRole = node.NodeRole
+		if existing.LastHeard.IsZero() {
+			existing.LastHeard = time.Now().UTC()
 		}
-		State.ClusterNodes[node.NodeID] = ex
+		State.ClusterNodes[node.NodeID] = existing
 	}
 }
 
-// countNodesByRole returns how many nodes (regardless of LastHeard) match the given role.
-func countNodesByRole(role string) int {
-	State.Mu.RLock()
-	defer State.Mu.RUnlock()
+// Heartbeat logic:
 
-	n := 0
-	for _, node := range State.ClusterNodes {
-		if node.NodeRole == role {
-			n++
-		}
-	}
-	return n
-}
-
-// countActiveMonitors returns how many "IBPMonitor" nodes are considered active (LastHeard <= 2 min).
-func countActiveMonitors() int {
-	State.Mu.RLock()
-	defer State.Mu.RUnlock()
-
-	n := 0
-	for _, node := range State.ClusterNodes {
-		if node.NodeRole == "IBPMonitor" && isNodeActive(node) {
-			n++
-		}
-	}
-	return n
-}
-
-// isNodeActive returns true if the node's LastHeard is within the last 2 minutes
-func isNodeActive(node NodeInfo) bool {
-	if node.LastHeard.IsZero() {
-		return false
-	}
-	if time.Since(node.LastHeard) > 2*time.Minute {
-		return false
-	}
-	return true
-}
-
-// markNodeHeard updates lastHeard for a given nodeID if it exists
-func markNodeHeard(nodeID string) {
-	if nodeID == "" {
-		return
-	}
-	State.Mu.Lock()
-	defer State.Mu.Unlock()
-
-	n, exists := State.ClusterNodes[nodeID]
-	if !exists {
-		// we do not have a record, create minimal
-		n = NodeInfo{
-			NodeID:   nodeID,
-			NodeRole: "",
-		}
-		log.Log(log.Debug, "[NATS] markNodeHeard: discovered new nodeID=%s with no role set", nodeID)
-	}
-	n.LastHeard = time.Now().UTC()
-	State.ClusterNodes[nodeID] = n
-}
-
-// StartHeartbeat periodically publishes a "consensus.heartbeat" from this node
 func StartHeartbeat() {
 	go func() {
 		t := time.NewTicker(30 * time.Second)

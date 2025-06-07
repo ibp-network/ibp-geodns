@@ -13,7 +13,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// handleDnsUsageRequest responds to "dns.usage.getUsage" requests
+// handleDnsUsageRequest responds to "dns.usage.getUsage"
 func handleDnsUsageRequest(m *nats.Msg) {
 	log.Log(log.Debug,
 		"[NATS] handleDnsUsageRequest: subject=%s reply=%s",
@@ -44,13 +44,11 @@ func handleDnsUsageRequest(m *nats.Msg) {
 	dataBytes, _ := json.Marshal(resp)
 
 	if m.Reply != "" {
-		// direct reply
 		log.Log(log.Debug,
 			"[NATS] handleDnsUsageRequest: replying to %s with %d usage records",
 			m.Reply, len(records))
 		_ = PublishMsgWithReply(m.Reply, "", dataBytes)
 	} else {
-		// fallback broadcast
 		log.Log(log.Debug,
 			"[NATS] handleDnsUsageRequest: publishing usageData with %d usage records",
 			len(records))
@@ -145,10 +143,9 @@ func retrieveLocalUsageRecords(
 	return results, nil
 }
 
-// RequestAllDnsUsage sends a usage request to "dns.usage.getUsage" with a unique inbox.
-// It waits for all IBPDns nodes to reply or until timeout. Returns aggregated usage records.
+// RequestAllDnsUsage sends a usage request to "dns.usage.getUsage"
 func RequestAllDnsUsage(req UsageRequest, timeout time.Duration) ([]UsageRecord, error) {
-	dnsCount := countNodesByRole("IBPDns")
+	dnsCount := countActiveDns()
 	if dnsCount == 0 {
 		return nil, fmt.Errorf("no IBPDns nodes found, cannot gather usage")
 	}
@@ -231,4 +228,18 @@ func handleDnsUsageData(m *nats.Msg) {
 	}
 	log.Log(log.Debug, "[NATS] handleDnsUsageData: got %d usage records from node=%s",
 		len(resp.UsageRecords), resp.NodeID)
+}
+
+// countActiveDns is optional if you want to do a similar majority-based finalization for DNS
+func countActiveDns() int {
+	State.Mu.RLock()
+	defer State.Mu.RUnlock()
+
+	n := 0
+	for _, node := range State.ClusterNodes {
+		if node.NodeRole == "IBPDns" && isNodeActive(node) {
+			n++
+		}
+	}
+	return n
 }

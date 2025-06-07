@@ -38,14 +38,12 @@ func handleMonitorStatsRequest(m *nats.Msg) {
 	}
 	dataBytes, _ := json.Marshal(resp)
 
-	// If the request provided an m.Reply subject, we respond directly
 	if m.Reply != "" {
 		log.Log(log.Debug,
 			"[NATS] handleMonitorStatsRequest: replying to %s with %d events",
 			m.Reply, len(events))
 		_ = PublishMsgWithReply(m.Reply, "", dataBytes)
 	} else {
-		// Otherwise, we can broadcast to "monitor.stats.downtimeData"
 		log.Log(log.Debug,
 			"[NATS] handleMonitorStatsRequest: publishing downtimeData with %d events",
 			len(events))
@@ -60,9 +58,6 @@ func retrieveLocalDowntimeEvents(memberName string, start, end time.Time) ([]Dow
 
 	rawEvents, err := dat.GetMemberEvents(memberName, "", start, end)
 	if err != nil {
-		log.Log(log.Error,
-			"[NATS] retrieveLocalDowntimeEvents: data.GetMemberEvents error: %v",
-			err)
 		return nil, err
 	}
 
@@ -90,10 +85,8 @@ func retrieveLocalDowntimeEvents(memberName string, start, end time.Time) ([]Dow
 }
 
 // RequestAllMonitorsDowntime sends a DowntimeRequest to "monitor.stats.getDowntime"
-// with a unique inbox. Then we wait for all IBPMonitor nodes to reply or until timeout.
 func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]DowntimeEvent, error) {
-	// Some code still references countNodesByRole for the cluster
-	monitorCount := countNodesByRole("IBPMonitor")
+	monitorCount := countActiveMonitors()
 	if monitorCount == 0 {
 		return nil, fmt.Errorf("no IBPMonitor nodes found, cannot gather downtime")
 	}
@@ -167,7 +160,7 @@ func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]D
 	return aggregated, nil
 }
 
-// handleMonitorStatsData is invoked when we receive downtime data from a node on "monitor.stats.downtimeData"
+// handleMonitorStatsData is invoked when we receive downtime data from "monitor.stats.downtimeData"
 func handleMonitorStatsData(m *nats.Msg) {
 	var resp DowntimeResponse
 	if err := json.Unmarshal(m.Data, &resp); err != nil {

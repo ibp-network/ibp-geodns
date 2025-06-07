@@ -12,7 +12,7 @@ import (
 	log "ibp-geodns/src/common/logging"
 )
 
-// ProposeCheckStatus now includes isIPv6, and sets SenderNodeID on the proposal.
+// ProposeCheckStatus looks for identical active proposals; if none, calls Propose.
 func ProposeCheckStatus(
 	checkType, checkName, memberName, domainName, endpoint string,
 	status bool,
@@ -20,10 +20,10 @@ func ProposeCheckStatus(
 	dataMap map[string]interface{},
 	isIPv6 bool,
 ) bool {
+	// See if an identical proposal is not yet finalized
 	State.Mu.RLock()
 	for _, pt := range State.Proposals {
 		prop := pt.Proposal
-		// If there's an identical active proposal, skip
 		if !pt.Finalized &&
 			prop.CheckType == checkType &&
 			prop.CheckName == checkName &&
@@ -49,7 +49,7 @@ func ProposeCheckStatus(
 	return true
 }
 
-// Propose creates a new proposal and publishes it to the cluster.
+// Propose broadcasts a new proposal
 func Propose(
 	checkType, checkName, memberName, domainName, endpoint string,
 	proposedStatus bool,
@@ -61,7 +61,7 @@ func Propose(
 	pid := ProposalID(uuid.New().String())
 	prop := Proposal{
 		ID:             pid,
-		SenderNodeID:   State.NodeID, // track who created it
+		SenderNodeID:   State.NodeID,
 		CheckType:      checkType,
 		CheckName:      checkName,
 		MemberName:     memberName,
@@ -73,7 +73,6 @@ func Propose(
 		IsIPv6:         isIPv6,
 		Timestamp:      time.Now().UTC(),
 	}
-
 	pt := &ProposalTracking{
 		Proposal: prop,
 		Votes:    make(map[string]bool),
@@ -102,19 +101,18 @@ func Propose(
 	return pid, err
 }
 
-// handleProposal processes incoming "consensus.propose" messages from any node.
+// handleProposal processes incoming proposals from any node
 func handleProposal(m *nats.Msg) {
 	var prop Proposal
 	if err := json.Unmarshal(m.Data, &prop); err != nil {
 		log.Log(log.Error, "[NATS] handleProposal: unmarshal error: %v", err)
 		return
 	}
-	// Update lastHeard for the sender
 	markNodeHeard(prop.SenderNodeID)
 
 	log.Log(log.Debug,
-		"[NATS] handleProposal: got proposal ID=%s, checkType=%s, checkName=%s, domain=%s, endpoint=%s, status=%v, isIPv6=%v",
-		prop.ID, prop.CheckType, prop.CheckName, prop.DomainName, prop.Endpoint, prop.ProposedStatus, prop.IsIPv6)
+		"[NATS] handleProposal: got proposal ID=%s, checkType=%s, checkName=%s, domain=%s, endpoint=%s, status=%v, isIPv6=%v from sender=%s",
+		prop.ID, prop.CheckType, prop.CheckName, prop.DomainName, prop.Endpoint, prop.ProposedStatus, prop.IsIPv6, prop.SenderNodeID)
 
 	State.Mu.Lock()
 	existingPT, exists := State.Proposals[prop.ID]
@@ -136,14 +134,16 @@ func handleProposal(m *nats.Msg) {
 		State.Mu.Unlock()
 	}
 
-	// We always attempt a local check and cast a vote if found
+	// Attempt a local check and cast a vote if found
 	go func(pr Proposal) {
 		found, localStatus := checkLocalStatus(
 			pr.CheckType, pr.CheckName, pr.MemberName, pr.DomainName, pr.Endpoint, pr.IsIPv6)
+
 		if !found {
-			log.Log(log.Debug, "[NATS] handleProposal: local check not found for proposal ID=%s", pr.ID)
+			log.Log(log.Debug, "[NATS] handleProposal: local check not found for proposal ID=%s => skipping vote", pr.ID)
 			return
 		}
+
 		v := Vote{
 			ProposalID:   pr.ID,
 			SenderNodeID: State.NodeID,
@@ -159,14 +159,13 @@ func handleProposal(m *nats.Msg) {
 	}(prop)
 }
 
-// handleVote processes incoming "consensus.vote" messages.
+// handleVote handles "consensus.vote" messages
 func handleVote(m *nats.Msg) {
 	var vote Vote
 	if err := json.Unmarshal(m.Data, &vote); err != nil {
 		log.Log(log.Error, "[NATS] handleVote: unmarshal error: %v", err)
 		return
 	}
-	// Mark we heard from the sender
 	markNodeHeard(vote.SenderNodeID)
 
 	log.Log(log.Debug,
@@ -188,7 +187,7 @@ func handleVote(m *nats.Msg) {
 
 	pt.Votes[vote.NodeID] = vote.Agree
 
-	monitorCount := countActiveMonitors() // updated to only count active
+	monitorCount := countActiveMonitors()
 	if monitorCount == 0 {
 		log.Log(log.Warn,
 			"[NATS] handleVote: monitorCount=0, cannot finalize proposal ID=%s",
@@ -200,10 +199,10 @@ func handleVote(m *nats.Msg) {
 
 	yesCount := 0
 	noCount := 0
-	for nodeID, v := range pt.Votes {
+	for nodeID, vAgree := range pt.Votes {
 		node, inMap := State.ClusterNodes[nodeID]
 		if inMap && node.NodeRole == "IBPMonitor" && isNodeActive(node) {
-			if v {
+			if vAgree {
 				yesCount++
 			} else {
 				noCount++
@@ -229,7 +228,7 @@ func handleVote(m *nats.Msg) {
 		return
 	}
 
-	// If all active monitors have voted, finalize as well
+	// If all active monitors have voted, finalize
 	activeVoters := 0
 	for nodeID := range pt.Votes {
 		node, inMap := State.ClusterNodes[nodeID]
@@ -248,7 +247,7 @@ func handleVote(m *nats.Msg) {
 	State.Mu.Unlock()
 }
 
-// handleFinalize processes incoming "consensus.finalize" messages.
+// handleFinalize processes "consensus.finalize" messages
 func handleFinalize(m *nats.Msg) {
 	var fm FinalizeMessage
 	if err := json.Unmarshal(m.Data, &fm); err != nil {
@@ -274,7 +273,7 @@ func handleFinalize(m *nats.Msg) {
 	}
 }
 
-// finalizeVote is triggered by timeouts or forced finalization.
+// finalizeVote is triggered by timeouts or forced finalization
 func finalizeVote(pid ProposalID) {
 	State.Mu.Lock()
 	pt, exists := State.Proposals[pid]
@@ -346,7 +345,7 @@ func finalizeVote(pid ProposalID) {
 		pid, finalStatus)
 }
 
-// checkLocalStatus consults local data about site/domain/endpoint for either IPv4 or IPv6
+// checkLocalStatus consults local data for site/domain/endpoint
 func checkLocalStatus(
 	checkType, checkName, memberName, domainName, endpoint string,
 	isIPv6 bool,
@@ -366,7 +365,7 @@ func checkLocalStatus(
 	}
 }
 
-// applyOfficialChanges updates data.Official with up/down status including isIPv6.
+// applyOfficialChanges updates data.Official with up/down status including isIPv6
 func applyOfficialChanges(prop Proposal, final bool) {
 	chk, chkOk := findCheckByName(prop.CheckName, prop.CheckType)
 	if !chkOk {

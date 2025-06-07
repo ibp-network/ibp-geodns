@@ -11,12 +11,13 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+// Global NATS connection handle
 var (
 	nc           *nats.Conn
 	connectionMu sync.Mutex
 )
 
-// Connect initializes a NATS connection using the config in cfg.GetConfig().
+// Connect initializes a NATS connection using the config from cfg.GetConfig().
 func Connect() error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -64,7 +65,7 @@ func Connect() error {
 	return nil
 }
 
-// Disconnect closes the NATS connection.
+// Disconnect closes the NATS connection if not already closed.
 func Disconnect() {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -75,7 +76,7 @@ func Disconnect() {
 	}
 }
 
-// Publish wraps nc.Publish.
+// Publish wraps nc.Publish to safely publish a message.
 func Publish(subject string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -106,7 +107,7 @@ func PublishMsgWithReply(subject, reply string, data []byte) error {
 	return nc.PublishMsg(msg)
 }
 
-// Subscribe wraps nc.Subscribe.
+// Subscribe wraps nc.Subscribe with a debug wrapper callback.
 func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -114,9 +115,9 @@ func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 		return nil, nats.ErrConnectionClosed
 	}
 
-	// Wrap the callback so we log the subject
+	// We wrap the callback to log the subject.
 	wrappedCb := func(m *nats.Msg) {
-		log.Log(log.Debug, "[NATS] Subscribe received: subject=%s len(data)=%d", m.Subject, len(m.Data))
+		log.Log(log.Debug, "[NATS] Subscription received subject=%s len(data)=%d", m.Subject, len(m.Data))
 		cb(m)
 	}
 
