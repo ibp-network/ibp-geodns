@@ -20,6 +20,28 @@ func ProposeCheckStatus(
 	dataMap map[string]interface{},
 	isIPv6 bool,
 ) bool {
+	State.Mu.RLock()
+	for _, pt := range State.Proposals {
+		prop := pt.Proposal
+		// Only skip if it’s an identical active proposal from *this node*.
+		if !pt.Finalized &&
+			prop.CheckType == checkType &&
+			prop.CheckName == checkName &&
+			prop.MemberName == memberName &&
+			prop.DomainName == domainName &&
+			prop.Endpoint == endpoint &&
+			prop.ProposedStatus == status &&
+			prop.IsIPv6 == isIPv6 &&
+			prop.SenderNodeID == State.NodeID {
+			log.Log(log.Debug,
+				"[NATS] ProposeCheckStatus skipped; identical active proposal for checkType=%s checkName=%s member=%s isIPv6=%v from same node=%s",
+				checkType, checkName, memberName, isIPv6, State.NodeID)
+			State.Mu.RUnlock()
+			return false
+		}
+	}
+	State.Mu.RUnlock()
+
 	log.Log(log.Debug,
 		"[NATS] ProposeCheckStatus creating new proposal for checkType=%s checkName=%s member=%s domain=%s endpoint=%s status=%v isIPv6=%v",
 		checkType, checkName, memberName, domainName, endpoint, status, isIPv6)
