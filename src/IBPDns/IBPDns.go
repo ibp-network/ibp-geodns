@@ -87,8 +87,8 @@ func startServiceMonitorPoller(intervalSec int) {
 func updateDNSMonitorSnapshot() {
 	c := cfg.GetConfig()
 	url := fmt.Sprintf("http://%s:%s/results",
-		c.Local.MonitorApi.ListenAddress,
-		c.Local.MonitorApi.ListenPort,
+		c.Local.DnsApi.MonitorAddress,
+		c.Local.DnsApi.MonitorPort,
 	)
 
 	client := http.Client{Timeout: 5 * time.Second}
