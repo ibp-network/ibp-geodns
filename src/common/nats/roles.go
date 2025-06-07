@@ -10,9 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// We define everything about node roles, cluster membership, marking
-// lastHeard, and so on.
-
+// EnableMonitorRole sets up the current node as an IBPMonitor
 func EnableMonitorRole() error {
 	State.SubjectPropose = "consensus.propose"
 	State.SubjectVote = "consensus.vote"
@@ -31,17 +29,21 @@ func EnableMonitorRole() error {
 	if err != nil {
 		return err
 	}
+	// Ensure subscription is active before proceeding, so we don't miss any initial messages.
+	if flushErr := Flush(); flushErr != nil {
+		return flushErr
+	}
 
 	State.ThisNode.NodeRole = "IBPMonitor"
 	State.ClusterNodes[State.NodeID] = State.ThisNode
-
 	StartGarbageCollection()
-
 	log.Log(log.Info, "[NATS] Monitor role enabled.")
+
 	broadcastClusterJoin()
 	return nil
 }
 
+// EnableDnsRole sets up the current node as an IBPDns
 func EnableDnsRole() error {
 	State.SubjectPropose = "consensus.propose"
 	State.SubjectVote = "consensus.vote"
@@ -59,6 +61,10 @@ func EnableDnsRole() error {
 	if err != nil {
 		return err
 	}
+	// Flush subscription to avoid losing messages
+	if flushErr := Flush(); flushErr != nil {
+		return flushErr
+	}
 
 	State.ThisNode.NodeRole = "IBPDns"
 	State.ClusterNodes[State.NodeID] = State.ThisNode
@@ -68,6 +74,7 @@ func EnableDnsRole() error {
 	return nil
 }
 
+// EnableCollatorRole sets up the current node as an IBPCollator
 func EnableCollatorRole() error {
 	State.SubjectPropose = "consensus.propose"
 	State.SubjectVote = "consensus.vote"
@@ -85,46 +92,55 @@ func EnableCollatorRole() error {
 	if err != nil {
 		return err
 	}
+	// Flush subscription to avoid losing messages
+	if flushErr := Flush(); flushErr != nil {
+		return flushErr
+	}
 
 	State.ThisNode.NodeRole = "IBPCollator"
 	State.ClusterNodes[State.NodeID] = State.ThisNode
-
 	StartGarbageCollection()
 	log.Log(log.Info, "[NATS] Collator role enabled.")
+
 	broadcastClusterJoin()
 	return nil
 }
 
 // handleAllMessages is the single entrypoint for the ">" subscription.
+// We parse the subject and choose which messages to handle based on role.
 func handleAllMessages(m *nats.Msg) {
 	subj := m.Subject
 	dataLen := len(m.Data)
 
 	log.Log(log.Debug, "[NATS] Subscription received subject=%s len(data)=%d", subj, dataLen)
 
-	// For cluster membership
+	// 1) Cluster membership messages (all node roles handle these)
 	if subj == State.SubjectCluster {
 		handleClusterMessage(m)
 		return
 	}
 
-	// For proposals
+	// 2) consensus.* messages => only IBPMonitor handles them
 	if subj == State.SubjectPropose {
-		handleProposal(m)
+		if State.ThisNode.NodeRole == "IBPMonitor" {
+			handleProposal(m)
+		}
 		return
 	}
-	// For votes
 	if subj == State.SubjectVote {
-		handleVote(m)
+		if State.ThisNode.NodeRole == "IBPMonitor" {
+			handleVote(m)
+		}
 		return
 	}
-	// For finalize
 	if subj == State.SubjectFinalize {
-		handleFinalize(m)
+		if State.ThisNode.NodeRole == "IBPMonitor" {
+			handleFinalize(m)
+		}
 		return
 	}
 
-	// Possibly more usage/stats
+	// 3) Monitor stats => only IBPMonitor responds to 'getDowntime', but all can receive 'downtimeData'
 	if subj == "monitor.stats.getDowntime" {
 		if State.ThisNode.NodeRole == "IBPMonitor" {
 			handleMonitorStatsRequest(m)
@@ -132,9 +148,12 @@ func handleAllMessages(m *nats.Msg) {
 		return
 	}
 	if subj == "monitor.stats.downtimeData" {
+		// Collator or Monitor can handle it, so no role check
 		handleMonitorStatsData(m)
 		return
 	}
+
+	// 4) DNS usage => only IBPDns responds to 'getUsage', but all can receive 'usageData'
 	if subj == "dns.usage.getUsage" {
 		if State.ThisNode.NodeRole == "IBPDns" {
 			handleDnsUsageRequest(m)
@@ -146,7 +165,7 @@ func handleAllMessages(m *nats.Msg) {
 		return
 	}
 
-	// Possibly request/reply for usage
+	// 5) Possibly request/reply for "downtimeReply" or "usageReply"
 	if strings.Contains(subj, "downtimeReply") {
 		handleMonitorStatsData(m)
 		return
@@ -262,7 +281,6 @@ func addNode(node NodeInfo) {
 }
 
 // markNodeHeard updates clusterNodes[nodeID].LastHeard to now.
-// If nodeID is missing from ClusterNodes, we add it with blank role.
 func markNodeHeard(nodeID string) {
 	if nodeID == "" {
 		return
