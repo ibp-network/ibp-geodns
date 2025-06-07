@@ -154,7 +154,7 @@ func startHeartbeat() {
 		// Initial delay to let everything initialize
 		time.Sleep(2 * time.Second)
 
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(300 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
 			// Update our own last heard time
