@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -84,28 +86,83 @@ func startServiceMonitorPoller(intervalSec int) {
 	}()
 }
 
+// Add this to updateDNSMonitorSnapshot() in IBPDns.go to debug what we're receiving
+
 func updateDNSMonitorSnapshot() {
 	c := cfg.GetConfig()
+
 	url := fmt.Sprintf("http://%s:%s/results",
 		c.Local.DnsApi.MonitorAddress,
 		c.Local.DnsApi.MonitorPort,
 	)
 
+	log.Log(log.Info, "[Monitor Poller] Fetching results from: %s", url)
+
 	client := http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		log.Log(log.Warn, "dnsApi poller: cannot fetch results from %s: %v", url, err)
+		log.Log(log.Error, "[Monitor Poller] Failed to fetch results from %s: %v", url, err)
 		return
 	}
 	defer resp.Body.Close()
 
-	var tmp api.OfficialResults
-	decErr := api.DecodeJSONBody(resp.Body, &tmp)
-	if decErr != nil {
-		log.Log(log.Warn, "dnsApi poller: decode error: %v", decErr)
+	if resp.StatusCode != http.StatusOK {
+		log.Log(log.Error, "[Monitor Poller] Non-OK status from monitor: %d", resp.StatusCode)
 		return
 	}
 
+	// First, let's see the raw JSON response
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Log(log.Error, "[Monitor Poller] Failed to read response body: %v", err)
+		return
+	}
+
+	// Log a sample of the raw response (first 500 chars)
+	sample := string(bodyBytes)
+	if len(sample) > 500 {
+		sample = sample[:500] + "..."
+	}
+	log.Log(log.Debug, "[Monitor Poller] Raw response sample: %s", sample)
+
+	// Now try to decode it
+	var tmp api.OfficialResults
+	decErr := json.Unmarshal(bodyBytes, &tmp)
+	if decErr != nil {
+		log.Log(log.Error, "[Monitor Poller] Failed to decode response: %v", decErr)
+		return
+	}
+
+	// Debug: Check if MemberName is actually populated
+	if len(tmp.SiteResults) > 0 && len(tmp.SiteResults[0].Results) > 0 {
+		firstResult := tmp.SiteResults[0].Results[0]
+		log.Log(log.Debug, "[Monitor Poller] First site result - MemberName: '%s', Status: %v",
+			firstResult.MemberName, firstResult.Status)
+	}
+
+	// Update the local snapshot
 	api.SetOfficialSnapshot(tmp)
-	log.Log(log.Debug, "dnsApi poller: updated official results snapshot.")
+
+	// Log detailed stats
+	offlineMembers := make(map[string]bool)
+
+	// Check site results
+	for _, sr := range tmp.SiteResults {
+		for _, r := range sr.Results {
+			if !r.Status {
+				if r.MemberName == "" {
+					log.Log(log.Warn, "[Monitor Poller] Found offline member with EMPTY name in site check %s", sr.CheckName)
+				} else {
+					offlineMembers[r.MemberName] = true
+					log.Log(log.Info, "[Monitor Poller] Member %s is OFFLINE (site check %s, IPv6=%v): %s",
+						r.MemberName, sr.CheckName, sr.IsIPv6, r.ErrorText)
+				}
+			}
+		}
+	}
+
+	// Similar for domains and endpoints...
+
+	log.Log(log.Info, "[Monitor Poller] Snapshot updated: %d sites, %d domains, %d endpoints, %d members offline",
+		len(tmp.SiteResults), len(tmp.DomainResults), len(tmp.EndpointResults), len(offlineMembers))
 }
