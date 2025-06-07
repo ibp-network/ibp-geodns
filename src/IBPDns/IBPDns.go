@@ -87,6 +87,7 @@ func startServiceMonitorPoller(intervalSec int) {
 }
 
 // Add this to updateDNSMonitorSnapshot() in IBPDns.go to debug what we're receiving
+// Also add "io" to the imports at the top of the file
 
 func updateDNSMonitorSnapshot() {
 	c := cfg.GetConfig()
