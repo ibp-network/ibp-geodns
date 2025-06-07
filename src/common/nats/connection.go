@@ -113,7 +113,14 @@ func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	if nc == nil || nc.IsClosed() {
 		return nil, nats.ErrConnectionClosed
 	}
-	sub, err := nc.Subscribe(subject, cb)
+
+	// Wrap the callback so we log the subject
+	wrappedCb := func(m *nats.Msg) {
+		log.Log(log.Debug, "[NATS] Subscribe received: subject=%s len(data)=%d", m.Subject, len(m.Data))
+		cb(m)
+	}
+
+	sub, err := nc.Subscribe(subject, wrappedCb)
 	if err != nil {
 		return nil, err
 	}
