@@ -10,7 +10,9 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// EnableMonitorRole sets up the current node as an IBPMonitor
+// We define everything about node roles, cluster membership, marking
+// lastHeard, and so on.
+
 func EnableMonitorRole() error {
 	State.SubjectPropose = "consensus.propose"
 	State.SubjectVote = "consensus.vote"
@@ -29,27 +31,18 @@ func EnableMonitorRole() error {
 	if err != nil {
 		return err
 	}
-	// Ensure subscription is active before proceeding, so we don't miss any initial messages.
-	if flushErr := Flush(); flushErr != nil {
-		return flushErr
-	}
 
 	State.ThisNode.NodeRole = "IBPMonitor"
 	State.ClusterNodes[State.NodeID] = State.ThisNode
 
 	StartGarbageCollection()
+	startHeartbeat() // Add heartbeat
+
 	log.Log(log.Info, "[NATS] Monitor role enabled.")
-
-	// 1) Immediately broadcast we are joining
 	broadcastClusterJoin()
-
-	// 2) Request membership from existing nodes, so we get the full membership set
-	requestClusterMembership()
-
 	return nil
 }
 
-// EnableDnsRole sets up the current node as an IBPDns
 func EnableDnsRole() error {
 	State.SubjectPropose = "consensus.propose"
 	State.SubjectVote = "consensus.vote"
@@ -67,26 +60,17 @@ func EnableDnsRole() error {
 	if err != nil {
 		return err
 	}
-	// Flush subscription to avoid losing messages
-	if flushErr := Flush(); flushErr != nil {
-		return flushErr
-	}
 
 	State.ThisNode.NodeRole = "IBPDns"
 	State.ClusterNodes[State.NodeID] = State.ThisNode
 
+	startHeartbeat() // Add heartbeat
+
 	log.Log(log.Info, "[NATS] IBPDns role enabled.")
-
-	// 1) Immediately broadcast we are joining
 	broadcastClusterJoin()
-
-	// 2) Request membership from existing nodes
-	requestClusterMembership()
-
 	return nil
 }
 
-// EnableCollatorRole sets up the current node as an IBPCollator
 func EnableCollatorRole() error {
 	State.SubjectPropose = "consensus.propose"
 	State.SubjectVote = "consensus.vote"
@@ -104,96 +88,102 @@ func EnableCollatorRole() error {
 	if err != nil {
 		return err
 	}
-	// Flush subscription to avoid losing messages
-	if flushErr := Flush(); flushErr != nil {
-		return flushErr
-	}
 
 	State.ThisNode.NodeRole = "IBPCollator"
 	State.ClusterNodes[State.NodeID] = State.ThisNode
 
 	StartGarbageCollection()
+	startHeartbeat() // Add heartbeat
 	log.Log(log.Info, "[NATS] Collator role enabled.")
-
-	// 1) Immediately broadcast we are joining
 	broadcastClusterJoin()
-
-	// 2) Request membership from existing nodes
-	requestClusterMembership()
-
 	return nil
 }
 
+// startHeartbeat sends periodic cluster join messages to keep node visible
+func startHeartbeat() {
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			// Update our own last heard time
+			State.Mu.Lock()
+			if node, exists := State.ClusterNodes[State.NodeID]; exists {
+				node.LastHeard = time.Now().UTC()
+				State.ClusterNodes[State.NodeID] = node
+			}
+			State.Mu.Unlock()
+
+			// Re-broadcast our presence
+			broadcastClusterJoin()
+		}
+	}()
+}
+
 // handleAllMessages is the single entrypoint for the ">" subscription.
-// We parse the subject and choose which messages to handle based on role.
 func handleAllMessages(m *nats.Msg) {
-	subj := m.Subject
-	dataLen := len(m.Data)
+	// Process messages in a goroutine to prevent blocking the NATS handler
+	go func() {
+		subj := m.Subject
+		dataLen := len(m.Data)
 
-	log.Log(log.Debug, "[NATS] Subscription received subject=%s len(data)=%d", subj, dataLen)
+		log.Log(log.Debug, "[NATS] Processing message: subject=%s len(data)=%d", subj, dataLen)
 
-	// 1) Cluster membership or membership request
-	if subj == State.SubjectCluster {
-		handleClusterMessage(m)
-		return
-	}
+		// For cluster membership
+		if subj == State.SubjectCluster {
+			handleClusterMessage(m)
+			return
+		}
 
-	// 2) consensus.* messages => only IBPMonitor handles them
-	if subj == State.SubjectPropose {
-		if State.ThisNode.NodeRole == "IBPMonitor" {
+		// For proposals
+		if subj == State.SubjectPropose {
 			handleProposal(m)
+			return
 		}
-		return
-	}
-	if subj == State.SubjectVote {
-		if State.ThisNode.NodeRole == "IBPMonitor" {
+		// For votes
+		if subj == State.SubjectVote {
 			handleVote(m)
+			return
 		}
-		return
-	}
-	if subj == State.SubjectFinalize {
-		if State.ThisNode.NodeRole == "IBPMonitor" {
+		// For finalize
+		if subj == State.SubjectFinalize {
 			handleFinalize(m)
+			return
 		}
-		return
-	}
 
-	// 3) Monitor stats => only IBPMonitor responds to 'getDowntime', but all can receive 'downtimeData'
-	if subj == "monitor.stats.getDowntime" {
-		if State.ThisNode.NodeRole == "IBPMonitor" {
-			handleMonitorStatsRequest(m)
+		// Possibly more usage/stats
+		if subj == "monitor.stats.getDowntime" {
+			if State.ThisNode.NodeRole == "IBPMonitor" {
+				handleMonitorStatsRequest(m)
+			}
+			return
 		}
-		return
-	}
-	if subj == "monitor.stats.downtimeData" {
-		// Collator or Monitor can handle it, so no role check
-		handleMonitorStatsData(m)
-		return
-	}
-
-	// 4) DNS usage => only IBPDns responds to 'getUsage', but all can receive 'usageData'
-	if subj == "dns.usage.getUsage" {
-		if State.ThisNode.NodeRole == "IBPDns" {
-			handleDnsUsageRequest(m)
+		if subj == "monitor.stats.downtimeData" {
+			handleMonitorStatsData(m)
+			return
 		}
-		return
-	}
-	if subj == "dns.usage.usageData" {
-		handleDnsUsageData(m)
-		return
-	}
+		if subj == "dns.usage.getUsage" {
+			if State.ThisNode.NodeRole == "IBPDns" {
+				handleDnsUsageRequest(m)
+			}
+			return
+		}
+		if subj == "dns.usage.usageData" {
+			handleDnsUsageData(m)
+			return
+		}
 
-	// 5) Possibly request/reply for "downtimeReply" or "usageReply"
-	if strings.Contains(subj, "downtimeReply") {
-		handleMonitorStatsData(m)
-		return
-	}
-	if strings.Contains(subj, "usageReply") {
-		handleDnsUsageData(m)
-		return
-	}
+		// Possibly request/reply for usage
+		if strings.Contains(subj, "downtimeReply") {
+			handleMonitorStatsData(m)
+			return
+		}
+		if strings.Contains(subj, "usageReply") {
+			handleDnsUsageData(m)
+			return
+		}
 
-	log.Log(log.Debug, "[NATS] handleAllMessages: unhandled subject=%s", subj)
+		log.Log(log.Debug, "[NATS] handleAllMessages: unhandled subject=%s", subj)
+	}()
 }
 
 // broadcastClusterJoin publishes "join"
@@ -203,24 +193,17 @@ func broadcastClusterJoin() {
 		Sender: State.ThisNode,
 	}
 	data, _ := json.Marshal(msg)
+	log.Log(log.Info, "[NATS] Broadcasting cluster join for node=%s role=%s to subject=%s",
+		State.ThisNode.NodeID, State.ThisNode.NodeRole, State.SubjectCluster)
+
 	if err := Publish(State.SubjectCluster, data); err != nil {
 		log.Log(log.Error, "[NATS] Failed to publish cluster join: %v", err)
+	} else {
+		log.Log(log.Info, "[NATS] Successfully published cluster join message")
 	}
 }
 
-// requestClusterMembership publishes a 'requestMembership' to ask existing nodes for their membership
-func requestClusterMembership() {
-	msg := ClusterMessage{
-		Type:   "requestMembership",
-		Sender: State.ThisNode,
-	}
-	data, _ := json.Marshal(msg)
-	if err := Publish(State.SubjectCluster, data); err != nil {
-		log.Log(log.Error, "[NATS] Failed to publish requestMembership: %v", err)
-	}
-}
-
-// broadcastClusterMembership publishes "membership" with our current known cluster
+// broadcastClusterMembership publishes "membership"
 func broadcastClusterMembership() {
 	State.Mu.RLock()
 	var nodes []NodeInfo
@@ -242,7 +225,7 @@ func broadcastClusterMembership() {
 	}
 }
 
-// handleClusterMessage processes "join", "membership", or "requestMembership"
+// handleClusterMessage processes "join" or "membership"
 func handleClusterMessage(m *nats.Msg) {
 	var msg ClusterMessage
 	if err := json.Unmarshal(m.Data, &msg); err != nil {
@@ -263,11 +246,6 @@ func handleClusterMessage(m *nats.Msg) {
 		log.Log(log.Debug, "[NATS] handleClusterMessage: got membership with %d nodes from sender=%s",
 			len(msg.Members), msg.Sender.NodeID)
 		mergeClusterMembership(msg.Members)
-
-	case "requestMembership":
-		// If we receive a requestMembership, we respond with our membership
-		log.Log(log.Debug, "[NATS] handleClusterMessage: node=%s requests membership => broadcasting membership", msg.Sender.NodeID)
-		broadcastClusterMembership()
 
 	default:
 		log.Log(log.Warn, "[NATS] handleClusterMessage: unknown type=%s", msg.Type)
@@ -316,6 +294,7 @@ func addNode(node NodeInfo) {
 }
 
 // markNodeHeard updates clusterNodes[nodeID].LastHeard to now.
+// If nodeID is missing from ClusterNodes, we add it with blank role.
 func markNodeHeard(nodeID string) {
 	if nodeID == "" {
 		return

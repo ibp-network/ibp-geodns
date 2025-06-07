@@ -20,10 +20,13 @@ func ProposeCheckStatus(
 	dataMap map[string]interface{},
 	isIPv6 bool,
 ) bool {
+	// Check for existing proposal without holding lock during Propose call
+	shouldPropose := true
+
 	State.Mu.RLock()
 	for _, pt := range State.Proposals {
 		prop := pt.Proposal
-		// Only skip if it’s an identical active proposal from *this node*.
+		// Only skip if it's an identical active proposal from *this node*.
 		if !pt.Finalized &&
 			prop.CheckType == checkType &&
 			prop.CheckName == checkName &&
@@ -36,17 +39,20 @@ func ProposeCheckStatus(
 			log.Log(log.Debug,
 				"[NATS] ProposeCheckStatus skipped; identical active proposal for checkType=%s checkName=%s member=%s isIPv6=%v from same node=%s",
 				checkType, checkName, memberName, isIPv6, State.NodeID)
-			State.Mu.RUnlock()
-			return false
+			shouldPropose = false
+			break
 		}
 	}
 	State.Mu.RUnlock()
 
-	log.Log(log.Debug,
-		"[NATS] ProposeCheckStatus creating new proposal for checkType=%s checkName=%s member=%s domain=%s endpoint=%s status=%v isIPv6=%v",
-		checkType, checkName, memberName, domainName, endpoint, status, isIPv6)
-	Propose(checkType, checkName, memberName, domainName, endpoint, status, errorText, dataMap, isIPv6)
-	return true
+	if shouldPropose {
+		log.Log(log.Debug,
+			"[NATS] ProposeCheckStatus creating new proposal for checkType=%s checkName=%s member=%s domain=%s endpoint=%s status=%v isIPv6=%v",
+			checkType, checkName, memberName, domainName, endpoint, status, isIPv6)
+		Propose(checkType, checkName, memberName, domainName, endpoint, status, errorText, dataMap, isIPv6)
+		return true
+	}
+	return false
 }
 
 // Propose constructs a new Proposal and publishes it.
@@ -138,28 +144,33 @@ func handleProposal(m *nats.Msg) {
 	}
 	State.Mu.Unlock()
 
-	// After storing, we vote
-	go func(pr Proposal) {
-		found, localStatus := checkLocalStatus(pr.CheckType, pr.CheckName, pr.MemberName, pr.DomainName, pr.Endpoint, pr.IsIPv6)
+	// After storing, we vote - moved outside of lock to prevent deadlock
+	// Use a copy of the proposal to avoid race conditions
+	proposalCopy := prop
+	go func() {
+		// Small delay to ensure the proposal is fully propagated
+		time.Sleep(100 * time.Millisecond)
+
+		found, localStatus := checkLocalStatus(proposalCopy.CheckType, proposalCopy.CheckName, proposalCopy.MemberName, proposalCopy.DomainName, proposalCopy.Endpoint, proposalCopy.IsIPv6)
 		if !found {
-			log.Log(log.Debug, "[NATS] handleProposal: local check not found for ID=%s", pr.ID)
+			log.Log(log.Debug, "[NATS] handleProposal: local check not found for ID=%s", proposalCopy.ID)
 			return
 		}
 		v := Vote{
-			ProposalID:   pr.ID,
+			ProposalID:   proposalCopy.ID,
 			SenderNodeID: State.NodeID,
 			NodeID:       State.NodeID,
-			Agree:        (localStatus == pr.ProposedStatus),
+			Agree:        (localStatus == proposalCopy.ProposedStatus),
 			Timestamp:    time.Now().UTC(),
 		}
 		data, _ := json.Marshal(v)
 		err := Publish(State.SubjectVote, data)
 		if err != nil {
-			log.Log(log.Error, "[NATS] handleProposal: failed to publish vote ID=%s: %v", pr.ID, err)
+			log.Log(log.Error, "[NATS] handleProposal: failed to publish vote ID=%s: %v", proposalCopy.ID, err)
 		} else {
-			log.Log(log.Debug, "[NATS] handleProposal: node=%s voted (agree=%v) for ID=%s", State.NodeID, v.Agree, pr.ID)
+			log.Log(log.Debug, "[NATS] handleProposal: node=%s voted (agree=%v) for ID=%s", State.NodeID, v.Agree, proposalCopy.ID)
 		}
-	}(prop)
+	}()
 }
 
 // handleVote processes "consensus.vote"
