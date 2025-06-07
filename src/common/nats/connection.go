@@ -11,13 +11,12 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// Global NATS connection handle
 var (
 	nc           *nats.Conn
 	connectionMu sync.Mutex
 )
 
-// Connect initializes a NATS connection using the config from cfg.GetConfig().
+// Connect sets up the global NATS connection
 func Connect() error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -65,7 +64,7 @@ func Connect() error {
 	return nil
 }
 
-// Disconnect closes the NATS connection if not already closed.
+// Disconnect forcibly closes
 func Disconnect() {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -76,7 +75,7 @@ func Disconnect() {
 	}
 }
 
-// Publish wraps nc.Publish to safely publish a message.
+// Publish publishes to subject
 func Publish(subject string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -86,7 +85,7 @@ func Publish(subject string, data []byte) error {
 	return nc.Publish(subject, data)
 }
 
-// PublishMsg wraps nc.PublishMsg.
+// PublishMsg is wrapper
 func PublishMsg(msg *nats.Msg) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -96,7 +95,7 @@ func PublishMsg(msg *nats.Msg) error {
 	return nc.PublishMsg(msg)
 }
 
-// PublishMsgWithReply publishes a message with a reply subject.
+// PublishMsgWithReply publishes with a reply subject
 func PublishMsgWithReply(subject, reply string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -107,7 +106,7 @@ func PublishMsgWithReply(subject, reply string, data []byte) error {
 	return nc.PublishMsg(msg)
 }
 
-// Subscribe wraps nc.Subscribe with a debug wrapper callback.
+// Subscribe to a subject
 func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -115,13 +114,11 @@ func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 		return nil, nats.ErrConnectionClosed
 	}
 
-	// We wrap the callback to log the subject.
-	wrappedCb := func(m *nats.Msg) {
-		log.Log(log.Debug, "[NATS] Subscription received subject=%s len(data)=%d", m.Subject, len(m.Data))
-		cb(m)
-	}
-
-	sub, err := nc.Subscribe(subject, wrappedCb)
+	sub, err := nc.Subscribe(subject, func(msg *nats.Msg) {
+		// optional: mark we heard from *someone*, if we parse nodeID from msg
+		// but we do that in handleAllMessages or in handleProposal/handleVote
+		cb(msg)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +126,7 @@ func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	return sub, nil
 }
 
-// Request wraps nc.Request.
+// Request is optional
 func Request(subject string, data []byte, timeout time.Duration) (*nats.Msg, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
