@@ -68,6 +68,7 @@ func Connect() error {
 func Disconnect() {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
+
 	if nc != nil && !nc.IsClosed() {
 		nc.Close()
 		nc = nil
@@ -115,8 +116,7 @@ func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	}
 
 	sub, err := nc.Subscribe(subject, func(msg *nats.Msg) {
-		// optional: mark we heard from *someone*, if we parse nodeID from msg
-		// but we do that in handleAllMessages or in handleProposal/handleVote
+		// The callback is invoked asynchronously by the nats library
 		cb(msg)
 	})
 	if err != nil {
@@ -134,4 +134,15 @@ func Request(subject string, data []byte, timeout time.Duration) (*nats.Msg, err
 		return nil, nats.ErrConnectionClosed
 	}
 	return nc.Request(subject, data, timeout)
+}
+
+// Flush ensures that all subscriptions and messages are processed up to this point.
+// This helps to avoid losing messages if we publish too quickly after subscribing.
+func Flush() error {
+	connectionMu.Lock()
+	defer connectionMu.Unlock()
+	if nc == nil || nc.IsClosed() {
+		return nats.ErrConnectionClosed
+	}
+	return nc.Flush()
 }
