@@ -12,9 +12,9 @@ jobs:
       with:
         go-version: '1.24'
     
-    - name: Verify dependencies
+    - name: Ensure go.sum is up to date and verify dependencies
       run: |
-        go mod download
+        go mod tidy
         go mod verify
     
     - name: Build all architectures
