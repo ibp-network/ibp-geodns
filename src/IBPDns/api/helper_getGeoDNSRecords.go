@@ -7,12 +7,11 @@ import (
 
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
+	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
 )
 
-// ProcessDynamic chooses the closest online member for the given domain
-// and returns (records, chosenMemberName). The `useIPv6` param indicates whether
-// we want to pick IPv6 addresses (AAAA) or IPv4 addresses (A).
+// ProcessDynamic decides whether we want IPv4 or IPv6 (based on `useIPv6`) and picks the best online member.
 func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]cfg.DNSRecord, string) {
 	var records []cfg.DNSRecord
 	chosenMemberName := ""
@@ -20,96 +19,130 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 	var closestMember cfg.Member
 	minDistance := math.MaxFloat64
 
-	clientLat, clientLon := max.GetClientCoordinates(params.Remote)
+	clientIP := net.ParseIP(params.Remote)
+	var clientLat, clientLon float64
+	if clientIP != nil {
+		// Check if the client IP is IPv6
+		isClientIPv6 := clientIP.To4() == nil
 
-	ServiceRecords.mu.RLock()
-	defer ServiceRecords.mu.RUnlock()
-
-	for serviceDomain, serviceConfig := range ServiceRecords.Services {
-		if strings.EqualFold(serviceDomain, domain) {
-			// Evaluate each assigned member
-			for _, member := range serviceConfig.Members {
-				// Must not be forcibly overridden offline
-				if member.Override {
-					continue
-				}
-
-				// Check if we want IPv4 or IPv6
-				addrToUse := ""
-				if useIPv6 {
-					if member.Service.ServiceIPv6 == "" {
-						continue
-					}
-					// Official checks for IPv6
-					if !IsMemberOnlineForDomainV6(domain, member.Details.Name) {
-						continue
-					}
-					addrToUse = member.Service.ServiceIPv6
-				} else {
-					if member.Service.ServiceIPv4 == "" {
-						continue
-					}
-					// Official checks for IPv4
-					if !IsMemberOnlineForDomain(domain, member.Details.Name) {
-						continue
-					}
-					addrToUse = member.Service.ServiceIPv4
-				}
-
-				// Validate IP
-				testIP := net.ParseIP(addrToUse)
-				if testIP == nil {
-					continue
-				}
-
-				dist := max.Distance(clientLat, clientLon, member.Location.Latitude, member.Location.Longitude)
-				if dist < minDistance {
-					minDistance = dist
-					closestMember = member
-				}
-			}
-
-			// If we have found a best match
-			if closestMember.Details.Name != "" {
-				chosenMemberName = closestMember.Details.Name
-				if useIPv6 {
-					// AAAA
-					rec := cfg.DNSRecord{
-						DomainID: id,
-						QName:    domain,
-						QType:    "AAAA",
-						Content:  closestMember.Service.ServiceIPv6,
-						TTL:      30,
-						Auth:     true,
-					}
-					records = append(records, rec)
-				} else {
-					// A
-					rec := cfg.DNSRecord{
-						DomainID: id,
-						QName:    domain,
-						QType:    "A",
-						Content:  closestMember.Service.ServiceIPv4,
-						TTL:      30,
-						Auth:     true,
-					}
-					records = append(records, rec)
-				}
-			}
+		// Use appropriate geolocation based on client IP version
+		if isClientIPv6 {
+			// For IPv6 clients, we should ideally have a separate IPv6 geolocation method
+			// For now, we'll use the same method but log it
+			log.Log(log.Debug, "ProcessDynamic: Client is using IPv6: %s", clientIP.String())
+			clientLat, clientLon = max.GetClientCoordinates(clientIP.String())
+		} else {
+			// IPv4 client
+			log.Log(log.Debug, "ProcessDynamic: Client is using IPv4: %s", clientIP.String())
+			clientLat, clientLon = max.GetClientCoordinates(clientIP.String())
 		}
 	}
+
+	// Acquire the service configuration
+	ServiceRecords.mu.RLock()
+	sc, found := ServiceRecords.Services[strings.ToLower(domain)]
+	ServiceRecords.mu.RUnlock()
+
+	if !found {
+		// No dynamic config for this domain
+		return nil, ""
+	}
+
+	for _, member := range sc.Members {
+		// Skip if override is set
+		if member.Override {
+			continue
+		}
+
+		// Decide which IP (v4 or v6) to use
+		var ipToUse string
+		if useIPv6 {
+			ipToUse = member.Service.ServiceIPv6
+			if ipToUse == "" {
+				continue
+			}
+			// FIXED: Use IPv6-specific status check
+			isOnline := IsMemberOnlineForDomainIPv6(domain, member.Details.Name)
+			if !isOnline {
+				log.Log(log.Debug, "ProcessDynamic: member %s is offline for IPv6 on domain %s",
+					member.Details.Name, domain)
+				continue
+			}
+		} else {
+			ipToUse = member.Service.ServiceIPv4
+			if ipToUse == "" {
+				continue
+			}
+			// FIXED: Use IPv4-specific status check
+			isOnline := IsMemberOnlineForDomainIPv4(domain, member.Details.Name)
+			if !isOnline {
+				log.Log(log.Debug, "ProcessDynamic: member %s is offline for IPv4 on domain %s",
+					member.Details.Name, domain)
+				continue
+			}
+		}
+
+		parsedIP := net.ParseIP(ipToUse)
+		if parsedIP == nil {
+			continue
+		}
+
+		dist := max.Distance(clientLat, clientLon, member.Location.Latitude, member.Location.Longitude)
+		if dist < minDistance {
+			minDistance = dist
+			closestMember = member
+		}
+	}
+
+	if closestMember.Details.Name == "" {
+		// None matched
+		log.Log(log.Debug, "ProcessDynamic: no suitable %v members found for domain=%s", boolToStr(useIPv6), domain)
+		return records, ""
+	}
+
+	// Produce final record
+	if useIPv6 {
+		rec := cfg.DNSRecord{
+			DomainID: id,
+			QName:    domain,
+			QType:    "AAAA",
+			Content:  closestMember.Service.ServiceIPv6,
+			TTL:      30,
+			Auth:     true,
+		}
+		records = append(records, rec)
+		chosenMemberName = closestMember.Details.Name
+
+		// Record the DNS hit for usage stats
+		dat.RecordDnsHit(true, params.Remote, domain, chosenMemberName)
+	} else {
+		rec := cfg.DNSRecord{
+			DomainID: id,
+			QName:    domain,
+			QType:    "A",
+			Content:  closestMember.Service.ServiceIPv4,
+			TTL:      30,
+			Auth:     true,
+		}
+		records = append(records, rec)
+		chosenMemberName = closestMember.Details.Name
+
+		// Record the DNS hit for usage stats
+		dat.RecordDnsHit(false, params.Remote, domain, chosenMemberName)
+	}
+
+	log.Log(log.Debug, "ProcessDynamic: selected member %s for %s query on domain %s",
+		chosenMemberName, boolToStr(useIPv6), domain)
 
 	return records, chosenMemberName
 }
 
-// IsMemberOnlineForDomainV6 checks official results for IPv6 by calling
-// our data-layer function that filters on IPv6 only.
-func IsMemberOnlineForDomainV6(domain, memberName string) bool {
-	return dat.IsMemberOnlineForDomainIPv6(domain, memberName)
-}
+// REMOVED: IsMemberOnlineForDomainIPv4v6 - this was the problematic function
+// Now we use the specific IPv4/IPv6 functions from helper_monitor.go
 
-// IsValidIPv4 checks if a string is a valid IPv4 address
-func IsValidIPv4(ip string) bool {
-	parsedIP := net.ParseIP(ip)
-	return parsedIP != nil && parsedIP.To4() != nil
+func boolToStr(b bool) string {
+	if b {
+		return "IPv6"
+	}
+	return "IPv4"
 }

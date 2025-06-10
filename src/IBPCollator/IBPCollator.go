@@ -11,7 +11,7 @@ import (
 	nconn "ibp-geodns/src/common/nats"
 )
 
-var version = "0.3.1"
+var version = "0.3.3"
 
 func main() {
 	log.Log(log.Info, "IBP-GeoDNS Collator v%s starting...", version)
@@ -54,8 +54,8 @@ func main() {
 
 	log.Log(log.Info, "[Collator] Requesting usage data from all IBPDns nodes...")
 	usageReq := nconn.UsageRequest{
-		StartDate:  "2025-05-30",
-		EndDate:    "2025-05-30",
+		StartDate:  "2025-06-07",
+		EndDate:    "2025-06-07",
 		Domain:     "",
 		MemberName: "",
 		Country:    "",
@@ -69,8 +69,8 @@ func main() {
 
 	log.Log(log.Info, "[Collator] Requesting downtime data from all IBPMonitor nodes...")
 	dtReq := nconn.DowntimeRequest{
-		StartTime:  time.Date(2025, 5, 30, 0, 0, 0, 0, time.UTC),
-		EndTime:    time.Date(2025, 5, 30, 23, 59, 59, 0, time.UTC),
+		StartTime:  time.Date(2025, 6, 07, 0, 0, 0, 0, time.UTC),
+		EndTime:    time.Date(2025, 6, 07, 23, 59, 59, 0, time.UTC),
 		MemberName: "",
 	}
 	dtEvents, err := nconn.RequestAllMonitorsDowntime(dtReq, 5*time.Second)

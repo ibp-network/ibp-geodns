@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -15,7 +17,7 @@ import (
 	natsCommon "ibp-geodns/src/common/nats"
 )
 
-var version = "0.3.1"
+var version = "0.3.3"
 
 func main() {
 	log.Log(log.Info, "IBP-GeoDNS DNS backend v%s starting...", version)
@@ -46,6 +48,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Start polling monitor
+	intervalSec := c.Local.DnsApi.RefreshIntervalSeconds
+	log.Log(log.Info, "Starting serviceMonitor poller every %d seconds", intervalSec)
+	go startServiceMonitorPoller(intervalSec)
+
 	natsCommon.State.NodeID = c.Local.Nats.NodeID
 	natsCommon.State.ThisNode = natsCommon.NodeInfo{
 		NodeID:        c.Local.Nats.NodeID,
@@ -61,11 +68,6 @@ func main() {
 
 	// Launch DNS API
 	api.Init()
-
-	// Start polling monitor
-	intervalSec := c.Local.DnsApi.RefreshIntervalSeconds
-	log.Log(log.Info, "Starting serviceMonitor poller every %d seconds", intervalSec)
-	startServiceMonitorPoller(intervalSec)
 
 	for {
 		time.Sleep(60 * time.Second)
@@ -84,28 +86,104 @@ func startServiceMonitorPoller(intervalSec int) {
 	}()
 }
 
+// Add this to updateDNSMonitorSnapshot() in IBPDns.go to debug what we're receiving
+// Also add "io" to the imports at the top of the file
+
 func updateDNSMonitorSnapshot() {
 	c := cfg.GetConfig()
+
 	url := fmt.Sprintf("http://%s:%s/results",
-		c.Local.MonitorApi.ListenAddress,
-		c.Local.MonitorApi.ListenPort,
+		c.Local.DnsApi.MonitorAddress,
+		c.Local.DnsApi.MonitorPort,
 	)
+
+	log.Log(log.Info, "[Monitor Poller] Fetching results from: %s", url)
 
 	client := http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		log.Log(log.Warn, "dnsApi poller: cannot fetch results from %s: %v", url, err)
+		log.Log(log.Error, "[Monitor Poller] Failed to fetch results from %s: %v", url, err)
 		return
 	}
 	defer resp.Body.Close()
 
-	var tmp api.OfficialResults
-	decErr := api.DecodeJSONBody(resp.Body, &tmp)
-	if decErr != nil {
-		log.Log(log.Warn, "dnsApi poller: decode error: %v", decErr)
+	if resp.StatusCode != http.StatusOK {
+		log.Log(log.Error, "[Monitor Poller] Non-OK status from monitor: %d", resp.StatusCode)
 		return
 	}
 
+	// First, let's see the raw JSON response
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Log(log.Error, "[Monitor Poller] Failed to read response body: %v", err)
+		return
+	}
+
+	// Log a sample of the raw response (first 500 chars)
+	sample := string(bodyBytes)
+	if len(sample) > 500 {
+		sample = sample[:500] + "..."
+	}
+	log.Log(log.Debug, "[Monitor Poller] Raw response sample: %s", sample)
+
+	// Now try to decode it
+	var tmp api.OfficialResults
+	decErr := json.Unmarshal(bodyBytes, &tmp)
+	if decErr != nil {
+		log.Log(log.Error, "[Monitor Poller] Failed to decode response: %v", decErr)
+		return
+	}
+
+	// Debug: Check if MemberName is actually populated
+	if len(tmp.SiteResults) > 0 && len(tmp.SiteResults[0].Results) > 0 {
+		firstResult := tmp.SiteResults[0].Results[0]
+		log.Log(log.Debug, "[Monitor Poller] First site result - MemberName: '%s', Status: %v",
+			firstResult.MemberName, firstResult.Status)
+	}
+
+	// Update the local snapshot
 	api.SetOfficialSnapshot(tmp)
-	log.Log(log.Debug, "dnsApi poller: updated official results snapshot.")
+
+	// Log detailed stats
+	offlineMembers := make(map[string]bool)
+
+	// Check site results
+	for _, sr := range tmp.SiteResults {
+		for _, r := range sr.Results {
+			if !r.Status {
+				if r.MemberName == "" {
+					log.Log(log.Warn, "[Monitor Poller] Found offline member with EMPTY name in site check %s", sr.CheckName)
+				} else {
+					offlineMembers[r.MemberName] = true
+					log.Log(log.Info, "[Monitor Poller] Member %s is OFFLINE (site check %s, IPv6=%v): %s",
+						r.MemberName, sr.CheckName, sr.IsIPv6, r.ErrorText)
+				}
+			}
+		}
+	}
+
+	// Check domain results
+	for _, dr := range tmp.DomainResults {
+		for _, r := range dr.Results {
+			if !r.Status {
+				offlineMembers[r.MemberName] = true
+				log.Log(log.Info, "[Monitor Poller] Member %s is OFFLINE (domain check %s, domain=%s, IPv6=%v): %s",
+					r.MemberName, dr.CheckName, dr.Domain, dr.IsIPv6, r.ErrorText)
+			}
+		}
+	}
+
+	// Check endpoint results
+	for _, er := range tmp.EndpointResults {
+		for _, r := range er.Results {
+			if !r.Status {
+				offlineMembers[r.MemberName] = true
+				log.Log(log.Info, "[Monitor Poller] Member %s is OFFLINE (endpoint check %s, endpoint=%s, IPv6=%v): %s",
+					r.MemberName, er.CheckName, er.RpcUrl, er.IsIPv6, r.ErrorText)
+			}
+		}
+	}
+
+	log.Log(log.Info, "[Monitor Poller] Snapshot updated: %d sites, %d domains, %d endpoints, %d members offline",
+		len(tmp.SiteResults), len(tmp.DomainResults), len(tmp.EndpointResults), len(offlineMembers))
 }

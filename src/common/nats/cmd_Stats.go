@@ -1,3 +1,4 @@
+// ===== cmd_Stats.go =====
 package nats
 
 import (
@@ -14,22 +15,50 @@ import (
 
 // handleMonitorStatsRequest responds to downtime requests: "monitor.stats.getDowntime"
 func handleMonitorStatsRequest(m *nats.Msg) {
-	log.Log(log.Debug, "[NATS] handleMonitorStatsRequest: subject=%s reply=%s", m.Subject, m.Reply)
+	log.Log(log.Debug, "[NATS] handleMonitorStatsRequest: subject=%s reply=%s from=%s",
+		m.Subject, m.Reply, m.Header.Get("sender"))
 
 	var req DowntimeRequest
 	if err := json.Unmarshal(m.Data, &req); err != nil {
 		log.Log(log.Error, "[NATS] handleMonitorStatsRequest: unmarshal error: %v", err)
+		// Send error response if we have a reply subject
+		if m.Reply != "" {
+			errResp := DowntimeResponse{
+				NodeID: State.NodeID,
+				Events: []DowntimeEvent{},
+				Error:  fmt.Sprintf("unmarshal error: %v", err),
+			}
+			if data, err := json.Marshal(errResp); err == nil {
+				PublishMsgWithReply(m.Reply, "", data)
+			}
+		}
 		return
 	}
 
 	log.Log(log.Debug, "[NATS] handleMonitorStatsRequest: StartTime=%v EndTime=%v MemberName=%s",
 		req.StartTime, req.EndTime, req.MemberName)
 
+	// Validate request
+	if req.EndTime.Before(req.StartTime) {
+		log.Log(log.Error, "[NATS] handleMonitorStatsRequest: EndTime before StartTime")
+		if m.Reply != "" {
+			errResp := DowntimeResponse{
+				NodeID: State.NodeID,
+				Events: []DowntimeEvent{},
+				Error:  "EndTime must be after StartTime",
+			}
+			if data, err := json.Marshal(errResp); err == nil {
+				PublishMsgWithReply(m.Reply, "", data)
+			}
+		}
+		return
+	}
+
 	// retrieve local downtime events
 	events, err := retrieveLocalDowntimeEvents(req.MemberName, req.StartTime, req.EndTime)
 	if err != nil {
 		log.Log(log.Error, "[NATS] handleMonitorStatsRequest: error retrieving local downtime: %v", err)
-		return
+		events = []DowntimeEvent{} // Send empty list on error
 	}
 
 	resp := DowntimeResponse{
@@ -38,15 +67,12 @@ func handleMonitorStatsRequest(m *nats.Msg) {
 	}
 	dataBytes, _ := json.Marshal(resp)
 
-	// If the request provided an m.Reply subject, we respond directly
 	if m.Reply != "" {
 		log.Log(log.Debug,
 			"[NATS] handleMonitorStatsRequest: replying to %s with %d events",
 			m.Reply, len(events))
 		_ = PublishMsgWithReply(m.Reply, "", dataBytes)
-
 	} else {
-		// Otherwise, we can broadcast to "monitor.stats.downtimeData"
 		log.Log(log.Debug,
 			"[NATS] handleMonitorStatsRequest: publishing downtimeData with %d events",
 			len(events))
@@ -61,110 +87,145 @@ func retrieveLocalDowntimeEvents(memberName string, start, end time.Time) ([]Dow
 
 	rawEvents, err := dat.GetMemberEvents(memberName, "", start, end)
 	if err != nil {
-		log.Log(log.Error,
-			"[NATS] retrieveLocalDowntimeEvents: data.GetMemberEvents error: %v",
-			err)
 		return nil, err
 	}
 
 	results := make([]DowntimeEvent, 0, len(rawEvents))
 	for _, e := range rawEvents {
-		results = append(results, DowntimeEvent{
-			MemberName: e.MemberName,
-			CheckType:  e.CheckType,
-			CheckName:  e.CheckName,
-			DomainName: e.DomainName,
-			Endpoint:   e.Endpoint,
-			Status:     e.Status,
-			StartTime:  e.StartTime,
-			EndTime:    e.EndTime,
-			ErrorText:  e.ErrorText,
-			Data:       e.Data,
-		})
+		// Only include offline events (status=false)
+		if !e.Status {
+			results = append(results, DowntimeEvent{
+				MemberName: e.MemberName,
+				CheckType:  e.CheckType,
+				CheckName:  e.CheckName,
+				DomainName: e.DomainName,
+				Endpoint:   e.Endpoint,
+				Status:     e.Status,
+				StartTime:  e.StartTime,
+				EndTime:    e.EndTime,
+				ErrorText:  e.ErrorText,
+				Data:       e.Data,
+				IsIPv6:     e.IsIPv6,
+			})
+		}
 	}
+
 	log.Log(log.Debug,
-		"[NATS] retrieveLocalDowntimeEvents: returning %d events",
-		len(results))
+		"[NATS] retrieveLocalDowntimeEvents: found %d total events, returning %d downtime events for member=%s",
+		len(rawEvents), len(results), memberName)
 
 	return results, nil
 }
 
 // RequestAllMonitorsDowntime sends a DowntimeRequest to "monitor.stats.getDowntime"
-// with a unique inbox. Then we wait for all IBPMonitor nodes to reply or until timeout.
 func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]DowntimeEvent, error) {
-	monitorCount := countNodesByRole("IBPMonitor")
+	monitorCount := countActiveMonitors()
 	if monitorCount == 0 {
-		return nil, fmt.Errorf("no IBPMonitor nodes found, cannot gather downtime")
+		return nil, fmt.Errorf("no active IBPMonitor nodes found")
 	}
+
+	log.Log(log.Debug, "[NATS] RequestAllMonitorsDowntime: requesting from %d active monitors", monitorCount)
 
 	data, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("downtime request marshal error: %w", err)
 	}
 
-	// We'll create a unique inbox subject where we expect replies
-	inbox := fmt.Sprintf("%s.downtimeReply.%d", State.NodeID, time.Now().UnixNano())
-	responseChan := make(chan []DowntimeEvent, monitorCount)
+	// Create unique inbox
+	inbox := fmt.Sprintf("_INBOX.%s.downtimeReply.%d", State.NodeID, time.Now().UnixNano())
 
-	// Subscribe to that inbox
-	sub, subErr := Subscribe(inbox, func(msg *nats.Msg) {
+	// Use a map to track responses and avoid duplicates
+	responseMap := make(map[string][]DowntimeEvent)
+	var mu sync.Mutex
+
+	// Subscribe to inbox
+	sub, err := Subscribe(inbox, func(msg *nats.Msg) {
 		var resp DowntimeResponse
-		if unErr := json.Unmarshal(msg.Data, &resp); unErr != nil {
-			log.Log(log.Error, "[NATS] RequestAllMonitorsDowntime: unmarshal error: %v", unErr)
+		if err := json.Unmarshal(msg.Data, &resp); err != nil {
+			log.Log(log.Error, "[NATS] RequestAllMonitorsDowntime: unmarshal error: %v", err)
 			return
 		}
-		responseChan <- resp.Events
-	})
-	if subErr != nil {
-		return nil, fmt.Errorf("subscribe error: %w", subErr)
-	}
 
-	// Publish the request to "monitor.stats.getDowntime", with our inbox as the reply subject
+		mu.Lock()
+		if _, exists := responseMap[resp.NodeID]; !exists {
+			responseMap[resp.NodeID] = resp.Events
+			log.Log(log.Debug, "[NATS] RequestAllMonitorsDowntime: received %d events from %s",
+				len(resp.Events), resp.NodeID)
+		} else {
+			log.Log(log.Warn, "[NATS] RequestAllMonitorsDowntime: duplicate response from %s ignored", resp.NodeID)
+		}
+		mu.Unlock()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("subscribe error: %w", err)
+	}
+	defer sub.Unsubscribe()
+
+	// Publish request
 	err = PublishMsgWithReply("monitor.stats.getDowntime", inbox, data)
 	if err != nil {
-		sub.Unsubscribe()
 		return nil, fmt.Errorf("publish downtime request error: %w", err)
 	}
 
-	log.Log(log.Debug,
-		"[NATS] RequestAllMonitorsDowntime: expecting %d replies from IBPMonitor nodes",
-		monitorCount)
-
-	aggregated := make([]DowntimeEvent, 0, monitorCount*10)
+	// Wait for responses or timeout
 	timer := time.NewTimer(timeout)
-	var mu sync.Mutex
+	defer timer.Stop()
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		received := 0
-		for {
-			select {
-			case evts := <-responseChan:
-				received++
-				mu.Lock()
-				aggregated = append(aggregated, evts...)
+	checkInterval := 100 * time.Millisecond
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timer.C:
+			// Timeout reached
+			mu.Lock()
+			receivedCount := len(responseMap)
+			mu.Unlock()
+			log.Log(log.Warn,
+				"[NATS] RequestAllMonitorsDowntime: timeout after receiving %d/%d responses",
+				receivedCount, monitorCount)
+			goto done
+
+		case <-ticker.C:
+			// Check if we have all responses
+			mu.Lock()
+			if len(responseMap) >= monitorCount {
 				mu.Unlock()
-				if received >= monitorCount {
-					return
-				}
-			case <-timer.C:
-				return
+				log.Log(log.Debug, "[NATS] RequestAllMonitorsDowntime: received all %d responses", monitorCount)
+				goto done
 			}
+			mu.Unlock()
 		}
-	}()
+	}
 
-	<-done
-	sub.Unsubscribe()
-	close(responseChan)
-
+done:
+	// Aggregate all events
 	mu.Lock()
-	finalCount := len(aggregated)
-	mu.Unlock()
+	defer mu.Unlock()
+
+	aggregated := make([]DowntimeEvent, 0)
+	for nodeID, events := range responseMap {
+		log.Log(log.Debug, "[NATS] RequestAllMonitorsDowntime: aggregating %d events from %s",
+			len(events), nodeID)
+		aggregated = append(aggregated, events...)
+	}
 
 	log.Log(log.Debug,
-		"[NATS] RequestAllMonitorsDowntime: done collecting => total events=%d",
-		finalCount)
+		"[NATS] RequestAllMonitorsDowntime: completed with %d total events from %d nodes",
+		len(aggregated), len(responseMap))
 
 	return aggregated, nil
+}
+
+// handleMonitorStatsData is invoked when we receive downtime data from "monitor.stats.downtimeData"
+func handleMonitorStatsData(m *nats.Msg) {
+	var resp DowntimeResponse
+	if err := json.Unmarshal(m.Data, &resp); err != nil {
+		log.Log(log.Error, "[NATS] handleMonitorStatsData: unmarshal error: %v", err)
+		return
+	}
+	log.Log(log.Debug, "[NATS] handleMonitorStatsData: got %d downtime events from node=%s",
+		len(resp.Events), resp.NodeID)
+	// Collator would process these events here
 }

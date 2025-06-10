@@ -13,7 +13,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// handleDnsUsageRequest responds to "dns.usage.getUsage" requests
+// handleDnsUsageRequest responds to "dns.usage.getUsage"
 func handleDnsUsageRequest(m *nats.Msg) {
 	log.Log(log.Debug,
 		"[NATS] handleDnsUsageRequest: subject=%s reply=%s",
@@ -22,6 +22,17 @@ func handleDnsUsageRequest(m *nats.Msg) {
 	var req UsageRequest
 	if err := json.Unmarshal(m.Data, &req); err != nil {
 		log.Log(log.Error, "[NATS] handleDnsUsageRequest: unmarshal error: %v", err)
+		// Send error response if we have a reply subject
+		if m.Reply != "" {
+			errResp := UsageResponse{
+				NodeID:       State.NodeID,
+				UsageRecords: []UsageRecord{},
+				Error:        fmt.Sprintf("unmarshal error: %v", err),
+			}
+			if data, err := json.Marshal(errResp); err == nil {
+				PublishMsgWithReply(m.Reply, "", data)
+			}
+		}
 		return
 	}
 
@@ -29,12 +40,28 @@ func handleDnsUsageRequest(m *nats.Msg) {
 		"[NATS] handleDnsUsageRequest: StartDate=%s EndDate=%s Domain=%s MemberName=%s Country=%s",
 		req.StartDate, req.EndDate, req.Domain, req.MemberName, req.Country)
 
+	// Validate dates
+	if req.StartDate > req.EndDate {
+		log.Log(log.Error, "[NATS] handleDnsUsageRequest: StartDate after EndDate")
+		if m.Reply != "" {
+			errResp := UsageResponse{
+				NodeID:       State.NodeID,
+				UsageRecords: []UsageRecord{},
+				Error:        "StartDate must be before or equal to EndDate",
+			}
+			if data, err := json.Marshal(errResp); err == nil {
+				PublishMsgWithReply(m.Reply, "", data)
+			}
+		}
+		return
+	}
+
 	records, err := retrieveLocalUsageRecords(req.StartDate, req.EndDate, req.Domain, req.MemberName, req.Country)
 	if err != nil {
 		log.Log(log.Error,
 			"[NATS] handleDnsUsageRequest: retrieveLocalUsageRecords error: %v",
 			err)
-		return
+		records = []UsageRecord{} // Send empty list on error
 	}
 
 	resp := UsageResponse{
@@ -44,13 +71,11 @@ func handleDnsUsageRequest(m *nats.Msg) {
 	dataBytes, _ := json.Marshal(resp)
 
 	if m.Reply != "" {
-		// direct reply
 		log.Log(log.Debug,
 			"[NATS] handleDnsUsageRequest: replying to %s with %d usage records",
 			m.Reply, len(records))
 		_ = PublishMsgWithReply(m.Reply, "", dataBytes)
 	} else {
-		// fallback broadcast
 		log.Log(log.Debug,
 			"[NATS] handleDnsUsageRequest: publishing usageData with %d usage records",
 			len(records))
@@ -65,23 +90,26 @@ func retrieveLocalUsageRecords(
 		"[NATS] retrieveLocalUsageRecords: start=%s end=%s domain=%s member=%s country=%s",
 		startDate, endDate, domain, member, country)
 
+	// Validate date format
 	sd := strings.TrimSpace(startDate)
 	ed := strings.TrimSpace(endDate)
 	if len(sd) != 10 || len(ed) != 10 {
-		log.Log(log.Warn,
-			"[NATS] retrieveLocalUsageRecords: invalid date format => start=%s end=%s",
-			sd, ed)
-		return nil, nil
+		return nil, fmt.Errorf("invalid date format, expected YYYY-MM-DD")
+	}
+
+	sTime, err := time.Parse("2006-01-02", sd)
+	if err != nil {
+		return nil, fmt.Errorf("invalid start date: %w", err)
+	}
+	eTime, err := time.Parse("2006-01-02", ed)
+	if err != nil {
+		return nil, fmt.Errorf("invalid end date: %w", err)
 	}
 
 	var results []UsageRecord
 
-	// Convert date strings to time.Time
-	sTime, _ := time.Parse("2006-01-02", sd)
-	eTime, _ := time.Parse("2006-01-02", ed)
-
-	// If domain != "" and member != ""
 	if domain != "" && member != "" {
+		// Specific domain and member
 		recs, err := dat.GetUsageByMember(domain, member, sTime, eTime)
 		if err != nil {
 			return nil, err
@@ -101,6 +129,7 @@ func retrieveLocalUsageRecords(
 			}
 		}
 	} else if domain != "" {
+		// Specific domain, all members
 		recs, err := dat.GetUsageByDomain(domain, sTime, eTime)
 		if err != nil {
 			return nil, err
@@ -120,24 +149,29 @@ func retrieveLocalUsageRecords(
 			}
 		}
 	} else {
-		// no domain => global query
+		// All domains
 		recs, err := dat.GetUsageByCountry(sTime, eTime)
 		if err != nil {
 			return nil, err
 		}
 		for _, r := range recs {
-			if country == "" || strings.EqualFold(country, r.CountryCode) {
-				results = append(results, UsageRecord{
-					Date:        r.Date,
-					Domain:      r.Domain,
-					MemberName:  r.MemberName,
-					CountryCode: r.CountryCode,
-					Asn:         r.Asn,
-					NetworkName: r.NetworkName,
-					CountryName: r.CountryName,
-					Hits:        r.Hits,
-				})
+			// Apply filters
+			if member != "" && r.MemberName != member {
+				continue
 			}
+			if country != "" && !strings.EqualFold(country, r.CountryCode) {
+				continue
+			}
+			results = append(results, UsageRecord{
+				Date:        r.Date,
+				Domain:      r.Domain,
+				MemberName:  r.MemberName,
+				CountryCode: r.CountryCode,
+				Asn:         r.Asn,
+				NetworkName: r.NetworkName,
+				CountryName: r.CountryName,
+				Hits:        r.Hits,
+			})
 		}
 	}
 
@@ -147,79 +181,136 @@ func retrieveLocalUsageRecords(
 	return results, nil
 }
 
-// RequestAllDnsUsage sends a usage request to "dns.usage.getUsage" with a unique inbox.
-// It waits for all IBPDns nodes to reply or until timeout. Returns aggregated usage records.
+// RequestAllDnsUsage sends a usage request to "dns.usage.getUsage"
 func RequestAllDnsUsage(req UsageRequest, timeout time.Duration) ([]UsageRecord, error) {
-	dnsCount := countNodesByRole("IBPDns")
+	dnsCount := countActiveDns()
 	if dnsCount == 0 {
-		return nil, fmt.Errorf("no IBPDns nodes found, cannot gather usage")
+		return nil, fmt.Errorf("no active IBPDns nodes found")
 	}
+
+	log.Log(log.Debug, "[NATS] RequestAllDnsUsage: requesting from %d active DNS nodes", dnsCount)
 
 	data, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("usage request marshal error: %w", err)
 	}
 
-	inbox := fmt.Sprintf("%s.usageReply.%d", State.NodeID, time.Now().UnixNano())
-	responseChan := make(chan []UsageRecord, dnsCount)
+	// Create unique inbox
+	inbox := fmt.Sprintf("_INBOX.%s.usageReply.%d", State.NodeID, time.Now().UnixNano())
 
-	sub, subErr := Subscribe(inbox, func(msg *nats.Msg) {
+	// Use a map to track responses and avoid duplicates
+	responseMap := make(map[string][]UsageRecord)
+	var mu sync.Mutex
+
+	// Subscribe to inbox
+	sub, err := Subscribe(inbox, func(msg *nats.Msg) {
 		var resp UsageResponse
-		if unErr := json.Unmarshal(msg.Data, &resp); unErr != nil {
-			log.Log(log.Error, "[NATS] RequestAllDnsUsage: unmarshal error: %v", unErr)
+		if err := json.Unmarshal(msg.Data, &resp); err != nil {
+			log.Log(log.Error, "[NATS] RequestAllDnsUsage: unmarshal error: %v", err)
 			return
 		}
-		responseChan <- resp.UsageRecords
-	})
-	if subErr != nil {
-		return nil, fmt.Errorf("subscribe error: %w", subErr)
-	}
 
+		mu.Lock()
+		if _, exists := responseMap[resp.NodeID]; !exists {
+			responseMap[resp.NodeID] = resp.UsageRecords
+			log.Log(log.Debug, "[NATS] RequestAllDnsUsage: received %d records from %s",
+				len(resp.UsageRecords), resp.NodeID)
+		} else {
+			log.Log(log.Warn, "[NATS] RequestAllDnsUsage: duplicate response from %s ignored", resp.NodeID)
+		}
+		mu.Unlock()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("subscribe error: %w", err)
+	}
+	defer sub.Unsubscribe()
+
+	// Publish request
 	err = PublishMsgWithReply("dns.usage.getUsage", inbox, data)
 	if err != nil {
-		sub.Unsubscribe()
 		return nil, fmt.Errorf("publish usage request error: %w", err)
 	}
 
-	log.Log(log.Debug,
-		"[NATS] RequestAllDnsUsage: expecting %d replies from IBPDns nodes",
-		dnsCount)
-
-	aggregated := make([]UsageRecord, 0, dnsCount*10)
+	// Wait for responses or timeout
 	timer := time.NewTimer(timeout)
-	var mu sync.Mutex
+	defer timer.Stop()
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		received := 0
-		for {
-			select {
-			case recs := <-responseChan:
-				received++
-				mu.Lock()
-				aggregated = append(aggregated, recs...)
+	checkInterval := 100 * time.Millisecond
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timer.C:
+			// Timeout reached
+			mu.Lock()
+			receivedCount := len(responseMap)
+			mu.Unlock()
+			log.Log(log.Warn,
+				"[NATS] RequestAllDnsUsage: timeout after receiving %d/%d responses",
+				receivedCount, dnsCount)
+			goto done
+
+		case <-ticker.C:
+			// Check if we have all responses
+			mu.Lock()
+			if len(responseMap) >= dnsCount {
 				mu.Unlock()
-				if received >= dnsCount {
-					return
-				}
-			case <-timer.C:
-				return
+				log.Log(log.Debug, "[NATS] RequestAllDnsUsage: received all %d responses", dnsCount)
+				goto done
+			}
+			mu.Unlock()
+		}
+	}
+
+done:
+	// Aggregate all records
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Use a map to aggregate by unique key to avoid duplicates across nodes
+	aggregateMap := make(map[string]UsageRecord)
+
+	for nodeID, records := range responseMap {
+		log.Log(log.Debug, "[NATS] RequestAllDnsUsage: aggregating %d records from %s",
+			len(records), nodeID)
+		for _, rec := range records {
+			// Create unique key for aggregation
+			key := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s",
+				rec.Date, rec.Domain, rec.MemberName, rec.CountryCode,
+				rec.Asn, rec.NetworkName, rec.CountryName)
+
+			if existing, found := aggregateMap[key]; found {
+				// Aggregate hits if we have the same record from multiple nodes
+				existing.Hits += rec.Hits
+				aggregateMap[key] = existing
+			} else {
+				aggregateMap[key] = rec
 			}
 		}
-	}()
+	}
 
-	<-done
-	sub.Unsubscribe()
-	close(responseChan)
-
-	mu.Lock()
-	finalCount := len(aggregated)
-	mu.Unlock()
+	// Convert map to slice
+	aggregated := make([]UsageRecord, 0, len(aggregateMap))
+	for _, rec := range aggregateMap {
+		aggregated = append(aggregated, rec)
+	}
 
 	log.Log(log.Debug,
-		"[NATS] RequestAllDnsUsage: done collecting => total usage records=%d",
-		finalCount)
+		"[NATS] RequestAllDnsUsage: completed with %d unique records from %d nodes",
+		len(aggregated), len(responseMap))
 
 	return aggregated, nil
+}
+
+// handleDnsUsageData is invoked when we receive usage data from a node on "dns.usage.usageData"
+func handleDnsUsageData(m *nats.Msg) {
+	var resp UsageResponse
+	if err := json.Unmarshal(m.Data, &resp); err != nil {
+		log.Log(log.Error, "[NATS] handleDnsUsageData: unmarshal error: %v", err)
+		return
+	}
+	log.Log(log.Debug, "[NATS] handleDnsUsageData: got %d usage records from node=%s",
+		len(resp.UsageRecords), resp.NodeID)
+	// Collator would process these records here
 }

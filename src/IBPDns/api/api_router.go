@@ -17,7 +17,8 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 	err := decoder.Decode(&req)
 	if err != nil {
 		log.Log(log.Warn, "dnsApiRouter: JSON decode error: %v", err)
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		// CHANGED BELOW: return JSON with "result" field
+		writeDnsErrorJSON(w, http.StatusBadRequest, "Bad request", err)
 		return
 	}
 
@@ -44,23 +45,34 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 		res = handle_GetMemberEvents(req)
 	default:
 		log.Log(log.Warn, "dnsApiRouter: Unrecognized method: %s", req.Method)
+		// We still have "result" in the JSON
 		res = Response{Result: "Invalid Request"}
 	}
 
 	writeDnsResponse(w, res)
 }
 
+// writeDnsResponse writes a Response as JSON
 func writeDnsResponse(w http.ResponseWriter, res Response) {
-	// Encode the response as JSON
 	w.Header().Set("Content-Type", "application/json")
-
-	// For debugging, show what we’re returning
-	// (WARNING: can be verbose, but helps debugging)
-	// log.Log(log.Debug, "dnsApiRouter: writing JSON response: %+v", res)
-
 	err := json.NewEncoder(w).Encode(res)
 	if err != nil {
 		log.Log(log.Error, "dnsApiRouter: Error encoding JSON response: %v", err)
-		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		// CHANGED BELOW: also produce JSON for this error
+		writeDnsErrorJSON(w, http.StatusInternalServerError, "Error encoding response", err)
+		return
 	}
+}
+
+// CHANGED BELOW: A helper to return error JSON that includes "result" so PDNS doesn't crash
+func writeDnsErrorJSON(w http.ResponseWriter, code int, message string, err error) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	resp := map[string]interface{}{
+		"result": message, // PDNS requires "result"
+	}
+	if err != nil {
+		resp["error"] = err.Error()
+	}
+	_ = json.NewEncoder(w).Encode(resp)
 }

@@ -26,11 +26,12 @@ var State NodeState
 
 // NodeInfo represents another node in the cluster
 type NodeInfo struct {
-	NodeID        string `json:"NodeID"`
-	PublicAddress string `json:"PublicAddress"`
-	ListenAddress string `json:"ListenAddress"`
-	ListenPort    string `json:"ListenPort"`
-	NodeRole      string `json:"NodeRole"` // "monitor", "dnsApi", "collator", etc.
+	NodeID        string    `json:"NodeID"`
+	PublicAddress string    `json:"PublicAddress"`
+	ListenAddress string    `json:"ListenAddress"`
+	ListenPort    string    `json:"ListenPort"`
+	NodeRole      string    `json:"NodeRole"` // "IBPMonitor", "IBPDns", "IBPCollator", etc.
+	LastHeard     time.Time // Tracks last time we heard from this node
 }
 
 // Monitor Voting
@@ -38,6 +39,7 @@ type ProposalID string
 
 type Proposal struct {
 	ID             ProposalID             `json:"id"`
+	SenderNodeID   string                 `json:"SenderNodeID"` // Added field to track which node initiated
 	CheckType      string                 `json:"CheckType"`
 	CheckName      string                 `json:"CheckName"`
 	MemberName     string                 `json:"MemberName"`
@@ -46,6 +48,7 @@ type Proposal struct {
 	ProposedStatus bool                   `json:"ProposedStatus"`
 	ErrorText      string                 `json:"ErrorText"`
 	Data           map[string]interface{} `json:"Data"`
+	IsIPv6         bool                   `json:"IsIPv6"`
 	Timestamp      time.Time              `json:"Timestamp"`
 }
 
@@ -58,10 +61,11 @@ type ProposalTracking struct {
 }
 
 type Vote struct {
-	ProposalID ProposalID `json:"ProposalID"`
-	NodeID     string     `json:"NodeID"`
-	Agree      bool       `json:"Agree"`
-	Timestamp  time.Time  `json:"Timestamp"`
+	ProposalID   ProposalID `json:"ProposalID"`
+	SenderNodeID string     `json:"SenderNodeID"` // Added to identify who is voting
+	NodeID       string     `json:"NodeID"`
+	Agree        bool       `json:"Agree"`
+	Timestamp    time.Time  `json:"Timestamp"`
 }
 
 type FinalizeMessage struct {
@@ -79,7 +83,6 @@ type UsageRequest struct {
 	Country    string `json:"country"`
 }
 
-// Updated UsageRecord struct to include ASN, network, and countryName
 type UsageRecord struct {
 	Date        string `json:"date"`
 	Domain      string `json:"domain"`
@@ -89,11 +92,6 @@ type UsageRecord struct {
 	NetworkName string `json:"networkName"`
 	CountryName string `json:"countryName"`
 	Hits        int    `json:"hits"`
-}
-
-type UsageResponse struct {
-	NodeID       string        `json:"nodeID"`
-	UsageRecords []UsageRecord `json:"usageRecords"`
 }
 
 // Monitor Stats / Downtime
@@ -114,11 +112,7 @@ type DowntimeEvent struct {
 	EndTime    time.Time              `json:"endTime"`
 	ErrorText  string                 `json:"errorText"`
 	Data       map[string]interface{} `json:"data"`
-}
-
-type DowntimeResponse struct {
-	NodeID string          `json:"nodeID"`
-	Events []DowntimeEvent `json:"events"`
+	IsIPv6     bool                   `json:"isIPv6"`
 }
 
 // Cluster membership messages
@@ -126,4 +120,18 @@ type ClusterMessage struct {
 	Type    string     `json:"type"` // "join", "membership"
 	Sender  NodeInfo   `json:"sender"`
 	Members []NodeInfo `json:"members"` // populated for "membership" broadcasts
+}
+
+// Update DowntimeResponse to include Error field
+type DowntimeResponse struct {
+	NodeID string          `json:"nodeID"`
+	Events []DowntimeEvent `json:"events"`
+	Error  string          `json:"error,omitempty"`
+}
+
+// Update UsageResponse to include Error field
+type UsageResponse struct {
+	NodeID       string        `json:"nodeID"`
+	UsageRecords []UsageRecord `json:"usageRecords"`
+	Error        string        `json:"error,omitempty"`
 }

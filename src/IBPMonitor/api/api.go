@@ -1,3 +1,5 @@
+// In src/IBPMonitor/api/api.go
+
 package api
 
 import (
@@ -31,16 +33,124 @@ func handleResults(w http.ResponseWriter, r *http.Request) {
 	// Query the official results from data
 	sites, domains, endpoints := dat.GetOfficialResults()
 
-	// We'll define a small struct to return these in JSON
-	out := struct {
-		SiteResults     interface{} `json:"SiteResults"`
-		DomainResults   interface{} `json:"DomainResults"`
-		EndpointResults interface{} `json:"EndpointResults"`
-	}{
-		SiteResults:     sites,
-		DomainResults:   domains,
-		EndpointResults: endpoints,
+	// The DNS expects a specific JSON structure with MemberName as a string
+	// We need to transform from our internal structure (which has full Member objects)
+	// to what the DNS expects
+
+	// Convert site results
+	var apiSites []interface{}
+	for _, site := range sites {
+		apiSite := map[string]interface{}{
+			"CheckName": site.Check.Name,
+			"IsIPv6":    site.IsIPv6,
+			"Results":   []interface{}{},
+		}
+
+		results := []interface{}{}
+		for _, result := range site.Results {
+			apiResult := map[string]interface{}{
+				"MemberName": result.Member.Details.Name, // Extract name from Member object
+				"Status":     result.Status,
+				"ErrorText":  result.ErrorText,
+				"Data":       result.Data,
+				"IsIPv6":     result.IsIPv6,
+			}
+			results = append(results, apiResult)
+		}
+		apiSite["Results"] = results
+		apiSites = append(apiSites, apiSite)
 	}
+
+	// Convert domain results
+	var apiDomains []interface{}
+	for _, domain := range domains {
+		apiDomain := map[string]interface{}{
+			"CheckName": domain.Check.Name,
+			"Domain":    domain.Domain,
+			"IsIPv6":    domain.IsIPv6,
+			"Results":   []interface{}{},
+		}
+
+		results := []interface{}{}
+		for _, result := range domain.Results {
+			apiResult := map[string]interface{}{
+				"MemberName": result.Member.Details.Name, // Extract name from Member object
+				"Status":     result.Status,
+				"ErrorText":  result.ErrorText,
+				"Data":       result.Data,
+				"IsIPv6":     result.IsIPv6,
+			}
+			results = append(results, apiResult)
+		}
+		apiDomain["Results"] = results
+		apiDomains = append(apiDomains, apiDomain)
+	}
+
+	// Convert endpoint results
+	var apiEndpoints []interface{}
+	for _, endpoint := range endpoints {
+		apiEndpoint := map[string]interface{}{
+			"CheckName": endpoint.Check.Name,
+			"Domain":    endpoint.Domain,
+			"RpcUrl":    endpoint.RpcUrl,
+			"IsIPv6":    endpoint.IsIPv6,
+			"Results":   []interface{}{},
+		}
+
+		results := []interface{}{}
+		for _, result := range endpoint.Results {
+			apiResult := map[string]interface{}{
+				"MemberName": result.Member.Details.Name, // Extract name from Member object
+				"Status":     result.Status,
+				"ErrorText":  result.ErrorText,
+				"Data":       result.Data,
+				"IsIPv6":     result.IsIPv6,
+			}
+			results = append(results, apiResult)
+		}
+		apiEndpoint["Results"] = results
+		apiEndpoints = append(apiEndpoints, apiEndpoint)
+	}
+
+	// Return the properly formatted response
+	out := map[string]interface{}{
+		"SiteResults":     apiSites,
+		"DomainResults":   apiDomains,
+		"EndpointResults": apiEndpoints,
+	}
+
+	// Log some debug info
+	offlineMembers := make(map[string]bool)
+
+	// Check site results
+	for _, site := range sites {
+		for _, result := range site.Results {
+			if !result.Status {
+				offlineMembers[result.Member.Details.Name] = true
+			}
+		}
+	}
+
+	// Check domain results
+	for _, domain := range domains {
+		for _, result := range domain.Results {
+			if !result.Status {
+				offlineMembers[result.Member.Details.Name] = true
+			}
+		}
+	}
+
+	// Check endpoint results
+	for _, endpoint := range endpoints {
+		for _, result := range endpoint.Results {
+			if !result.Status {
+				offlineMembers[result.Member.Details.Name] = true
+			}
+		}
+	}
+
+	log.Log(log.Debug, "Monitor API: Returning %d site results, %d domain results, %d endpoint results with %d offline members",
+		len(sites), len(domains), len(endpoints), len(offlineMembers))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(out)

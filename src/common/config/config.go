@@ -91,7 +91,7 @@ func loadStaticDNSConfig(url string, initialLoad bool) {
 	log.Log(log.Debug, "StaticDNS configuration loaded from %s", url)
 }
 
-// loadMembersConfig loads the members config from a URlog.
+// loadMembersConfig loads the members config from a URL
 func loadMembersConfig(url string, initialLoad bool) {
 	data := downloadConfig(url, initialLoad)
 	if data == nil {
@@ -108,11 +108,12 @@ func loadMembersConfig(url string, initialLoad bool) {
 		return
 	}
 
-	// Retain Override = 1 for existing members in cfg.data.Members
+	// Retain Override and OverrideTime for existing members
 	for name, existingMember := range cfg.data.Members {
 		if existingMember.Override {
 			if newMember, exists := newMembers[name]; exists {
 				newMember.Override = true
+				newMember.OverrideTime = existingMember.OverrideTime
 				newMembers[name] = newMember
 			}
 		}

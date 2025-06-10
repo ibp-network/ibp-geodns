@@ -4,7 +4,7 @@ import (
 	"sync"
 )
 
-// OfficialResults is our local copy of the serviceMonitor’s official results
+// OfficialResults is our local copy of the monitor's official results
 // after they reach consensus. This is used by the DNS API to serve queries.
 type OfficialResults struct {
 	SiteResults     []MonitorResultSite     `json:"SiteResults"`
@@ -15,12 +15,14 @@ type OfficialResults struct {
 // MonitorResultSite/Domain/Endpoint define the checks + results
 type MonitorResultSite struct {
 	CheckName string                 `json:"CheckName"`
+	IsIPv6    bool                   `json:"IsIPv6"` // ADDED: Track IPv6 vs IPv4
 	Results   []MonitorResultGeneric `json:"Results"`
 }
 
 type MonitorResultDomain struct {
 	CheckName string                 `json:"CheckName"`
 	Domain    string                 `json:"Domain"`
+	IsIPv6    bool                   `json:"IsIPv6"` // ADDED: Track IPv6 vs IPv4
 	Results   []MonitorResultGeneric `json:"Results"`
 }
 
@@ -28,6 +30,7 @@ type MonitorResultEndpoint struct {
 	CheckName string                 `json:"CheckName"`
 	Domain    string                 `json:"Domain"`
 	RpcUrl    string                 `json:"RpcUrl"`
+	IsIPv6    bool                   `json:"IsIPv6"` // ADDED: Track IPv6 vs IPv4
 	Results   []MonitorResultGeneric `json:"Results"`
 }
 
@@ -37,6 +40,7 @@ type MonitorResultGeneric struct {
 	Status     bool                   `json:"Status"`
 	ErrorText  string                 `json:"ErrorText"`
 	Data       map[string]interface{} `json:"Data"`
+	IsIPv6     bool                   `json:"IsIPv6"`
 }
 
 // We rename the underlying variables to reflect they are official results

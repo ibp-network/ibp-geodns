@@ -9,7 +9,8 @@ import (
 	log "ibp-geodns/src/common/logging"
 )
 
-func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, status bool, errorText string, data map[string]interface{}) {
+// RecordEvent now includes a param isIPv6 to store in the DB.
+func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, status bool, errorText string, data map[string]interface{}, isIPv6 bool) {
 	// Prepare data for storage
 	var additionalData string
 	if data != nil {
@@ -17,49 +18,41 @@ func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, 
 		additionalData = string(dataBytes)
 	}
 
-	// Handle events based on status
 	if status {
-		// Online Event: Close any existing offline event
-		event, err := mysql.FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint)
+		// Online Event: close any existing offline event for (member, checkType, checkName, domainName, endpoint, isIPv6)
+		event, err := mysql.FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint, isIPv6)
 		if err != nil {
 			log.Log(log.Error, "Failed to check for existing offline event: %v", err)
 			return
 		}
-
 		if event != nil {
-			// Calculate the duration the member was offline
+			// Calculate how long it was offline
 			now := time.Now().UTC()
 			duration := now.Sub(event.StartTime)
-
-			// If the duration is less than 30 seconds, delete the event
 			if duration < 30*time.Second {
 				err := mysql.DeleteEvent(event.ID)
 				if err != nil {
 					log.Log(log.Error, "Failed to delete short-duration event: %v", err)
 				} else {
-					log.Log(log.Info, "Deleted short-duration offline event for %s %s %s", memberName, checkType, checkName)
+					log.Log(log.Info, "Deleted short-duration offline event for %s %s %s isIPv6=%v", memberName, checkType, checkName, isIPv6)
 				}
 				return
 			}
-
-			// Otherwise, update the event end time
 			err = mysql.UpdateEventEndTime(event.ID, now)
 			if err != nil {
 				log.Log(log.Error, "Failed to update event end time: %v", err)
 				return
 			}
-			log.Log(log.Info, "Closed offline event for %s %s %s", memberName, checkType, checkName)
+			log.Log(log.Info, "Closed offline event for %s %s %s isIPv6=%v", memberName, checkType, checkName, isIPv6)
 		}
 	} else {
-		// Offline Event: Check if an open event already exists
-		event, err := mysql.FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint)
+		// Offline Event: see if one is already open
+		event, err := mysql.FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint, isIPv6)
 		if err != nil {
 			log.Log(log.Error, "Failed to check for existing offline event: %v", err)
 			return
 		}
-
 		if event == nil {
-			// Insert a new offline event
 			_, err := mysql.InsertEvent(mysql.EventRecord{
 				MemberName:     memberName,
 				CheckType:      checkType,
@@ -70,17 +63,18 @@ func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, 
 				StartTime:      time.Now().UTC(),
 				ErrorText:      sql.NullString{String: errorText, Valid: errorText != ""},
 				AdditionalData: sql.NullString{String: additionalData, Valid: additionalData != ""},
+				IsIPv6:         isIPv6,
 			})
 			if err != nil {
 				log.Log(log.Error, "Failed to insert offline event: %v", err)
 			} else {
-				log.Log(log.Info, "Recorded offline event for %s %s %s", memberName, checkType, checkName)
+				log.Log(log.Info, "Recorded offline event for %s %s %s isIPv6=%v", memberName, checkType, checkName, isIPv6)
 			}
 		}
 	}
 }
 
-// GetMemberEvents retrieves events for a member and optional domain within a time range.
+// GetMemberEvents retrieves events for a member+domain in [start,end].
 func GetMemberEvents(memberName, domain string, start, end time.Time) ([]EventRecord, error) {
 	rows, err := mysql.FetchEvents(memberName, domain, start, end)
 	if err != nil {
@@ -93,7 +87,6 @@ func GetMemberEvents(memberName, domain string, start, end time.Time) ([]EventRe
 		if r.AdditionalData.Valid && r.AdditionalData.String != "" {
 			_ = json.Unmarshal([]byte(r.AdditionalData.String), &dataMap)
 		}
-
 		var domainName, endpoint, errText string
 		if r.DomainName.Valid {
 			domainName = r.DomainName.String
@@ -123,8 +116,8 @@ func GetMemberEvents(memberName, domain string, start, end time.Time) ([]EventRe
 			EndTime:    endTime,
 			StartDate:  r.StartTime.Format("2006-01-02"),
 			EndDate:    endTime.Format("2006-01-02"),
+			IsIPv6:     r.IsIPv6,
 		})
 	}
-
 	return events, nil
 }

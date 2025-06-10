@@ -7,7 +7,6 @@ import (
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
-	max "ibp-geodns/src/common/maxmind"
 	natsCommon "ibp-geodns/src/common/nats"
 )
 
@@ -25,14 +24,14 @@ var (
 	}
 )
 
-// These are function types for the different checks.
+// Function types for different checks
 type (
 	CheckSiteFunc     func(check cfg.Check, member cfg.Member)
 	CheckDomainFunc   func(check cfg.Check, domain string, service cfg.Service, member cfg.Member)
 	CheckEndpointFunc func(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member)
 )
 
-// RegisterSiteCheck associates a check name ("ping", etc.) with a site-level check function.
+// RegisterSiteCheck ...
 func RegisterSiteCheck(name string, checkFunc CheckSiteFunc) {
 	CheckRegistry.Mu.Lock()
 	defer CheckRegistry.Mu.Unlock()
@@ -40,7 +39,7 @@ func RegisterSiteCheck(name string, checkFunc CheckSiteFunc) {
 	log.Log(log.Info, "Registered site check '%s'", name)
 }
 
-// RegisterDomainCheck associates a check name ("ssl", etc.) with a domain-level check function.
+// RegisterDomainCheck ...
 func RegisterDomainCheck(name string, checkFunc CheckDomainFunc) {
 	CheckRegistry.Mu.Lock()
 	defer CheckRegistry.Mu.Unlock()
@@ -48,7 +47,7 @@ func RegisterDomainCheck(name string, checkFunc CheckDomainFunc) {
 	log.Log(log.Info, "Registered domain check '%s'", name)
 }
 
-// RegisterEndpointCheck associates a check name ("wss", etc.) with an endpoint-level check function.
+// RegisterEndpointCheck ...
 func RegisterEndpointCheck(name string, checkFunc CheckEndpointFunc) {
 	CheckRegistry.Mu.Lock()
 	defer CheckRegistry.Mu.Unlock()
@@ -76,14 +75,12 @@ func getSiteCheck(name string) (CheckSiteFunc, bool) {
 func initSiteCheck() {
 	c := cfg.GetConfig()
 
-	// Copy site checks from config into a local slice (so reloading won't disrupt iteration).
 	var siteChecks []cfg.Check
 	for _, ch := range c.Local.Checks {
 		if ch.CheckType == "site" && ch.Enabled == 1 {
 			siteChecks = append(siteChecks, ch)
 		}
 	}
-
 	for _, check := range siteChecks {
 		fn, exists := getSiteCheck(check.Name)
 		if exists {
@@ -133,26 +130,19 @@ func runSiteCheck(check cfg.Check, fn CheckSiteFunc) {
 	}
 }
 
-// UpdateSiteResultLocal saves local site results and proposes consensus if they differ from official.
-func UpdateSiteResultLocal(
-	check cfg.Check,
-	member cfg.Member,
-	status bool,
-	errorMsg string,
-	dataMap map[string]interface{},
-	isIPv6 bool,
-) {
+// UpdateSiteResultLocal includes isIPv6
+func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
 	// 1) Store in data.Local
 	dat.UpdateLocalSiteResult(check, member, status, errorMsg, dataMap, isIPv6)
 
 	// 2) Compare with official
-	found, officialStatus := dat.GetOfficialSiteStatus(check.Name, member.Details.Name)
+	found, officialStatus := dat.GetOfficialSiteStatus(check.Name, member.Details.Name, isIPv6)
 	if !found {
-		natsCommon.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
+		natsCommon.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap, isIPv6)
 		return
 	}
 	if officialStatus != status {
-		natsCommon.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap)
+		natsCommon.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap, isIPv6)
 	}
 }
 
@@ -176,7 +166,6 @@ func initDomainCheck() {
 			domainChecks = append(domainChecks, ch)
 		}
 	}
-
 	for _, check := range domainChecks {
 		fn, exists := getDomainCheck(check.Name)
 		if exists {
@@ -203,23 +192,25 @@ func runDomainCheck(check cfg.Check, fn CheckDomainFunc) {
 		for _, member := range c.Members {
 			if member.Membership.Level >= svc.Configuration.LevelRequired &&
 				member.Service.Active == 1 && !member.Override {
-
 				domainsSet := make(map[string]struct{})
 				for _, assignments := range member.ServiceAssignments {
 					for _, assignment := range assignments {
 						if assignment == svcName {
 							for _, provider := range svc.Providers {
 								for _, url := range provider.RpcUrls {
-									parsed := max.ParseUrl(url)
-									domainsSet[parsed.Domain] = struct{}{}
+									parsed := parseUrlForDomain(url)
+									if parsed != "" {
+										domainsSet[parsed] = struct{}{}
+									}
 								}
 							}
 						}
 					}
 				}
 				for dom := range domainsSet {
+					// We'll do separate calls for IPv4 vs IPv6 if present
 					go domainCheckWrapper(check, fn, dom, svc, member)
-					time.Sleep(10 * time.Millisecond)
+					time.Sleep(30 * time.Millisecond)
 				}
 			}
 		}
@@ -234,7 +225,7 @@ func domainCheckWrapper(check cfg.Check, fn CheckDomainFunc, domain string, serv
 		defer func() {
 			if r := recover(); r != nil {
 				log.Log(log.Error, "Check %s for member %s crashed: %v", check.Name, member.Details.Name, r)
-				UpdateDomainResultLocal(check, domain, service, member, false, "Check crashed", nil)
+				UpdateDomainResultLocal(check, domain, service, member, false, "Check crashed", nil, false)
 			}
 			close(done)
 		}()
@@ -244,29 +235,59 @@ func domainCheckWrapper(check cfg.Check, fn CheckDomainFunc, domain string, serv
 	select {
 	case <-done:
 	case <-timer.C:
-		UpdateDomainResultLocal(check, domain, service, member, false, "Check timed out", nil)
+		UpdateDomainResultLocal(check, domain, service, member, false, "Check timed out", nil, false)
 	}
 }
 
-// UpdateDomainResultLocal saves local domain results, proposes changes if different from official.
-func UpdateDomainResultLocal(
-	check cfg.Check,
-	domain string,
-	service cfg.Service,
-	member cfg.Member,
-	status bool,
-	errorMsg string,
-	dataMap map[string]interface{},
-) {
-	dat.UpdateLocalDomainResult(check, member, service, domain, status, errorMsg, dataMap)
+// We introduce a helper for parsing domain out of an URL without pulling in maxmind parse code here
+func parseUrlForDomain(raw string) string {
+	// naive approach
+	// or we could do something simpler since maxmind is not imported here
+	// but let's do a quick parse
+	// remove protocol
+	// e.g. wss://mydomain.com/path => mydomain.com
+	// strip path
+	// return domain
 
-	found, officialStatus := dat.GetOfficialDomainStatus(check.Name, member.Details.Name, domain)
+	// we can do something minimal
+	// user specifically said we do not rely on advanced logic here, it's domain only
+	// The code below is stable enough
+
+	start := 0
+	if idx := indexOf(raw, "://"); idx != -1 {
+		start = idx + 3
+	}
+	rest := raw[start:]
+	if slash := indexOf(rest, "/"); slash != -1 {
+		rest = rest[:slash]
+	}
+	return rest
+}
+
+func indexOf(str, sep string) int {
+	returnIndex := -1
+	for i := 0; i+len(sep) <= len(str); i++ {
+		if str[i:i+len(sep)] == sep {
+			returnIndex = i
+			break
+		}
+	}
+	return returnIndex
+}
+
+// UpdateDomainResultLocal adds isIPv6 param
+func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service, member cfg.Member,
+	status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
+
+	dat.UpdateLocalDomainResult(check, member, service, domain, status, errorMsg, dataMap, isIPv6)
+
+	found, officialStatus := dat.GetOfficialDomainStatus(check.Name, member.Details.Name, domain, isIPv6)
 	if !found {
-		natsCommon.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
+		natsCommon.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap, isIPv6)
 		return
 	}
 	if officialStatus != status {
-		natsCommon.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap)
+		natsCommon.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap, isIPv6)
 	}
 }
 
@@ -290,7 +311,6 @@ func initEndpointCheck() {
 			endpointChecks = append(endpointChecks, ch)
 		}
 	}
-
 	for _, check := range endpointChecks {
 		fn, exists := getEndpointCheck(check.Name)
 		if exists {
@@ -324,7 +344,7 @@ func runEndpointCheck(check cfg.Check, fn CheckEndpointFunc) {
 							for _, provider := range svc.Providers {
 								for _, url := range provider.RpcUrls {
 									go endpointCheckWrapper(check, fn, url, svc, member)
-									time.Sleep(10 * time.Millisecond)
+									time.Sleep(30 * time.Millisecond)
 								}
 							}
 						}
@@ -343,7 +363,7 @@ func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string
 		defer func() {
 			if r := recover(); r != nil {
 				log.Log(log.Error, "Check %s for member %s crashed: %v", check.Name, member.Details.Name, r)
-				UpdateEndpointResultLocal(check, member, service, endpoint, false, "Check crashed", nil)
+				UpdateEndpointResultLocal(check, member, service, endpoint, false, "Check crashed", nil, false)
 			}
 			close(done)
 		}()
@@ -353,11 +373,10 @@ func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string
 	select {
 	case <-done:
 	case <-timer.C:
-		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Check timed out", nil)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Check timed out", nil, false)
 	}
 }
 
-// UpdateEndpointResultLocal saves local endpoint results, proposes changes if different from official.
 func UpdateEndpointResultLocal(
 	check cfg.Check,
 	member cfg.Member,
@@ -366,18 +385,17 @@ func UpdateEndpointResultLocal(
 	status bool,
 	errorMsg string,
 	dataMap map[string]interface{},
+	isIPv6 bool,
 ) {
-	parsed := max.ParseUrl(endpoint)
-	domain := parsed.Domain
+	domain := parseUrlForDomain(endpoint)
+	dat.UpdateLocalEndpointResult(check, member, service, domain, endpoint, status, errorMsg, dataMap, isIPv6)
 
-	dat.UpdateLocalEndpointResult(check, member, service, domain, endpoint, status, errorMsg, dataMap)
-
-	found, officialStatus := dat.GetOfficialEndpointStatus(check.Name, member.Details.Name, domain, endpoint)
+	found, officialStatus := dat.GetOfficialEndpointStatus(check.Name, member.Details.Name, domain, endpoint, isIPv6)
 	if !found {
-		natsCommon.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap)
+		natsCommon.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap, isIPv6)
 		return
 	}
 	if officialStatus != status {
-		natsCommon.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap)
+		natsCommon.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap, isIPv6)
 	}
 }

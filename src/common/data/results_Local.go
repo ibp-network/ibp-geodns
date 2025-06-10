@@ -37,7 +37,7 @@ func GetLocalResults() (sites []SiteResult, domains []DomainResult, endpoints []
 	return Local.SiteResults, Local.DomainResults, Local.EndpointResults
 }
 
-// UpdateLocalSiteResult is extended to accept isIPv6
+// UpdateLocalSiteResult sets or updates a site result (with isIPv6)
 func UpdateLocalSiteResult(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
 	Local.Mu.Lock()
 	defer Local.Mu.Unlock()
@@ -60,7 +60,6 @@ func UpdateLocalSiteResult(check cfg.Check, member cfg.Member, status bool, erro
 	}
 
 	if sIndex == -1 {
-		// Create a new site entry
 		site := SiteResult{
 			Check:   check,
 			IsIPv6:  isIPv6,
@@ -84,13 +83,16 @@ func UpdateLocalSiteResult(check cfg.Check, member cfg.Member, status bool, erro
 	}
 }
 
-func UpdateLocalDomainResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string, status bool, errorMsg string, dataMap map[string]interface{}) {
+// UpdateLocalDomainResult sets or updates a domain result (with isIPv6)
+func UpdateLocalDomainResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string,
+	status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
+
 	Local.Mu.Lock()
 	defer Local.Mu.Unlock()
 
 	dIndex := -1
 	for i, dr := range Local.DomainResults {
-		if dr.Check.Name == check.Name && dr.Domain == domain {
+		if dr.Check.Name == check.Name && dr.Domain == domain && dr.IsIPv6 == isIPv6 {
 			dIndex = i
 			break
 		}
@@ -102,6 +104,7 @@ func UpdateLocalDomainResult(check cfg.Check, member cfg.Member, service cfg.Ser
 		Checktime: time.Now().UTC(),
 		ErrorText: errorMsg,
 		Data:      dataMap,
+		IsIPv6:    isIPv6,
 	}
 
 	if dIndex == -1 {
@@ -109,11 +112,11 @@ func UpdateLocalDomainResult(check cfg.Check, member cfg.Member, service cfg.Ser
 			Check:   check,
 			Service: service,
 			Domain:  domain,
+			IsIPv6:  isIPv6,
 			Results: []Result{newResult},
 		})
 	} else {
 		dr := &Local.DomainResults[dIndex]
-
 		rIndex := -1
 		for i, res := range dr.Results {
 			if res.Member.Details.Name == member.Details.Name {
@@ -129,13 +132,16 @@ func UpdateLocalDomainResult(check cfg.Check, member cfg.Member, service cfg.Ser
 	}
 }
 
-func UpdateLocalEndpointResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string, endpoint string, status bool, errorMsg string, dataMap map[string]interface{}) {
+// UpdateLocalEndpointResult sets or updates an endpoint result (with isIPv6)
+func UpdateLocalEndpointResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string, endpoint string,
+	status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
+
 	Local.Mu.Lock()
 	defer Local.Mu.Unlock()
 
 	eIndex := -1
 	for i, er := range Local.EndpointResults {
-		if er.Check.Name == check.Name && er.RpcUrl == endpoint {
+		if er.Check.Name == check.Name && er.Domain == domain && er.RpcUrl == endpoint && er.IsIPv6 == isIPv6 {
 			eIndex = i
 			break
 		}
@@ -147,6 +153,7 @@ func UpdateLocalEndpointResult(check cfg.Check, member cfg.Member, service cfg.S
 		Checktime: time.Now().UTC(),
 		ErrorText: errorMsg,
 		Data:      dataMap,
+		IsIPv6:    isIPv6,
 	}
 
 	if eIndex == -1 {
@@ -155,11 +162,11 @@ func UpdateLocalEndpointResult(check cfg.Check, member cfg.Member, service cfg.S
 			Service: service,
 			RpcUrl:  endpoint,
 			Domain:  domain,
+			IsIPv6:  isIPv6,
 			Results: []Result{newResult},
 		})
 	} else {
 		er := &Local.EndpointResults[eIndex]
-
 		rIndex := -1
 		for i, res := range er.Results {
 			if res.Member.Details.Name == member.Details.Name {
@@ -175,49 +182,47 @@ func UpdateLocalEndpointResult(check cfg.Check, member cfg.Member, service cfg.S
 	}
 }
 
-// Local Status Helpers
-func GetLocalSiteStatus(checkName string, memberName string) (found bool, status bool) {
-	localSites, _, _ := GetLocalResults()
-	for _, lsr := range localSites {
-		if lsr.Check.Name == checkName {
+// Helpers for site/domain/endpoint status with isIPv6
+func GetLocalSiteStatusIPv4v6(checkName, memberName string, isIPv6 bool) (bool, bool) {
+	Local.Mu.RLock()
+	defer Local.Mu.RUnlock()
+	for _, lsr := range Local.SiteResults {
+		if lsr.Check.Name == checkName && lsr.IsIPv6 == isIPv6 {
 			for _, r := range lsr.Results {
 				if r.Member.Details.Name == memberName {
 					return true, r.Status
 				}
 			}
-			break
 		}
 	}
 	return false, false
 }
 
-func GetLocalDomainStatus(checkName string, memberName string, domain string) (found bool, status bool) {
-	_, localDomains, _ := GetLocalResults()
-	for _, ld := range localDomains {
-		if ld.Check.Name == checkName && ld.Domain == domain {
+func GetLocalDomainStatusIPv4v6(checkName, memberName, domain string, isIPv6 bool) (bool, bool) {
+	Local.Mu.RLock()
+	defer Local.Mu.RUnlock()
+	for _, ld := range Local.DomainResults {
+		if ld.Check.Name == checkName && ld.Domain == domain && ld.IsIPv6 == isIPv6 {
 			for _, r := range ld.Results {
 				if r.Member.Details.Name == memberName {
 					return true, r.Status
 				}
 			}
-
-			break
 		}
 	}
 	return false, false
 }
 
-func GetLocalEndpointStatus(checkName string, memberName string, endpoint string) (found bool, status bool) {
-	_, _, localEndpoints := GetLocalResults()
-	for _, le := range localEndpoints {
-		if le.Check.Name == checkName && le.RpcUrl == endpoint {
+func GetLocalEndpointStatusIPv4v6(checkName, memberName, domain, endpoint string, isIPv6 bool) (bool, bool) {
+	Local.Mu.RLock()
+	defer Local.Mu.RUnlock()
+	for _, le := range Local.EndpointResults {
+		if le.Check.Name == checkName && le.Domain == domain && le.RpcUrl == endpoint && le.IsIPv6 == isIPv6 {
 			for _, r := range le.Results {
 				if r.Member.Details.Name == memberName {
 					return true, r.Status
 				}
 			}
-
-			break
 		}
 	}
 	return false, false
