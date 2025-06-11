@@ -1,14 +1,11 @@
 package nats
 
 /*
-   Cluster‑role management
+   Node‑role & cluster‑membership orchestration
 
-   • JOIN is still broadcast at start‑up and on each heartbeat.
-   • The former full “membership” flood (sometimes > 2 MiB) is **removed**;
-     JOINs alone are fully sufficient for convergence and keep every frame
-     well below the NATS default 1 MiB message limit.
-
-   • Every outbound message is now validated to ensure Sender.NodeID != "".
+   • JOIN broadcast ≠ membership flood – every frame now ≤ a few KB.
+   • Every outbound frame is validated; blank NodeID can never be sent.
+   • Heartbeat refreshes LastHeard and re‑sends JOIN (no huge payloads).
 */
 
 import (
@@ -23,9 +20,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-/*───────────────────────────────────────────────────────────────────────────
-  Constants & regex helpers
-───────────────────────────────────────────────────────────────────────────*/
+/*──────────────────────────── constants ──────────────────────────────*/
 
 const (
 	activeNodeWindow        = 5 * time.Minute
@@ -33,28 +28,24 @@ const (
 	broadcastJoinDelay      = 500 * time.Millisecond
 )
 
+/*────────────────────────── regex helpers ────────────────────────────*/
+
 var (
 	reMonitor = regexp.MustCompile(`(?i)monitor`)
 	reDns     = regexp.MustCompile(`(?i)dns`)
 )
 
-/*───────────────────────────────────────────────────────────────────────────
-  Atomic state (only for throttling)
-───────────────────────────────────────────────────────────────────────────*/
+/*──────────────────────────── atomics ────────────────────────────────*/
 
-var lastJoin int64 // unix‑nano timestamp of last JOIN we sent
+var lastJoin int64 // unix‑nano timestamp of our last JOIN
 
-/*───────────────────────────────────────────────────────────────────────────
-  Public API – enable each role
-───────────────────────────────────────────────────────────────────────────*/
+/*──────────────────────── public role APIs ───────────────────────────*/
 
 func EnableMonitorRole() error  { return enableRoleInternal("IBPMonitor") }
 func EnableDnsRole() error      { return enableRoleInternal("IBPDns") }
 func EnableCollatorRole() error { return enableRoleInternal("IBPCollator") }
 
-/*───────────────────────────────────────────────────────────────────────────
-  Shared initialiser
-───────────────────────────────────────────────────────────────────────────*/
+/*──────────────────────── shared initialiser ─────────────────────────*/
 
 func enableRoleInternal(role string) error {
 	State.SubjectPropose = "consensus.propose"
@@ -89,7 +80,7 @@ func enableRoleInternal(role string) error {
 
 	log.Log(log.Info, "[NATS] %s role enabled for node=%s", role, State.NodeID)
 
-	// burst a few JOINs on start‑up
+	// initial burst of JOINs for fast convergence
 	go func() {
 		for i := 0; i < broadcastJoinRetryCount; i++ {
 			broadcastClusterJoin()
@@ -100,16 +91,14 @@ func enableRoleInternal(role string) error {
 	return nil
 }
 
-/*───────────────────────────────────────────────────────────────────────────
-  Heart‑beat timer – refresh LastHeard + send JOIN
-───────────────────────────────────────────────────────────────────────────*/
+/*──────────────────────── heartbeat / JOIN ───────────────────────────*/
 
 func startHeartbeat() {
 	go func() {
-		time.Sleep(2 * time.Second) // let subscriptions settle
-		ticker := time.NewTicker(300 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
+		time.Sleep(2 * time.Second) // allow subscriptions to settle
+		t := time.NewTicker(300 * time.Second)
+		defer t.Stop()
+		for range t.C {
 			State.Mu.Lock()
 			if me, ok := State.ClusterNodes[State.NodeID]; ok {
 				me.LastHeard = time.Now().UTC()
@@ -121,20 +110,15 @@ func startHeartbeat() {
 	}()
 }
 
-/*───────────────────────────────────────────────────────────────────────────
-  JOIN broadcaster (membership flood removed)
-───────────────────────────────────────────────────────────────────────────*/
-
 func broadcastClusterJoin() {
 	now := time.Now().UnixNano()
-	// throttle JOINs to once every 5 s except for the initial burst
 	if last := atomic.LoadInt64(&lastJoin); last != 0 && now-last < 5*int64(time.Second) {
-		return
+		return // throttle to max 1 every 5 s
 	}
 	atomic.StoreInt64(&lastJoin, now)
 
 	if State.ThisNode.NodeID == "" {
-		log.Log(log.Error, "[NATS] broadcastClusterJoin: NodeID is empty – skipping")
+		log.Log(log.Error, "[NATS] JOIN suppressed – NodeID is empty")
 		return
 	}
 	msg := ClusterMessage{
@@ -147,9 +131,7 @@ func broadcastClusterJoin() {
 	}
 }
 
-/*───────────────────────────────────────────────────────────────────────────
-  Wildcard dispatcher
-───────────────────────────────────────────────────────────────────────────*/
+/*──────────────────────── wildcard dispatcher ────────────────────────*/
 
 func handleAllMessages(m *nats.Msg) {
 	go func() {
@@ -194,9 +176,7 @@ func handleAllMessages(m *nats.Msg) {
 	}()
 }
 
-/*───────────────────────────────────────────────────────────────────────────
-  Cluster message processing (JOIN only)
-───────────────────────────────────────────────────────────────────────────*/
+/*──────────────────────── cluster JOIN handler ───────────────────────*/
 
 func handleClusterMessage(m *nats.Msg) {
 	var msg ClusterMessage
@@ -204,10 +184,8 @@ func handleClusterMessage(m *nats.Msg) {
 		log.Log(log.Error, "[NATS] handleClusterMessage: unmarshal error: %v", err)
 		return
 	}
-
 	if msg.Sender.NodeID == "" {
-		// Silently discard – in practice this only happens with malformed
-		// legacy frames still present on the server.
+		// silently drop legacy or malformed frames
 		return
 	}
 
@@ -218,9 +196,7 @@ func handleClusterMessage(m *nats.Msg) {
 	}
 }
 
-/*───────────────────────────────────────────────────────────────────────────
-  Node bookkeeping helpers
-───────────────────────────────────────────────────────────────────────────*/
+/*──────────────────────── node bookkeeping ───────────────────────────*/
 
 func addNode(n NodeInfo) {
 	State.Mu.Lock()
@@ -264,9 +240,7 @@ func guessRoleFromID(id string) string {
 	}
 }
 
-/*───────────────────────────────────────────────────────────────────────────
-  Liveness helpers (unchanged logic)
-───────────────────────────────────────────────────────────────────────────*/
+/*──────────────────────── liveness helpers ───────────────────────────*/
 
 func IsNodeActive(n NodeInfo) bool {
 	return n.NodeID != "" && !n.LastHeard.IsZero() && time.Since(n.LastHeard) < activeNodeWindow
@@ -275,36 +249,34 @@ func IsNodeActive(n NodeInfo) bool {
 func CountActiveMonitors() int {
 	State.Mu.RLock()
 	defer State.Mu.RUnlock()
-	cnt := 0
-	for _, n := range State.ClusterNodes {
-		if n.NodeRole == "IBPMonitor" && IsNodeActive(n) {
-			cnt++
+	n := 0
+	for _, node := range State.ClusterNodes {
+		if node.NodeRole == "IBPMonitor" && IsNodeActive(node) {
+			n++
 		}
 	}
-	return cnt
+	return n
 }
 
 func CountActiveDns() int {
 	State.Mu.RLock()
 	defer State.Mu.RUnlock()
-	cnt := 0
-	for _, n := range State.ClusterNodes {
-		if n.NodeRole == "IBPDns" && IsNodeActive(n) {
-			cnt++
+	n := 0
+	for _, node := range State.ClusterNodes {
+		if node.NodeRole == "IBPDns" && IsNodeActive(node) {
+			n++
 		}
 	}
-	return cnt
+	return n
 }
 
-/*───────────────────────────────────────────────────────────────────────────
-  Garbage‑collection (unchanged)
-───────────────────────────────────────────────────────────────────────────*/
+/*──────────────────────── garbage collection ─────────────────────────*/
 
 func StartGarbageCollection() {
 	go func() {
-		t := time.NewTicker(5 * time.Second)
-		defer t.Stop()
-		for range t.C {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
 			cleanOldProposals()
 			cleanStaleNodes()
 		}
@@ -331,19 +303,17 @@ func cleanStaleNodes() {
 	State.Mu.Lock()
 	defer State.Mu.Unlock()
 
-	for id, n := range State.ClusterNodes {
+	for id, node := range State.ClusterNodes {
 		if id == State.NodeID {
 			continue
 		}
-		if !n.LastHeard.IsZero() && now.Sub(n.LastHeard) > 15*time.Minute {
+		if !node.LastHeard.IsZero() && now.Sub(node.LastHeard) > 15*time.Minute {
 			delete(State.ClusterNodes, id)
 		}
 	}
 }
 
-/*───────────────────────────────────────────────────────────────────────────
-  Export package‑internal helpers
-───────────────────────────────────────────────────────────────────────────*/
+/*──────────────────────── internal exports ───────────────────────────*/
 
 var (
 	countActiveMonitors = CountActiveMonitors

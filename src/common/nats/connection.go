@@ -53,7 +53,7 @@ func Connect() error {
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(2 * time.Second),
 		nats.Timeout(10 * time.Second),
-		nats.PingInterval(20 * time.Second),
+		nats.PingInterval(200 * time.Second),
 		nats.MaxPingsOutstanding(5),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
 			log.Log(log.Error, "[NATS] Disconnected: %v", err)
