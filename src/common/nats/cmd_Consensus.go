@@ -1,80 +1,91 @@
 package nats
 
+/*
+   Consensus engine – production version.
+
+   Key points
+   ----------
+
+   • Every local status divergence prompts ONE dedicated proposal.
+   • Proposal outcome (Pass/Fail) is broadcast; when *Pass* all nodes
+     apply exactly the **ProposedStatus** (never their own local copy).
+   • Finalisation honours quorum ≥ ⌊N/2⌋+1 **and** a hard floor
+     minConsensusVotes (2).
+*/
+
 import (
 	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/nats-io/nats.go"
-
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
+
+	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
 )
 
-const minConsensusVotes = 2 // hard floor per spec
+/*─────────────────────────────────────────────────────────────
+  CONSTANTS
+─────────────────────────────────────────────────────────────*/
 
-// ProposeCheckStatus is called after local checks detect status change.
+const minConsensusVotes = 2 // hard minimum even for small clusters
+
+/*─────────────────────────────────────────────────────────────
+  PUBLIC ENTRY – called by monitor helpers
+─────────────────────────────────────────────────────────────*/
+
 func ProposeCheckStatus(
-	checkType, checkName, memberName, domainName, endpoint string,
+	checkType, checkName, memberName,
+	domainName, endpoint string,
 	status bool,
 	errorText string,
 	dataMap map[string]interface{},
 	isIPv6 bool,
-) bool {
-	// Check for existing proposal without holding lock during Propose call
-	shouldPropose := true
-
+) {
+	// skip if identical active proposal already exists from this node
 	State.Mu.RLock()
 	for _, pt := range State.Proposals {
-		prop := pt.Proposal
-		// Only skip if it's an identical active proposal from *this node*.
 		if !pt.Finalized &&
-			prop.CheckType == checkType &&
-			prop.CheckName == checkName &&
-			prop.MemberName == memberName &&
-			prop.DomainName == domainName &&
-			prop.Endpoint == endpoint &&
-			prop.ProposedStatus == status &&
-			prop.IsIPv6 == isIPv6 {
-			log.Log(log.Debug,
-				"[NATS] ProposeCheckStatus skipped; identical active proposal for checkType=%s checkName=%s member=%s isIPv6=%v from same node=%s",
-				checkType, checkName, memberName, isIPv6, State.NodeID)
-			shouldPropose = false
-			break
+			pt.Proposal.CheckType == checkType &&
+			pt.Proposal.CheckName == checkName &&
+			pt.Proposal.MemberName == memberName &&
+			pt.Proposal.DomainName == domainName &&
+			pt.Proposal.Endpoint == endpoint &&
+			pt.Proposal.ProposedStatus == status &&
+			pt.Proposal.IsIPv6 == isIPv6 {
+			State.Mu.RUnlock()
+			return
 		}
 	}
 	State.Mu.RUnlock()
 
-	if shouldPropose {
-		log.Log(log.Debug,
-			"[NATS] ProposeCheckStatus creating new proposal for checkType=%s checkName=%s member=%s domain=%s endpoint=%s status=%v isIPv6=%v",
-			checkType, checkName, memberName, domainName, endpoint, status, isIPv6)
-		Propose(checkType, checkName, memberName, domainName, endpoint, status, errorText, dataMap, isIPv6)
-		return true
-	}
-	return false
+	propose(checkType, checkName, memberName, domainName, endpoint,
+		status, errorText, dataMap, isIPv6)
 }
 
-// Propose constructs a new Proposal and publishes it.
-func Propose(
+/*─────────────────────────────────────────────────────────────
+  CREATE + PUBLISH PROPOSAL
+─────────────────────────────────────────────────────────────*/
+
+func propose(
 	checkType, checkName, memberName, domainName, endpoint string,
-	proposedStatus bool,
+	status bool,
 	errorText string,
 	data map[string]interface{},
 	isIPv6 bool,
-) (ProposalID, error) {
+) {
 	pid := ProposalID(uuid.New().String())
 
 	prop := Proposal{
 		ID:             pid,
-		SenderNodeID:   State.NodeID, // Track who sent it
+		SenderNodeID:   State.NodeID,
 		CheckType:      checkType,
 		CheckName:      checkName,
 		MemberName:     memberName,
 		DomainName:     domainName,
 		Endpoint:       endpoint,
-		ProposedStatus: proposedStatus,
+		ProposedStatus: status,
 		ErrorText:      errorText,
 		Data:           data,
 		IsIPv6:         isIPv6,
@@ -87,125 +98,103 @@ func Propose(
 	}
 
 	State.Mu.Lock()
+	if State.Proposals == nil {
+		State.Proposals = make(map[ProposalID]*ProposalTracking)
+	}
 	State.Proposals[pid] = pt
-
-	// Start timer for forced finalize AFTER storing proposal
-	pt.Timer = time.AfterFunc(State.ProposalTimeout, func() {
-		log.Log(log.Debug, "[NATS] Proposal timeout reached for ID=%s, forcing finalization", pid)
-		finalizeVote(pid)
-	})
+	pt.Timer = time.AfterFunc(State.ProposalTimeout, func() { forceFinalize(pid) })
 	State.Mu.Unlock()
 
-	log.Log(log.Debug,
-		"[NATS] Propose: Stored new proposal ID=%s, checkType=%s, checkName=%s, domain=%s, endpoint=%s, status=%v, isIPv6=%v from sender=%s",
-		pid, checkType, checkName, domainName, endpoint, proposedStatus, isIPv6, State.NodeID)
-
-	dataBytes, _ := json.Marshal(prop)
-	err := Publish(State.SubjectPropose, dataBytes)
-	if err != nil {
-		log.Log(log.Error, "[NATS] Propose: failed to publish ID=%s: %v", pid, err)
-	} else {
-		log.Log(log.Debug, "[NATS] Propose: published proposal ID=%s -> subject=%s", pid, State.SubjectPropose)
+	if dataBytes, _ := json.Marshal(prop); Publish(State.SubjectPropose, dataBytes) != nil {
+		log.Log(log.Error, "[NATS] failed to publish proposal %s", pid)
 	}
-	return pid, err
+
+	go voteOnProposal(prop)
 }
 
-// handleProposal processes "consensus.propose"
+/*─────────────────────────────────────────────────────────────
+  PROPOSAL HANDLER
+─────────────────────────────────────────────────────────────*/
+
 func handleProposal(m *nats.Msg) {
 	var prop Proposal
 	if err := json.Unmarshal(m.Data, &prop); err != nil {
 		log.Log(log.Error, "[NATS] handleProposal: unmarshal error: %v", err)
 		return
 	}
-
-	// Mark node as heard
 	markNodeHeard(prop.SenderNodeID)
 
-	log.Log(log.Debug,
-		"[NATS] handleProposal: got proposal ID=%s, checkType=%s, checkName=%s, domain=%s, endpoint=%s, status=%v, isIPv6=%v from sender=%s",
-		prop.ID, prop.CheckType, prop.CheckName, prop.DomainName, prop.Endpoint, prop.ProposedStatus, prop.IsIPv6, prop.SenderNodeID)
-
 	State.Mu.Lock()
-	existingPT, exists := State.Proposals[prop.ID]
-	if !exists {
-		pt := &ProposalTracking{
+	if _, exists := State.Proposals[prop.ID]; !exists {
+		State.Proposals[prop.ID] = &ProposalTracking{
 			Proposal: prop,
 			Votes:    make(map[string]bool),
 		}
-		State.Proposals[prop.ID] = pt
-		pt.Timer = time.AfterFunc(State.ProposalTimeout, func() {
-			log.Log(log.Debug, "[NATS] Proposal timeout reached for ID=%s (from handleProposal), forcing finalization", prop.ID)
-			finalizeVote(prop.ID)
-		})
-		log.Log(log.Debug, "[NATS] handleProposal: stored new proposal ID=%s", prop.ID)
+		State.Proposals[prop.ID].Timer = time.AfterFunc(State.ProposalTimeout, func() { forceFinalize(prop.ID) })
 		State.Mu.Unlock()
-
-		// Vote immediately after storing
 		go voteOnProposal(prop)
-	} else {
-		log.Log(log.Debug,
-			"[NATS] handleProposal: proposal ID=%s already exists (finalized=%v)",
-			existingPT.Proposal.ID, existingPT.Finalized)
-		State.Mu.Unlock()
+		return
 	}
+	State.Mu.Unlock()
 }
 
-// voteOnProposal is separated out to avoid holding locks
-func voteOnProposal(proposal Proposal) {
-	// Small delay to ensure the proposal is fully propagated
-	time.Sleep(100 * time.Millisecond)
+/*─────────────────────────────────────────────────────────────
+  VOTING
+─────────────────────────────────────────────────────────────*/
 
-	found, localStatus := checkLocalStatus(proposal.CheckType, proposal.CheckName, proposal.MemberName, proposal.DomainName, proposal.Endpoint, proposal.IsIPv6)
+func voteOnProposal(prop Proposal) {
+	time.Sleep(50 * time.Millisecond) // allow storage propagation
+
+	found, localStatus := checkLocalStatus(
+		prop.CheckType, prop.CheckName, prop.MemberName,
+		prop.DomainName, prop.Endpoint, prop.IsIPv6)
 	if !found {
-		log.Log(log.Debug, "[NATS] voteOnProposal: local check not found for ID=%s", proposal.ID)
 		return
 	}
 
 	v := Vote{
-		ProposalID:   proposal.ID,
+		ProposalID:   prop.ID,
 		SenderNodeID: State.NodeID,
 		NodeID:       State.NodeID,
-		Agree:        (localStatus == proposal.ProposedStatus),
+		Agree:        localStatus == prop.ProposedStatus,
 		Timestamp:    time.Now().UTC(),
 	}
 
-	data, _ := json.Marshal(v)
-	err := Publish(State.SubjectVote, data)
-	if err != nil {
-		log.Log(log.Error, "[NATS] voteOnProposal: failed to publish vote ID=%s: %v", proposal.ID, err)
-	} else {
-		log.Log(log.Debug, "[NATS] voteOnProposal: node=%s voted (agree=%v) for ID=%s", State.NodeID, v.Agree, proposal.ID)
+	if data, _ := json.Marshal(v); Publish(State.SubjectVote, data) != nil {
+		log.Log(log.Error, "[NATS] failed to publish vote for %s", prop.ID)
 	}
 }
 
 func handleVote(m *nats.Msg) {
-	var vote Vote
-	if err := json.Unmarshal(m.Data, &vote); err != nil {
+	var v Vote
+	if err := json.Unmarshal(m.Data, &v); err != nil {
 		log.Log(log.Error, "[NATS] handleVote: unmarshal error: %v", err)
 		return
 	}
-
-	markNodeHeard(vote.SenderNodeID)
+	markNodeHeard(v.SenderNodeID)
 
 	State.Mu.Lock()
-	defer State.Mu.Unlock()
-
-	pt, exists := State.Proposals[vote.ProposalID]
-	if !exists || pt.Finalized {
+	pt, ok := State.Proposals[v.ProposalID]
+	if !ok || pt.Finalized {
+		State.Mu.Unlock()
 		return
 	}
-	pt.Votes[vote.NodeID] = vote.Agree
+	pt.Votes[v.NodeID] = v.Agree
+	decideLocked(pt)
+	State.Mu.Unlock()
+}
 
-	monitorCount := countActiveMonitorsLocked()
-	if monitorCount == 0 {
+func decideLocked(pt *ProposalTracking) {
+	total := countActiveMonitorsLocked()
+	if total == 0 {
 		return
 	}
-	majority := (monitorCount / 2) + 1
+	maj := (total / 2) + 1
 
 	yes, no := 0, 0
-	for nid, v := range pt.Votes {
+	for nid, agree := range pt.Votes {
 		if node, ok := State.ClusterNodes[nid]; ok && node.NodeRole == "IBPMonitor" && isNodeActive(node) {
-			if v {
+			if agree {
 				yes++
 			} else {
 				no++
@@ -213,88 +202,54 @@ func handleVote(m *nats.Msg) {
 		}
 	}
 
-	// finalise only if both the majority rule AND min‑votes rule are satisfied
-	if yes >= majority && yes >= minConsensusVotes {
-		pt.Finalized = true
-		pt.FinalStatus = true
-	} else if no >= majority && no >= minConsensusVotes {
-		pt.Finalized = true
-		pt.FinalStatus = false
+	switch {
+	case yes >= maj && yes >= minConsensusVotes:
+		pt.Finalized, pt.Passed = true, true
+	case no >= maj && no >= minConsensusVotes:
+		pt.Finalized, pt.Passed = true, false
 	}
 
 	if pt.Finalized {
 		if pt.Timer != nil {
 			pt.Timer.Stop()
 		}
-		go finalizeVote(vote.ProposalID) // run outside lock
+		go finalize(pt)
 	}
 }
 
-/* ───────────────────────── finalizeVote ──────────────────────────────── */
+/*─────────────────────────────────────────────────────────────
+  FINALISATION (timer fallback + explicit)
+─────────────────────────────────────────────────────────────*/
 
-func finalizeVote(pid ProposalID) {
+func forceFinalize(pid ProposalID) {
 	State.Mu.Lock()
 	pt, ok := State.Proposals[pid]
-	if !ok {
+	if !ok || pt.Finalized {
 		State.Mu.Unlock()
 		return
 	}
-
-	// recount with latest liveness
-	monitorCount := countActiveMonitorsLocked()
-	yes, no := 0, 0
-	for nid, v := range pt.Votes {
-		if node, ok := State.ClusterNodes[nid]; ok && node.NodeRole == "IBPMonitor" && isNodeActive(node) {
-			if v {
-				yes++
-			} else {
-				no++
-			}
-		}
-	}
-	majority := (monitorCount / 2) + 1
-
-	// if still not enough votes, extend timer and wait
-	if yes < minConsensusVotes && no < minConsensusVotes {
-		if pt.Timer != nil {
-			pt.Timer.Reset(State.ProposalTimeout)
-		} else {
-			pt.Timer = time.AfterFunc(State.ProposalTimeout, func() { finalizeVote(pid) })
-		}
-		State.Mu.Unlock()
-		return
-	}
-
-	// compute outcome respecting majority + minVotes
-	if yes >= majority && yes >= minConsensusVotes {
-		pt.FinalStatus = true
-	} else if no >= majority && no >= minConsensusVotes {
-		pt.FinalStatus = false
-	} else {
-		// tie or not enough – do not change official status
-		State.Mu.Unlock()
-		return
-	}
-
-	pt.Finalized = true
-	State.Proposals[pid] = pt
+	decideLocked(pt)
 	State.Mu.Unlock()
-
-	// apply locally
-	go applyOfficialChanges(pt.Proposal, pt.FinalStatus)
-
-	// broadcast finalize (includes full proposal)
-	fm := FinalizeMessage{
-		ProposalID:  pid,
-		Proposal:    pt.Proposal,
-		FinalStatus: pt.FinalStatus,
-		DecidedAt:   time.Now().UTC(),
-	}
-	data, _ := json.Marshal(fm)
-	_ = Publish(State.SubjectFinalize, data)
 }
 
-/* ───────────────────────── handleFinalize ────────────────────────────── */
+func finalize(pt *ProposalTracking) {
+	msg := FinalizeMessage{
+		Proposal:  pt.Proposal,
+		Passed:    pt.Passed,
+		DecidedAt: time.Now().UTC(),
+	}
+	if data, _ := json.Marshal(msg); Publish(State.SubjectFinalize, data) != nil {
+		log.Log(log.Error, "[NATS] failed to publish finalize for %s", pt.Proposal.ID)
+	}
+
+	if pt.Passed {
+		applyOfficialChanges(pt.Proposal)
+	}
+
+	State.Mu.Lock()
+	delete(State.Proposals, pt.Proposal.ID)
+	State.Mu.Unlock()
+}
 
 func handleFinalize(m *nats.Msg) {
 	var fm FinalizeMessage
@@ -302,29 +257,68 @@ func handleFinalize(m *nats.Msg) {
 		log.Log(log.Error, "[NATS] handleFinalize: unmarshal error: %v", err)
 		return
 	}
-
 	markNodeHeard(fm.Proposal.SenderNodeID)
 
-	State.Mu.Lock()
-	pt, exists := State.Proposals[fm.ProposalID]
-	if !exists {
-		pt = &ProposalTracking{
-			Proposal: fm.Proposal,
-			Votes:    make(map[string]bool),
-		}
-		State.Proposals[fm.ProposalID] = pt
+	if fm.Passed {
+		applyOfficialChanges(fm.Proposal)
 	}
-	pt.Finalized = true
-	pt.FinalStatus = fm.FinalStatus
-	if pt.Timer != nil {
-		pt.Timer.Stop()
-	}
-	State.Mu.Unlock()
-
-	go applyOfficialChanges(fm.Proposal, fm.FinalStatus)
 }
 
-// countActiveMonitorsLocked counts active monitors while already holding the lock
+/*─────────────────────────────────────────────────────────────
+  APPLY TO OFFICIAL SNAPSHOT
+─────────────────────────────────────────────────────────────*/
+
+func applyOfficialChanges(prop Proposal) {
+	chk, okChk := findCheckByName(prop.CheckName, prop.CheckType)
+	if !okChk {
+		log.Log(log.Warn, "[NATS] applyOfficialChanges: check %s/%s not found", prop.CheckType, prop.CheckName)
+		return
+	}
+	mem, okMem := findMemberByName(prop.MemberName)
+	if !okMem {
+		log.Log(log.Warn, "[NATS] applyOfficialChanges: member %s not found", prop.MemberName)
+		return
+	}
+
+	var svc cfg.Service
+	if prop.CheckType == "domain" || prop.CheckType == "endpoint" {
+		s, ok := findServiceForDomain(prop.DomainName)
+		if ok {
+			svc = s
+		}
+	}
+
+	switch prop.CheckType {
+	case "site":
+		dat.UpdateOfficialSiteResult(chk, mem, prop.ProposedStatus, prop.ErrorText, prop.Data, prop.IsIPv6)
+	case "domain":
+		dat.UpdateOfficialDomainResult(chk, mem, svc, prop.DomainName, prop.ProposedStatus, prop.ErrorText, prop.Data, prop.IsIPv6)
+	case "endpoint":
+		dat.UpdateOfficialEndpointResult(chk, mem, svc, prop.DomainName, prop.Endpoint, prop.ProposedStatus, prop.ErrorText, prop.Data, prop.IsIPv6)
+	}
+}
+
+/*─────────────────────────────────────────────────────────────
+  HELPER – LOCAL STATUS LOOK‑UP
+─────────────────────────────────────────────────────────────*/
+
+func checkLocalStatus(checkType, checkName, memberName, domainName, endpoint string, isIPv6 bool) (bool, bool) {
+	switch checkType {
+	case "site":
+		return dat.GetLocalSiteStatusIPv4v6(checkName, memberName, isIPv6)
+	case "domain":
+		return dat.GetLocalDomainStatusIPv4v6(checkName, memberName, domainName, isIPv6)
+	case "endpoint":
+		return dat.GetLocalEndpointStatusIPv4v6(checkName, memberName, domainName, endpoint, isIPv6)
+	default:
+		return false, false
+	}
+}
+
+/*─────────────────────────────────────────────────────────────
+  HELPER – LIVE MONITOR COUNT (LOCK HELD BY CALLER)
+─────────────────────────────────────────────────────────────*/
+
 func countActiveMonitorsLocked() int {
 	n := 0
 	for _, node := range State.ClusterNodes {
@@ -333,75 +327,4 @@ func countActiveMonitorsLocked() int {
 		}
 	}
 	return n
-}
-
-// checkLocalStatus returns (found, status).
-func checkLocalStatus(
-	checkType, checkName, memberName, domainName, endpoint string,
-	isIPv6 bool,
-) (bool, bool) {
-	switch checkType {
-	case "site":
-		found, status := dat.GetLocalSiteStatusIPv4v6(checkName, memberName, isIPv6)
-		return found, status
-	case "domain":
-		found, status := dat.GetLocalDomainStatusIPv4v6(checkName, memberName, domainName, isIPv6)
-		return found, status
-	case "endpoint":
-		found, status := dat.GetLocalEndpointStatusIPv4v6(checkName, memberName, domainName, endpoint, isIPv6)
-		return found, status
-	default:
-		return false, false
-	}
-}
-
-// applyOfficialChanges modifies data.Official after finalization
-func applyOfficialChanges(prop Proposal, final bool) {
-	chk, okChk := findCheckByName(prop.CheckName, prop.CheckType)
-	if !okChk {
-		log.Log(log.Warn, "[NATS] applyOfficialChanges: no check named=%s (type=%s)", prop.CheckName, prop.CheckType)
-		return
-	}
-	mem, okMem := findMemberByName(prop.MemberName)
-	if !okMem {
-		log.Log(log.Warn, "[NATS] applyOfficialChanges: no member named=%s", prop.MemberName)
-		return
-	}
-
-	var svc cfg.Service
-	if prop.CheckType == "domain" || prop.CheckType == "endpoint" {
-		serviceObj, ok := findServiceForDomain(prop.DomainName)
-		if !ok && prop.CheckType == "domain" {
-			log.Log(log.Warn, "[NATS] applyOfficialChanges: domain service not found for domain=%s", prop.DomainName)
-			return
-		}
-		svc = serviceObj
-	}
-
-	status := final
-	errorMsg := prop.ErrorText
-	dataMap := prop.Data
-
-	switch prop.CheckType {
-	case "site":
-		log.Log(log.Debug,
-			"[NATS] applyOfficialChanges: APPLYING site check for member=%s => %t isIPv6=%v",
-			prop.MemberName, status, prop.IsIPv6)
-		dat.UpdateOfficialSiteResult(chk, mem, status, errorMsg, dataMap, prop.IsIPv6)
-
-	case "domain":
-		log.Log(log.Debug,
-			"[NATS] applyOfficialChanges: APPLYING domain check for member=%s => %t domain=%s isIPv6=%v",
-			prop.MemberName, status, prop.DomainName, prop.IsIPv6)
-		dat.UpdateOfficialDomainResult(chk, mem, svc, prop.DomainName, status, errorMsg, dataMap, prop.IsIPv6)
-
-	case "endpoint":
-		log.Log(log.Debug,
-			"[NATS] applyOfficialChanges: APPLYING endpoint check for member=%s => %t domain=%s endpoint=%s isIPv6=%v",
-			prop.MemberName, status, prop.DomainName, prop.Endpoint, prop.IsIPv6)
-		dat.UpdateOfficialEndpointResult(chk, mem, svc, prop.DomainName, prop.Endpoint, status, errorMsg, dataMap, prop.IsIPv6)
-
-	default:
-		log.Log(log.Warn, "[NATS] applyOfficialChanges: unrecognized checkType=%s", prop.CheckType)
-	}
 }

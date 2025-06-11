@@ -5,7 +5,9 @@ import (
 	"time"
 )
 
-/* ───────── Node / proposal bookkeeping ───────── */
+/* ────────────────────────────────────────────────────────────
+   NODE / PROPOSAL BOOK‑KEEPING
+   ────────────────────────────────────────────────────────────*/
 
 type NodeState struct {
 	NodeID          string
@@ -33,12 +35,14 @@ type NodeInfo struct {
 	LastHeard     time.Time `json:"LastHeard"`
 }
 
-/* ───────── Voting types ───────── */
+/* ────────────────────────────────────────────────────────────
+   CONSENSUS PAYLOADS
+   ────────────────────────────────────────────────────────────*/
 
 type ProposalID string
 
 type Proposal struct {
-	ID             ProposalID             `json:"id"`
+	ID             ProposalID             `json:"ID"`
 	SenderNodeID   string                 `json:"SenderNodeID"`
 	CheckType      string                 `json:"CheckType"`
 	CheckName      string                 `json:"CheckName"`
@@ -53,11 +57,11 @@ type Proposal struct {
 }
 
 type ProposalTracking struct {
-	Proposal    Proposal
-	Votes       map[string]bool
-	Finalized   bool
-	FinalStatus bool
-	Timer       *time.Timer
+	Proposal  Proposal
+	Votes     map[string]bool
+	Finalized bool // true when a PASS or FAIL decision reached
+	Passed    bool // true = proposal accepted, false = rejected
+	Timer     *time.Timer
 }
 
 type Vote struct {
@@ -69,15 +73,14 @@ type Vote struct {
 }
 
 type FinalizeMessage struct {
-	ProposalID  ProposalID `json:"ProposalID"`
-	Proposal    Proposal   `json:"Proposal"`
-	FinalStatus bool       `json:"FinalStatus"`
-	DecidedAt   time.Time  `json:"DecidedAt"`
+	Proposal  Proposal  `json:"Proposal"`
+	Passed    bool      `json:"Passed"` // true = accepted, false = rejected
+	DecidedAt time.Time `json:"DecidedAt"`
 }
 
-// ----------------------------------------------------------------------------
-// DNS Usage
-// ----------------------------------------------------------------------------
+/* ────────────────────────────────────────────────────────────
+   USAGE‑/STATS‑related TYPES (unchanged)
+   ────────────────────────────────────────────────────────────*/
 
 type UsageRequest struct {
 	StartDate  string `json:"startDate"`
@@ -98,9 +101,15 @@ type UsageRecord struct {
 	Hits        int    `json:"hits"`
 }
 
-// ----------------------------------------------------------------------------
-// Monitor Stats / Downtime
-// ----------------------------------------------------------------------------
+type UsageResponse struct {
+	NodeID       string        `json:"nodeID"`
+	UsageRecords []UsageRecord `json:"usageRecords"`
+	Error        string        `json:"error,omitempty"`
+}
+
+/* ────────────────────────────────────────────────────────────
+   DOWNTIME TYPES (unchanged)
+   ────────────────────────────────────────────────────────────*/
 
 type DowntimeRequest struct {
 	StartTime  time.Time `json:"startTime"`
@@ -122,28 +131,18 @@ type DowntimeEvent struct {
 	IsIPv6     bool                   `json:"isIPv6"`
 }
 
-// ----------------------------------------------------------------------------
-// Cluster membership messages
-// ----------------------------------------------------------------------------
-
-type ClusterMessage struct {
-	Type    string     `json:"type"` // "join", "membership"
-	Sender  NodeInfo   `json:"sender"`
-	Members []NodeInfo `json:"members"` // populated for "membership" broadcasts
-}
-
-// ----------------------------------------------------------------------------
-// Response wrappers (unchanged, but kept for completeness)
-// ----------------------------------------------------------------------------
-
 type DowntimeResponse struct {
 	NodeID string          `json:"nodeID"`
 	Events []DowntimeEvent `json:"events"`
 	Error  string          `json:"error,omitempty"`
 }
 
-type UsageResponse struct {
-	NodeID       string        `json:"nodeID"`
-	UsageRecords []UsageRecord `json:"usageRecords"`
-	Error        string        `json:"error,omitempty"`
+/* ────────────────────────────────────────────────────────────
+   CLUSTER MEMBERSHIP (unchanged)
+   ────────────────────────────────────────────────────────────*/
+
+type ClusterMessage struct {
+	Type    string     `json:"type"` // "join" | "membership"
+	Sender  NodeInfo   `json:"sender"`
+	Members []NodeInfo `json:"members"`
 }
