@@ -111,6 +111,7 @@ func runSiteCheck(ch cfg.Check, fn CheckSiteFunc) {
 	c := cfg.GetConfig()
 	for _, m := range c.Members {
 		if m.Service.Active == 1 && !m.Override {
+			time.Sleep(25 * time.Millisecond)
 			go func(check cfg.Check, mem cfg.Member) {
 				defer func() {
 					if r := recover(); r != nil {
@@ -182,7 +183,7 @@ func runDomainCheck(ch cfg.Check, fn CheckDomainFunc) {
 							}()
 							fn(check, domain, s, m)
 						}(ch, dom, svc, mem)
-						time.Sleep(100 * time.Millisecond)
+						time.Sleep(25 * time.Millisecond)
 					}
 				}
 			}
@@ -248,7 +249,7 @@ func runEndpointCheck(ch cfg.Check, fn CheckEndpointFunc) {
 								}()
 								fn(check, endpoint, s, m)
 							}(ch, rpc, svc, mem)
-							time.Sleep(100 * time.Millisecond)
+							time.Sleep(25 * time.Millisecond)
 						}
 					}
 				}
