@@ -110,5 +110,5 @@ func updateDNSMonitorSnapshot() {
 	api.SetOfficialSnapshot(snap)
 
 	// diagnostic dump
-	api.DumpDomainStatus()
+	// api.DumpDomainStatus()
 }

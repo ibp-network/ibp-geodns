@@ -4,12 +4,6 @@ import (
 	"strings"
 )
 
-/*
-   OFFLINE‑only snapshot logic
-   ‑ if a matching record exists  ⇒ member is OFFLINE
-   ‑ otherwise                  ⇒ member is ONLINE
-*/
-
 // ------------------------------------------------------------------ helpers --
 func offSite(sites []MonitorResultSite, member string, v6 *bool) bool {
 	for _, sr := range sites {
