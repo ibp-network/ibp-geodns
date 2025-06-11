@@ -18,22 +18,30 @@ type InitOptions struct {
 func Init(opts InitOptions) {
 	log.Log(log.Debug, "[data.Init] Starting with options: %+v", opts)
 
-	// Always initialize MySQL (for events, usage records, etc.).
-	go mysql.Init()
+	// ----------------------------------------------------------------------
+	// (1)  *** MySQL INITIALISATION – SYNCHRONOUS ***
+	// ----------------------------------------------------------------------
+	//
+	// MySQL *must* be ready before any goroutine can insert usage‑ or
+	// event‑records.  Initialising it in the background caused rare panics
+	// (nil DB handle) during the first seconds of uptime.  The call now
+	// blocks; any fatal error panics here instead of later.
+	mysql.Init()
 
-	// (1) Set the global flags for saving caches:
+	// ----------------------------------------------------------------------
+	// (2)  Configure cache behaviour
+	// ----------------------------------------------------------------------
 	SetCacheOptions(opts.UseLocalOfficialCaches, opts.UseUsageStats)
 
-	// Load caches if needed (local official caches).
 	if opts.UseLocalOfficialCaches {
 		LoadAllCaches()
 		SaveAllCaches()
-		// auto-save official & local caches periodically
 		go startAutoUpdate()
 	}
 
-	// (2) Always start the periodic usage flush every 5 minutes, regardless of UseUsageStats.
-	// The daily flush for "yesterday" is removed since we flush frequently.
+	// ----------------------------------------------------------------------
+	// (3)  Usage‑statistics flusher
+	// ----------------------------------------------------------------------
 	go startPeriodicUsageFlush()
 }
 

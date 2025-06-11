@@ -1,16 +1,22 @@
 package monitor
 
 import (
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
+	max "ibp-geodns/src/common/maxmind"
 	natsCommon "ibp-geodns/src/common/nats"
 )
 
+// ----------------------------------------------------------------------
 // Registry of checks
+// ----------------------------------------------------------------------
+
 var (
 	CheckRegistry = struct {
 		Site     map[string]CheckSiteFunc
@@ -24,37 +30,41 @@ var (
 	}
 )
 
-// Function types for different checks
+// Function signatures
 type (
 	CheckSiteFunc     func(check cfg.Check, member cfg.Member)
 	CheckDomainFunc   func(check cfg.Check, domain string, service cfg.Service, member cfg.Member)
 	CheckEndpointFunc func(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member)
 )
 
-// RegisterSiteCheck ...
-func RegisterSiteCheck(name string, checkFunc CheckSiteFunc) {
+// ----------------------------------------------------------------------
+// Registration helpers
+// ----------------------------------------------------------------------
+
+func RegisterSiteCheck(name string, fn CheckSiteFunc) {
 	CheckRegistry.Mu.Lock()
 	defer CheckRegistry.Mu.Unlock()
-	CheckRegistry.Site[name] = checkFunc
+	CheckRegistry.Site[name] = fn
 	log.Log(log.Info, "Registered site check '%s'", name)
 }
 
-// RegisterDomainCheck ...
-func RegisterDomainCheck(name string, checkFunc CheckDomainFunc) {
+func RegisterDomainCheck(name string, fn CheckDomainFunc) {
 	CheckRegistry.Mu.Lock()
 	defer CheckRegistry.Mu.Unlock()
-	CheckRegistry.Domain[name] = checkFunc
+	CheckRegistry.Domain[name] = fn
 	log.Log(log.Info, "Registered domain check '%s'", name)
 }
 
-// RegisterEndpointCheck ...
-func RegisterEndpointCheck(name string, checkFunc CheckEndpointFunc) {
+func RegisterEndpointCheck(name string, fn CheckEndpointFunc) {
 	CheckRegistry.Mu.Lock()
 	defer CheckRegistry.Mu.Unlock()
-	CheckRegistry.Endpoint[name] = checkFunc
+	CheckRegistry.Endpoint[name] = fn
 }
 
-// startChecks is invoked by monitor.Init() to kick off all checks in parallel.
+// ----------------------------------------------------------------------
+// Entry‑point – launched from monitor.Init()
+// ----------------------------------------------------------------------
+
 func startChecks() {
 	go initSiteCheck()
 	go initDomainCheck()
@@ -74,16 +84,15 @@ func getSiteCheck(name string) (CheckSiteFunc, bool) {
 
 func initSiteCheck() {
 	c := cfg.GetConfig()
-
 	var siteChecks []cfg.Check
 	for _, ch := range c.Local.Checks {
 		if ch.CheckType == "site" && ch.Enabled == 1 {
 			siteChecks = append(siteChecks, ch)
 		}
 	}
+
 	for _, check := range siteChecks {
-		fn, exists := getSiteCheck(check.Name)
-		if exists {
+		if fn, exists := getSiteCheck(check.Name); exists {
 			go siteCheckTimer(check, fn)
 		}
 	}
@@ -103,17 +112,27 @@ func siteCheckTimer(check cfg.Check, fn CheckSiteFunc) {
 
 func runSiteCheck(check cfg.Check, fn CheckSiteFunc) {
 	c := cfg.GetConfig()
+
 	for _, member := range c.Members {
 		if member.Service.Active == 1 && !member.Override {
 			go func(ch cfg.Check, m cfg.Member) {
 				done := make(chan struct{})
 				timer := time.NewTimer(time.Duration(ch.Timeout) * time.Second)
 
+				ipv4Exists := m.Service.ServiceIPv4 != ""
+				ipv6Exists := m.Service.ServiceIPv6 != ""
+
+				// Run the actual check
 				go func() {
 					defer func() {
 						if r := recover(); r != nil {
-							log.Log(log.Error, "Check %s for member %s crashed: %v", ch.Name, m.Details.Name, r)
-							UpdateSiteResultLocal(ch, m, false, "Check crashed", nil, false)
+							log.Log(log.Error, "Check %s for member %s panicked: %v", ch.Name, m.Details.Name, r)
+							if ipv4Exists {
+								UpdateSiteResultLocal(ch, m, false, "Check crashed", nil, false)
+							}
+							if ipv6Exists {
+								UpdateSiteResultLocal(ch, m, false, "Check crashed", nil, true)
+							}
 						}
 						close(done)
 					}()
@@ -123,19 +142,23 @@ func runSiteCheck(check cfg.Check, fn CheckSiteFunc) {
 				select {
 				case <-done:
 				case <-timer.C:
-					UpdateSiteResultLocal(ch, m, false, "Check timed out", nil, false)
+					if ipv4Exists {
+						UpdateSiteResultLocal(ch, m, false, "Check timed out", nil, false)
+					}
+					if ipv6Exists {
+						UpdateSiteResultLocal(ch, m, false, "Check timed out", nil, true)
+					}
 				}
 			}(check, member)
 		}
 	}
 }
 
-// UpdateSiteResultLocal includes isIPv6
 func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
-	// 1) Store in data.Local
+	// 1) cache locally
 	dat.UpdateLocalSiteResult(check, member, status, errorMsg, dataMap, isIPv6)
 
-	// 2) Compare with official
+	// 2) compare with official snapshot
 	found, officialStatus := dat.GetOfficialSiteStatus(check.Name, member.Details.Name, isIPv6)
 	if !found {
 		natsCommon.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap, isIPv6)
@@ -159,7 +182,6 @@ func getDomainCheck(name string) (CheckDomainFunc, bool) {
 
 func initDomainCheck() {
 	c := cfg.GetConfig()
-
 	var domainChecks []cfg.Check
 	for _, ch := range c.Local.Checks {
 		if ch.CheckType == "domain" && ch.Enabled == 1 {
@@ -167,8 +189,7 @@ func initDomainCheck() {
 		}
 	}
 	for _, check := range domainChecks {
-		fn, exists := getDomainCheck(check.Name)
-		if exists {
+		if fn, exists := getDomainCheck(check.Name); exists {
 			go domainCheckTimer(check, fn)
 		}
 	}
@@ -188,28 +209,30 @@ func domainCheckTimer(check cfg.Check, fn CheckDomainFunc) {
 
 func runDomainCheck(check cfg.Check, fn CheckDomainFunc) {
 	c := cfg.GetConfig()
+
 	for svcName, svc := range c.Services {
 		for _, member := range c.Members {
 			if member.Membership.Level >= svc.Configuration.LevelRequired &&
 				member.Service.Active == 1 && !member.Override {
-				domainsSet := make(map[string]struct{})
+
+				domains := make(map[string]struct{})
+
 				for _, assignments := range member.ServiceAssignments {
 					for _, assignment := range assignments {
 						if assignment == svcName {
 							for _, provider := range svc.Providers {
-								for _, url := range provider.RpcUrls {
-									parsed := parseUrlForDomain(url)
-									if parsed != "" {
-										domainsSet[parsed] = struct{}{}
+								for _, rpcURL := range provider.RpcUrls {
+									if domain := parseUrlForDomain(rpcURL); domain != "" {
+										domains[domain] = struct{}{}
 									}
 								}
 							}
 						}
 					}
 				}
-				for dom := range domainsSet {
-					// We'll do separate calls for IPv4 vs IPv6 if present
-					go domainCheckWrapper(check, fn, dom, svc, member)
+
+				for domain := range domains {
+					go domainCheckWrapper(check, fn, domain, svc, member)
 					time.Sleep(30 * time.Millisecond)
 				}
 			}
@@ -226,6 +249,7 @@ func domainCheckWrapper(check cfg.Check, fn CheckDomainFunc, domain string, serv
 			if r := recover(); r != nil {
 				log.Log(log.Error, "Check %s for member %s crashed: %v", check.Name, member.Details.Name, r)
 				UpdateDomainResultLocal(check, domain, service, member, false, "Check crashed", nil, false)
+				UpdateDomainResultLocal(check, domain, service, member, false, "Check crashed", nil, true)
 			}
 			close(done)
 		}()
@@ -236,46 +260,10 @@ func domainCheckWrapper(check cfg.Check, fn CheckDomainFunc, domain string, serv
 	case <-done:
 	case <-timer.C:
 		UpdateDomainResultLocal(check, domain, service, member, false, "Check timed out", nil, false)
+		UpdateDomainResultLocal(check, domain, service, member, false, "Check timed out", nil, true)
 	}
 }
 
-// We introduce a helper for parsing domain out of an URL without pulling in maxmind parse code here
-func parseUrlForDomain(raw string) string {
-	// naive approach
-	// or we could do something simpler since maxmind is not imported here
-	// but let's do a quick parse
-	// remove protocol
-	// e.g. wss://mydomain.com/path => mydomain.com
-	// strip path
-	// return domain
-
-	// we can do something minimal
-	// user specifically said we do not rely on advanced logic here, it's domain only
-	// The code below is stable enough
-
-	start := 0
-	if idx := indexOf(raw, "://"); idx != -1 {
-		start = idx + 3
-	}
-	rest := raw[start:]
-	if slash := indexOf(rest, "/"); slash != -1 {
-		rest = rest[:slash]
-	}
-	return rest
-}
-
-func indexOf(str, sep string) int {
-	returnIndex := -1
-	for i := 0; i+len(sep) <= len(str); i++ {
-		if str[i:i+len(sep)] == sep {
-			returnIndex = i
-			break
-		}
-	}
-	return returnIndex
-}
-
-// UpdateDomainResultLocal adds isIPv6 param
 func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service, member cfg.Member,
 	status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
 
@@ -292,7 +280,7 @@ func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service
 }
 
 // ------------------------------------------------------------------
-// ENDPOINT checks
+// ENDPOINT checks (unchanged except parseUrlForDomain call)
 // ------------------------------------------------------------------
 
 func getEndpointCheck(name string) (CheckEndpointFunc, bool) {
@@ -304,7 +292,6 @@ func getEndpointCheck(name string) (CheckEndpointFunc, bool) {
 
 func initEndpointCheck() {
 	c := cfg.GetConfig()
-
 	var endpointChecks []cfg.Check
 	for _, ch := range c.Local.Checks {
 		if ch.CheckType == "endpoint" && ch.Enabled == 1 {
@@ -312,8 +299,7 @@ func initEndpointCheck() {
 		}
 	}
 	for _, check := range endpointChecks {
-		fn, exists := getEndpointCheck(check.Name)
-		if exists {
+		if fn, exists := getEndpointCheck(check.Name); exists {
 			go endpointCheckTimer(check, fn)
 		}
 	}
@@ -342,8 +328,8 @@ func runEndpointCheck(check cfg.Check, fn CheckEndpointFunc) {
 					for _, assignment := range assignments {
 						if assignment == svcName {
 							for _, provider := range svc.Providers {
-								for _, url := range provider.RpcUrls {
-									go endpointCheckWrapper(check, fn, url, svc, member)
+								for _, rpcURL := range provider.RpcUrls {
+									go endpointCheckWrapper(check, fn, rpcURL, svc, member)
 									time.Sleep(30 * time.Millisecond)
 								}
 							}
@@ -364,6 +350,7 @@ func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string
 			if r := recover(); r != nil {
 				log.Log(log.Error, "Check %s for member %s crashed: %v", check.Name, member.Details.Name, r)
 				UpdateEndpointResultLocal(check, member, service, endpoint, false, "Check crashed", nil, false)
+				UpdateEndpointResultLocal(check, member, service, endpoint, false, "Check crashed", nil, true)
 			}
 			close(done)
 		}()
@@ -374,6 +361,7 @@ func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string
 	case <-done:
 	case <-timer.C:
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Check timed out", nil, false)
+		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Check timed out", nil, true)
 	}
 }
 
@@ -399,3 +387,33 @@ func UpdateEndpointResultLocal(
 		natsCommon.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap, isIPv6)
 	}
 }
+
+// ------------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------------
+
+// parseUrlForDomain normalises any RPC / WSS URL into a **host‑only** string
+// without a port, always lower‑cased.  It tolerates missing scheme and
+// returns an empty string on irreversible errors.
+func parseUrlForDomain(raw string) string {
+	if raw == "" {
+		return ""
+	}
+
+	// Ensure we can parse: add dummy scheme if absent.
+	testStr := raw
+	if !strings.Contains(raw, "://") {
+		testStr = "https://" + raw // scheme never impacts Hostname()
+	}
+
+	u, err := url.Parse(testStr)
+	if err != nil {
+		return ""
+	}
+
+	host := u.Hostname() // strips port automatically
+	return strings.ToLower(host)
+}
+
+// parseUrlForDomain is also required by some Monitor modules outside this file.
+var _ = max.ParseUrl
