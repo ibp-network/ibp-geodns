@@ -34,12 +34,15 @@ type NodeInfo struct {
 	LastHeard     time.Time // Tracks last time we heard from this node
 }
 
-// Monitor Voting
+// ----------------------------------------------------------------------------
+// Proposal / Voting
+// ----------------------------------------------------------------------------
+
 type ProposalID string
 
 type Proposal struct {
 	ID             ProposalID             `json:"id"`
-	SenderNodeID   string                 `json:"SenderNodeID"` // Added field to track which node initiated
+	SenderNodeID   string                 `json:"SenderNodeID"`
 	CheckType      string                 `json:"CheckType"`
 	CheckName      string                 `json:"CheckName"`
 	MemberName     string                 `json:"MemberName"`
@@ -62,19 +65,27 @@ type ProposalTracking struct {
 
 type Vote struct {
 	ProposalID   ProposalID `json:"ProposalID"`
-	SenderNodeID string     `json:"SenderNodeID"` // Added to identify who is voting
+	SenderNodeID string     `json:"SenderNodeID"`
 	NodeID       string     `json:"NodeID"`
 	Agree        bool       `json:"Agree"`
 	Timestamp    time.Time  `json:"Timestamp"`
 }
 
+// ----------------------------------------------------------------------------
+// Finalize message  (now includes the Proposal so late‑arriving nodes can apply)
+// ----------------------------------------------------------------------------
+
 type FinalizeMessage struct {
 	ProposalID  ProposalID `json:"ProposalID"`
+	Proposal    Proposal   `json:"Proposal"`
 	FinalStatus bool       `json:"FinalStatus"`
 	DecidedAt   time.Time  `json:"DecidedAt"`
 }
 
+// ----------------------------------------------------------------------------
 // DNS Usage
+// ----------------------------------------------------------------------------
+
 type UsageRequest struct {
 	StartDate  string `json:"startDate"`
 	EndDate    string `json:"endDate"`
@@ -94,7 +105,10 @@ type UsageRecord struct {
 	Hits        int    `json:"hits"`
 }
 
+// ----------------------------------------------------------------------------
 // Monitor Stats / Downtime
+// ----------------------------------------------------------------------------
+
 type DowntimeRequest struct {
 	StartTime  time.Time `json:"startTime"`
 	EndTime    time.Time `json:"endTime"`
@@ -115,21 +129,26 @@ type DowntimeEvent struct {
 	IsIPv6     bool                   `json:"isIPv6"`
 }
 
+// ----------------------------------------------------------------------------
 // Cluster membership messages
+// ----------------------------------------------------------------------------
+
 type ClusterMessage struct {
 	Type    string     `json:"type"` // "join", "membership"
 	Sender  NodeInfo   `json:"sender"`
 	Members []NodeInfo `json:"members"` // populated for "membership" broadcasts
 }
 
-// Update DowntimeResponse to include Error field
+// ----------------------------------------------------------------------------
+// Response wrappers (unchanged, but kept for completeness)
+// ----------------------------------------------------------------------------
+
 type DowntimeResponse struct {
 	NodeID string          `json:"nodeID"`
 	Events []DowntimeEvent `json:"events"`
 	Error  string          `json:"error,omitempty"`
 }
 
-// Update UsageResponse to include Error field
 type UsageResponse struct {
 	NodeID       string        `json:"nodeID"`
 	UsageRecords []UsageRecord `json:"usageRecords"`

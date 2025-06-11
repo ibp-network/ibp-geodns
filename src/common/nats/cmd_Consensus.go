@@ -258,39 +258,6 @@ func handleVote(m *nats.Msg) {
 	}
 }
 
-// handleFinalize processes "consensus.finalize"
-func handleFinalize(m *nats.Msg) {
-	var fm FinalizeMessage
-	if err := json.Unmarshal(m.Data, &fm); err != nil {
-		log.Log(log.Error, "[NATS] handleFinalize: unmarshal error: %v", err)
-		return
-	}
-
-	log.Log(log.Debug,
-		"[NATS] handleFinalize: got finalize for proposal ID=%s finalStatus=%v",
-		fm.ProposalID, fm.FinalStatus)
-
-	State.Mu.Lock()
-	pt, exists := State.Proposals[fm.ProposalID]
-	if exists && !pt.Finalized {
-		pt.Finalized = true
-		// Cancel timer if exists
-		if pt.Timer != nil {
-			pt.Timer.Stop()
-		}
-		State.Mu.Unlock()
-
-		// Apply the finalized status
-		go applyOfficialChanges(pt.Proposal, fm.FinalStatus)
-	} else {
-		State.Mu.Unlock()
-		log.Log(log.Debug,
-			"[NATS] handleFinalize: proposal ID=%s not found or already finalized",
-			fm.ProposalID)
-	}
-}
-
-// finalizeVote is triggered by timeouts or vote majority
 func finalizeVote(pid ProposalID) {
 	State.Mu.Lock()
 	pt, exists := State.Proposals[pid]
@@ -300,23 +267,20 @@ func finalizeVote(pid ProposalID) {
 		return
 	}
 
-	// Check if already finalized (could happen if both timeout and vote trigger)
 	if pt.Finalized {
 		log.Log(log.Debug, "[NATS] finalizeVote: proposal ID=%s already finalized, skipping", pid)
 		State.Mu.Unlock()
 		return
 	}
 
-	// Stop timer if it exists
 	if pt.Timer != nil {
 		pt.Timer.Stop()
 	}
 
-	// Count votes from active monitors
+	// vote counting (unchanged) …
 	monitorCount := countActiveMonitorsLocked()
 	yesCount := 0
 	noCount := 0
-
 	for nodeID, v := range pt.Votes {
 		if node, ok := State.ClusterNodes[nodeID]; ok && node.NodeRole == "IBPMonitor" && isNodeActive(node) {
 			if v {
@@ -326,42 +290,38 @@ func finalizeVote(pid ProposalID) {
 			}
 		}
 	}
-
 	majority := (monitorCount / 2) + 1
 
-	// Determine final status
 	var finalStatus bool
 	if monitorCount == 0 {
-		// No active monitors, use the proposed status
 		finalStatus = pt.Proposal.ProposedStatus
-		log.Log(log.Warn, "[NATS] finalizeVote: No active monitors for proposal=%s, using proposed status=%v", pid, finalStatus)
 	} else if yesCount >= majority {
 		finalStatus = true
 	} else if noCount >= majority {
 		finalStatus = false
 	} else {
-		// Not enough votes for majority, use simple majority
 		finalStatus = (yesCount > noCount)
 		if yesCount == noCount {
-			// Tie, use proposed status
 			finalStatus = pt.Proposal.ProposedStatus
 		}
 	}
 
 	pt.FinalStatus = finalStatus
 	pt.Finalized = true
+	State.Proposals[pid] = pt // save
 	State.Mu.Unlock()
 
 	log.Log(log.Debug,
 		"[NATS] finalizeVote: FINALIZED proposal ID=%s => finalStatus=%v (yes=%d no=%d monitors=%d majority=%d)",
 		pid, finalStatus, yesCount, noCount, monitorCount, majority)
 
-	// Apply to official data
+	// Apply locally
 	go applyOfficialChanges(pt.Proposal, finalStatus)
 
-	// Broadcast finalize message
+	// Broadcast finalize (NOW WITH FULL PROPOSAL)
 	fm := FinalizeMessage{
 		ProposalID:  pid,
+		Proposal:    pt.Proposal,
 		FinalStatus: finalStatus,
 		DecidedAt:   time.Now().UTC(),
 	}
@@ -369,6 +329,46 @@ func finalizeVote(pid ProposalID) {
 	if err := Publish(State.SubjectFinalize, data); err != nil {
 		log.Log(log.Error, "[NATS] finalizeVote: failed to publish finalize message: %v", err)
 	}
+}
+
+// -----------------------------------------------------------------------------
+// handleFinalize — now idempotent & tolerant of re‑ordering
+// -----------------------------------------------------------------------------
+func handleFinalize(m *nats.Msg) {
+	var fm FinalizeMessage
+	if err := json.Unmarshal(m.Data, &fm); err != nil {
+		log.Log(log.Error, "[NATS] handleFinalize: unmarshal error: %v", err)
+		return
+	}
+
+	// Mark node heard
+	markNodeHeard(fm.Proposal.SenderNodeID)
+
+	log.Log(log.Debug,
+		"[NATS] handleFinalize: received finalize for ID=%s finalStatus=%v (check=%s/%s member=%s isIPv6=%v)",
+		fm.ProposalID, fm.FinalStatus, fm.Proposal.CheckType, fm.Proposal.CheckName, fm.Proposal.MemberName, fm.Proposal.IsIPv6)
+
+	// Ensure proposal tracking exists
+	State.Mu.Lock()
+	pt, exists := State.Proposals[fm.ProposalID]
+	if !exists {
+		// create minimal tracking so we don't lose history
+		pt = &ProposalTracking{
+			Proposal: fm.Proposal,
+			Votes:    make(map[string]bool),
+		}
+		State.Proposals[fm.ProposalID] = pt
+	}
+	// mark finalized
+	pt.Finalized = true
+	pt.FinalStatus = fm.FinalStatus
+	if pt.Timer != nil {
+		pt.Timer.Stop()
+	}
+	State.Mu.Unlock()
+
+	// Apply the change (idempotent)
+	go applyOfficialChanges(fm.Proposal, fm.FinalStatus)
 }
 
 // countActiveMonitorsLocked counts active monitors while already holding the lock
