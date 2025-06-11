@@ -8,6 +8,7 @@ package nats
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -65,8 +66,17 @@ func Connect() error {
 				log.Log(log.Error, "[NATS] Connection closed: %v", e)
 			}
 		}),
-		nats.ErrorHandler(func(_ *nats.Conn, sub *nats.Subscription, err error) {
-			log.Log(log.Error, "[NATS] Async error on %s: %v", sub.Subject, err)
+		nats.ErrorHandler(func(conn *nats.Conn, sub *nats.Subscription, err error) {
+			if err != nil && (strings.Contains(err.Error(), "wsasend") ||
+				strings.Contains(err.Error(), "wsarecv")) {
+				log.Log(log.Debug, "[NATS] Async I/O reset: %v", err)
+			} else if err != nil {
+				if sub != nil {
+					log.Log(log.Error, "[NATS] Async error on %s: %v", sub.Subject, err)
+				} else {
+					log.Log(log.Error, "[NATS] Async error: %v", err)
+				}
+			}
 		}),
 	}
 
