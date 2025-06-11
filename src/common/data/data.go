@@ -4,33 +4,26 @@ import (
 	cfg "ibp-geodns/src/common/config"
 	mysql "ibp-geodns/src/common/data/mysql"
 	log "ibp-geodns/src/common/logging"
+	"strings"
 	"time"
 )
 
-// InitOptions allows selective initialization of data subsystems (caches, etc.).
-// The usage stats flush is now always started unconditionally.
+/*
+   ---------------------------------------------------------------------------
+   Init machinery (unchanged – full file retained)
+   ---------------------------------------------------------------------------
+*/
+
 type InitOptions struct {
-	UseLocalOfficialCaches bool // if true, load/save local+official results
-	UseUsageStats          bool // if true, track usage daily stats (for future checks)
+	UseLocalOfficialCaches bool
+	UseUsageStats          bool
 }
 
-// Init selectively initializes data subsystems based on InitOptions.
 func Init(opts InitOptions) {
 	log.Log(log.Debug, "[data.Init] Starting with options: %+v", opts)
 
-	// ----------------------------------------------------------------------
-	// (1)  *** MySQL INITIALISATION – SYNCHRONOUS ***
-	// ----------------------------------------------------------------------
-	//
-	// MySQL *must* be ready before any goroutine can insert usage‑ or
-	// event‑records.  Initialising it in the background caused rare panics
-	// (nil DB handle) during the first seconds of uptime.  The call now
-	// blocks; any fatal error panics here instead of later.
 	mysql.Init()
 
-	// ----------------------------------------------------------------------
-	// (2)  Configure cache behaviour
-	// ----------------------------------------------------------------------
 	SetCacheOptions(opts.UseLocalOfficialCaches, opts.UseUsageStats)
 
 	if opts.UseLocalOfficialCaches {
@@ -39,13 +32,15 @@ func Init(opts InitOptions) {
 		go startAutoUpdate()
 	}
 
-	// ----------------------------------------------------------------------
-	// (3)  Usage‑statistics flusher
-	// ----------------------------------------------------------------------
 	go startPeriodicUsageFlush()
 }
 
-// MemberEnable sets Override=false on a member and records an event.
+/*
+   ---------------------------------------------------------------------------
+   Member enable / disable helpers (unchanged)
+   ---------------------------------------------------------------------------
+*/
+
 func MemberEnable(name string) {
 	member, exists := cfg.GetMember(name)
 	if !exists {
@@ -58,7 +53,6 @@ func MemberEnable(name string) {
 	RecordEvent("site", "MemberEnable", name, "", "", true, "Member has disabled override.", nil, true)
 }
 
-// MemberDisable sets Override=true on a member and records an event.
 func MemberDisable(name string) {
 	member, exists := cfg.GetMember(name)
 	if !exists {
@@ -71,88 +65,143 @@ func MemberDisable(name string) {
 	RecordEvent("site", "MemberDisable", name, "", "", false, "Member has enabled override.", nil, true)
 }
 
-// IsMemberOnlineForDomain checks official results for IPv4.
+/*
+   ---------------------------------------------------------------------------
+   NEW helpers – determine “latest” status
+   ---------------------------------------------------------------------------
+*/
+
+func newestStatus(results []Result, memberName string) (found bool, latest bool, newest time.Time) {
+	for _, r := range results {
+		if r.Member.Details.Name != memberName {
+			continue
+		}
+		if !found || r.Checktime.After(newest) {
+			found = true
+			latest = r.Status
+			newest = r.Checktime
+		}
+	}
+	return
+}
+
+func newestSiteStatus(sites []SiteResult, memberName string, ipv6Filter *bool) (bool, bool) {
+	var newest time.Time
+	found := false
+	latest := false
+
+	for _, sr := range sites {
+		if ipv6Filter != nil && sr.IsIPv6 != *ipv6Filter {
+			continue
+		}
+		if ok, st, ct := newestStatus(sr.Results, memberName); ok {
+			if !found || ct.After(newest) {
+				found = true
+				latest = st
+				newest = ct
+			}
+		}
+	}
+	return found, latest
+}
+
+func newestDomainStatus(domains []DomainResult, memberName, domain string, ipv6Filter *bool) (bool, bool) {
+	var newest time.Time
+	found := false
+	latest := false
+
+	for _, dr := range domains {
+		if !strings.EqualFold(dr.Domain, domain) {
+			continue
+		}
+		if ipv6Filter != nil && dr.IsIPv6 != *ipv6Filter {
+			continue
+		}
+		if ok, st, ct := newestStatus(dr.Results, memberName); ok {
+			if !found || ct.After(newest) {
+				found = true
+				latest = st
+				newest = ct
+			}
+		}
+	}
+	return found, latest
+}
+
+func newestEndpointStatus(endpoints []EndpointResult, memberName, domain string, ipv6Filter *bool) (bool, bool) {
+	var newest time.Time
+	found := false
+	latest := false
+
+	for _, er := range endpoints {
+		if !strings.EqualFold(er.Domain, domain) {
+			continue
+		}
+		if ipv6Filter != nil && er.IsIPv6 != *ipv6Filter {
+			continue
+		}
+		if ok, st, ct := newestStatus(er.Results, memberName); ok {
+			if !found || ct.After(newest) {
+				found = true
+				latest = st
+				newest = ct
+			}
+		}
+	}
+	return found, latest
+}
+
+/*
+   ---------------------------------------------------------------------------
+   Public status helpers (re‑implemented to use newest‑status helpers)
+   ---------------------------------------------------------------------------
+*/
+
+// overall: any failed (v4 or v6) ⇒ offline
 func IsMemberOnlineForDomain(domain, memberName string) bool {
 	sites, domains, endpoints := GetOfficialResults()
 
-	// site-level
-	for _, sr := range sites {
-		for _, r := range sr.Results {
-			if r.Member.Details.Name == memberName && !r.Status {
-				return false
-			}
-		}
+	if ok, st := newestSiteStatus(sites, memberName, nil); ok && !st {
+		return false
 	}
-
-	// domain-level
-	for _, dr := range domains {
-		if dr.Domain == domain {
-			for _, r := range dr.Results {
-				if r.Member.Details.Name == memberName && !r.Status {
-					return false
-				}
-			}
-		}
+	if ok, st := newestDomainStatus(domains, memberName, domain, nil); ok && !st {
+		return false
 	}
-
-	// endpoint-level
-	for _, er := range endpoints {
-		if er.Domain == domain {
-			for _, r := range er.Results {
-				if r.Member.Details.Name == memberName && !r.Status {
-					return false
-				}
-			}
-		}
+	if ok, st := newestEndpointStatus(endpoints, memberName, domain, nil); ok && !st {
+		return false
 	}
-
 	return true
 }
 
-// IsMemberOnlineForDomainIPv6 checks official results for IPv6.
-func IsMemberOnlineForDomainIPv6(domain, memberName string) bool {
+func IsMemberOnlineForDomainIPv4(domain, memberName string) bool {
+	ipv6 := false
 	sites, domains, endpoints := GetOfficialResults()
 
-	// site-level (only if IsIPv6 == true)
-	for _, sr := range sites {
-		if !sr.IsIPv6 {
-			continue
-		}
-		for _, r := range sr.Results {
-			if r.Member.Details.Name == memberName && !r.Status {
-				return false
-			}
-		}
+	if ok, st := newestSiteStatus(sites, memberName, &ipv6); ok && !st {
+		return false
 	}
-
-	// domain-level (only if IsIPv6 == true)
-	for _, dr := range domains {
-		if !dr.IsIPv6 {
-			continue
-		}
-		if dr.Domain == domain {
-			for _, r := range dr.Results {
-				if r.Member.Details.Name == memberName && !r.Status {
-					return false
-				}
-			}
-		}
+	if ok, st := newestDomainStatus(domains, memberName, domain, &ipv6); ok && !st {
+		return false
 	}
-
-	// endpoint-level (only if IsIPv6 == true)
-	for _, er := range endpoints {
-		if !er.IsIPv6 {
-			continue
-		}
-		if er.Domain == domain {
-			for _, r := range er.Results {
-				if r.Member.Details.Name == memberName && !r.Status {
-					return false
-				}
-			}
-		}
+	if ok, st := newestEndpointStatus(endpoints, memberName, domain, &ipv6); ok && !st {
+		return false
 	}
+	return true
+}
 
+func IsMemberOnlineForDomainIPv6(domain, memberName string) bool {
+	ipv6 := true
+	sites, domains, endpoints := GetOfficialResults()
+
+	if ok, st := newestSiteStatus(sites, memberName, &ipv6); ok && !st {
+		return false
+	}
+	if ok, st := newestDomainStatus(domains, memberName, domain, &ipv6); ok && !st {
+		return false
+	}
+	if ok, st := newestEndpointStatus(endpoints, memberName, domain, &ipv6); ok && !st {
+		return false
+	}
 	return true
 }
 

@@ -6,12 +6,21 @@ import (
 	"time"
 )
 
+/*
+   ---------------------------------------------------------------------------
+   Global container & simple setters/getters
+   ---------------------------------------------------------------------------
+*/
+
+// Official holds the cluster‑consensus results.
 var Official = OfficialResults{
 	SiteResults:     make([]SiteResult, 0),
 	DomainResults:   make([]DomainResult, 0),
 	EndpointResults: make([]EndpointResult, 0),
 	Mu:              sync.RWMutex{},
 }
+
+// --- store helpers ---------------------------------------------------------
 
 func SetOfficialSiteResults(results []SiteResult) {
 	Official.Mu.Lock()
@@ -31,13 +40,19 @@ func SetOfficialEndpointResults(results []EndpointResult) {
 	Official.EndpointResults = results
 }
 
+// --- fetch helper ----------------------------------------------------------
+
 func GetOfficialResults() (sites []SiteResult, domains []DomainResult, endpoints []EndpointResult) {
 	Official.Mu.RLock()
 	defer Official.Mu.RUnlock()
 	return Official.SiteResults, Official.DomainResults, Official.EndpointResults
 }
 
-// Extended site/domain/endpoint updates that include isIPv6
+/*
+   ---------------------------------------------------------------------------
+   Update functions  (unchanged behaviour)
+   ---------------------------------------------------------------------------
+*/
 
 func UpdateOfficialSiteResult(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
 	Official.Mu.Lock()
@@ -207,45 +222,95 @@ func UpdateOfficialEndpointResult(check cfg.Check, member cfg.Member, service cf
 	}
 }
 
-// Additional queries for official isIPv6
+/*
+   ---------------------------------------------------------------------------
+   New “latest‑status” helpers
+   ---------------------------------------------------------------------------
+*/
+
+// latestStatusFromResults walks a slice and returns the *newest* Status.
+func latestStatusFromResults(results []Result, memberName string) (found bool, latest bool, newest time.Time) {
+	for _, r := range results {
+		if r.Member.Details.Name != memberName {
+			continue
+		}
+		if !found || r.Checktime.After(newest) {
+			found = true
+			latest = r.Status
+			newest = r.Checktime
+		}
+	}
+	return
+}
+
+/*
+   ---------------------------------------------------------------------------
+   Public query helpers – now use newest check‑time
+   ---------------------------------------------------------------------------
+*/
+
 func GetOfficialSiteStatus(checkName, memberName string, isIPv6 bool) (bool, bool) {
-	officialSites, _, _ := GetOfficialResults()
-	for _, osr := range officialSites {
-		if osr.Check.Name == checkName && osr.IsIPv6 == isIPv6 {
-			for _, r := range osr.Results {
-				if r.Member.Details.Name == memberName {
-					return true, r.Status
-				}
+	sites, _, _ := GetOfficialResults()
+
+	var newest time.Time
+	var latest bool
+	found := false
+
+	for _, sr := range sites {
+		if sr.Check.Name != checkName || sr.IsIPv6 != isIPv6 {
+			continue
+		}
+		if ok, st, ct := latestStatusFromResults(sr.Results, memberName); ok {
+			if !found || ct.After(newest) {
+				found = true
+				latest = st
+				newest = ct
 			}
 		}
 	}
-	return false, false
+	return found, latest
 }
 
 func GetOfficialDomainStatus(checkName, memberName, domain string, isIPv6 bool) (bool, bool) {
-	_, officialDomains, _ := GetOfficialResults()
-	for _, od := range officialDomains {
-		if od.Check.Name == checkName && od.Domain == domain && od.IsIPv6 == isIPv6 {
-			for _, r := range od.Results {
-				if r.Member.Details.Name == memberName {
-					return true, r.Status
-				}
+	_, domains, _ := GetOfficialResults()
+
+	var newest time.Time
+	var latest bool
+	found := false
+
+	for _, dr := range domains {
+		if dr.Check.Name != checkName || dr.Domain != domain || dr.IsIPv6 != isIPv6 {
+			continue
+		}
+		if ok, st, ct := latestStatusFromResults(dr.Results, memberName); ok {
+			if !found || ct.After(newest) {
+				found = true
+				latest = st
+				newest = ct
 			}
 		}
 	}
-	return false, false
+	return found, latest
 }
 
 func GetOfficialEndpointStatus(checkName, memberName, domain, endpoint string, isIPv6 bool) (bool, bool) {
-	_, _, officialEndpoints := GetOfficialResults()
-	for _, oe := range officialEndpoints {
-		if oe.Check.Name == checkName && oe.Domain == domain && oe.RpcUrl == endpoint && oe.IsIPv6 == isIPv6 {
-			for _, r := range oe.Results {
-				if r.Member.Details.Name == memberName {
-					return true, r.Status
-				}
+	_, _, endpoints := GetOfficialResults()
+
+	var newest time.Time
+	var latest bool
+	found := false
+
+	for _, er := range endpoints {
+		if er.Check.Name != checkName || er.Domain != domain || er.RpcUrl != endpoint || er.IsIPv6 != isIPv6 {
+			continue
+		}
+		if ok, st, ct := latestStatusFromResults(er.Results, memberName); ok {
+			if !found || ct.After(newest) {
+				found = true
+				latest = st
+				newest = ct
 			}
 		}
 	}
-	return false, false
+	return found, latest
 }
