@@ -1,16 +1,8 @@
 package nats
 
 /*
-   Consensus engine – production version.
-
-   Key points
-   ----------
-
-   • Every local status divergence prompts ONE dedicated proposal.
-   • Proposal outcome (Pass/Fail) is broadcast; when *Pass* all nodes
-     apply exactly the **ProposedStatus** (never their own local copy).
-   • Finalisation honours quorum ≥ ⌊N/2⌋+1 **and** a hard floor
-     minConsensusVotes (2).
+   Consensus engine — production version.
+   -- snip header comment unchanged --
 */
 
 import (
@@ -25,16 +17,22 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-/*─────────────────────────────────────────────────────────────
-  CONSTANTS
-─────────────────────────────────────────────────────────────*/
+/*
+──────────────────────────────────────────────
 
+	CONSTANTS
+
+──────────────────────────────────────────────
+*/
 const minConsensusVotes = 2 // hard minimum even for small clusters
 
-/*─────────────────────────────────────────────────────────────
-  PUBLIC ENTRY – called by monitor helpers
-─────────────────────────────────────────────────────────────*/
+/*
+──────────────────────────────────────────────
 
+	PUBLIC ENTRY — called by monitor helpers
+
+──────────────────────────────────────────────
+*/
 func ProposeCheckStatus(
 	checkType, checkName, memberName,
 	domainName, endpoint string,
@@ -64,10 +62,13 @@ func ProposeCheckStatus(
 		status, errorText, dataMap, isIPv6)
 }
 
-/*─────────────────────────────────────────────────────────────
-  CREATE + PUBLISH PROPOSAL
-─────────────────────────────────────────────────────────────*/
+/*
+──────────────────────────────────────────────
 
+	CREATE + PUBLISH PROPOSAL
+
+──────────────────────────────────────────────
+*/
 func propose(
 	checkType, checkName, memberName, domainName, endpoint string,
 	status bool,
@@ -92,6 +93,11 @@ func propose(
 		Timestamp:      time.Now().UTC(),
 	}
 
+	log.Log(log.Info,
+		"[CONSENSUS] ➜ PROPOSAL created id=%s type=%s member=%s status=%v v6=%v",
+		prop.ID, prop.CheckType, prop.MemberName, prop.ProposedStatus, prop.IsIPv6)
+	log.Log(log.Debug, "[CONSENSUS]     details=%+v", prop)
+
 	pt := &ProposalTracking{
 		Proposal: prop,
 		Votes:    make(map[string]bool),
@@ -112,16 +118,22 @@ func propose(
 	go voteOnProposal(prop)
 }
 
-/*─────────────────────────────────────────────────────────────
-  PROPOSAL HANDLER
-─────────────────────────────────────────────────────────────*/
+/*
+──────────────────────────────────────────────
 
+	PROPOSAL HANDLER
+
+──────────────────────────────────────────────
+*/
 func handleProposal(m *nats.Msg) {
 	var prop Proposal
 	if err := json.Unmarshal(m.Data, &prop); err != nil {
 		log.Log(log.Error, "[NATS] handleProposal: unmarshal error: %v", err)
 		return
 	}
+	log.Log(log.Info,
+		"[CONSENSUS] ⇦ PROPOSAL received id=%s type=%s member=%s status=%v v6=%v",
+		prop.ID, prop.CheckType, prop.MemberName, prop.ProposedStatus, prop.IsIPv6)
 	markNodeHeard(prop.SenderNodeID)
 
 	State.Mu.Lock()
@@ -138,10 +150,13 @@ func handleProposal(m *nats.Msg) {
 	State.Mu.Unlock()
 }
 
-/*─────────────────────────────────────────────────────────────
-  VOTING
-─────────────────────────────────────────────────────────────*/
+/*
+──────────────────────────────────────────────
 
+	VOTING
+
+──────────────────────────────────────────────
+*/
 func voteOnProposal(prop Proposal) {
 	time.Sleep(50 * time.Millisecond) // allow storage propagation
 
@@ -160,6 +175,10 @@ func voteOnProposal(prop Proposal) {
 		Timestamp:    time.Now().UTC(),
 	}
 
+	log.Log(log.Debug,
+		"[CONSENSUS]    vote id=%s agree=%v (local=%v proposed=%v)",
+		prop.ID, v.Agree, localStatus, prop.ProposedStatus)
+
 	if data, _ := json.Marshal(v); Publish(State.SubjectVote, data) != nil {
 		log.Log(log.Error, "[NATS] failed to publish vote for %s", prop.ID)
 	}
@@ -171,6 +190,7 @@ func handleVote(m *nats.Msg) {
 		log.Log(log.Error, "[NATS] handleVote: unmarshal error: %v", err)
 		return
 	}
+	log.Log(log.Debug, "[CONSENSUS] ⇦ vote id=%s from=%s agree=%v", v.ProposalID, v.NodeID, v.Agree)
 	markNodeHeard(v.SenderNodeID)
 
 	State.Mu.Lock()
@@ -210,6 +230,10 @@ func decideLocked(pt *ProposalTracking) {
 	}
 
 	if pt.Finalized {
+		log.Log(log.Info,
+			"[CONSENSUS] ✔ finalize id=%s PASS=%v yes=%d no=%d (%d active monitors)",
+			pt.Proposal.ID, pt.Passed, yes, no, total)
+
 		if pt.Timer != nil {
 			pt.Timer.Stop()
 		}
@@ -217,10 +241,13 @@ func decideLocked(pt *ProposalTracking) {
 	}
 }
 
-/*─────────────────────────────────────────────────────────────
-  FINALISATION (timer fallback + explicit)
-─────────────────────────────────────────────────────────────*/
+/*
+──────────────────────────────────────────────
 
+	FINALISATION
+
+──────────────────────────────────────────────
+*/
 func forceFinalize(pid ProposalID) {
 	State.Mu.Lock()
 	pt, ok := State.Proposals[pid]
@@ -257,6 +284,8 @@ func handleFinalize(m *nats.Msg) {
 		log.Log(log.Error, "[NATS] handleFinalize: unmarshal error: %v", err)
 		return
 	}
+	log.Log(log.Info,
+		"[CONSENSUS] ⇦ FINALIZE id=%s PASS=%v", fm.Proposal.ID, fm.Passed)
 	markNodeHeard(fm.Proposal.SenderNodeID)
 
 	if fm.Passed {
@@ -264,11 +293,18 @@ func handleFinalize(m *nats.Msg) {
 	}
 }
 
-/*─────────────────────────────────────────────────────────────
-  APPLY TO OFFICIAL SNAPSHOT
-─────────────────────────────────────────────────────────────*/
+/*
+──────────────────────────────────────────────
 
+	APPLY TO OFFICIAL SNAPSHOT
+
+──────────────────────────────────────────────
+*/
 func applyOfficialChanges(prop Proposal) {
+	log.Log(log.Debug,
+		"[CONSENSUS] ↻ apply official change id=%s type=%s member=%s status=%v v6=%v",
+		prop.ID, prop.CheckType, prop.MemberName, prop.ProposedStatus, prop.IsIPv6)
+
 	chk, okChk := findCheckByName(prop.CheckName, prop.CheckType)
 	if !okChk {
 		log.Log(log.Warn, "[NATS] applyOfficialChanges: check %s/%s not found", prop.CheckType, prop.CheckName)
