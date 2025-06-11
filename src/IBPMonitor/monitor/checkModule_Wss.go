@@ -9,6 +9,7 @@ import (
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
+	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
 
 	"github.com/gorilla/websocket"
@@ -72,6 +73,7 @@ func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member 
 	c, _, err := dialer.Dial(reconstructedURL, nil)
 	if err != nil {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Failed to connect on IP=%s => %v", ip, err), nil, isIPv6)
+		log.Log(log.Debug, "WSS check failed for %s %s isIPv6=%v success=%v", member.Details.Name, endpoint, isIPv6, false)
 		return
 	}
 	defer c.Close()
@@ -85,44 +87,54 @@ func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member 
 
 	if !sendJSONRPCRequest(c, request) {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Failed to send JSON RPC", nil, isIPv6)
+		log.Log(log.Debug, "WSS check failed for %s %s isIPv6=%v success=%v", member.Details.Name, endpoint, isIPv6, false)
 		return
 	}
 
 	_, _, err = c.ReadMessage()
 	if err != nil {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Failed to read JSON-RPC response: %v", err), nil, isIPv6)
+		log.Log(log.Debug, "WSS check failed for %s %s isIPv6=%v success=%v", member.Details.Name, endpoint, isIPv6, false)
 		return
 	}
 
 	isFullArchive, err := checkFullArchive(c)
 	if err != nil {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Full archive check failed: %v", err), nil, isIPv6)
+		log.Log(log.Debug, "WSS check failed for %s %s isIPv6=%v success=%v", member.Details.Name, endpoint, isIPv6, false)
 		return
 	}
 	if !isFullArchive {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Not a full archive node", nil, isIPv6)
+		log.Log(log.Debug, "WSS check failed for %s %s isIPv6=%v success=%v", member.Details.Name, endpoint, isIPv6, false)
 		return
 	}
 
 	isCorrectNetwork, err := checkNetwork(c, service.Configuration.NetworkName)
 	if err != nil {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Network check failed: %v", err), nil, isIPv6)
+		log.Log(log.Debug, "WSS check failed for %s %s isIPv6=%v success=%v", member.Details.Name, endpoint, isIPv6, false)
 		return
 	}
 	if !isCorrectNetwork {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Wrong network", nil, isIPv6)
+		log.Log(log.Debug, "WSS check failed for %s %s isIPv6=%v success=%v", member.Details.Name, endpoint, isIPv6, false)
 		return
 	}
 
 	hasEnoughPeers, isSyncing, err := checkPeers(c)
 	if err != nil {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Peer check failed: %v", err), nil, isIPv6)
+		log.Log(log.Debug, "WSS check failed for %s %s isIPv6=%v success=%v", member.Details.Name, endpoint, isIPv6, false)
 		return
 	}
 	if !hasEnoughPeers || isSyncing {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Syncing or not enough peers", nil, isIPv6)
+		log.Log(log.Debug, "WSS check failed for %s %s isIPv6=%v success=%v", member.Details.Name, endpoint, isIPv6, false)
 		return
 	}
+
+	log.Log(log.Debug, "WSS check completed for %s %s isIPv6=%v success=%v", member.Details.Name, endpoint, isIPv6, true)
 
 	UpdateEndpointResultLocal(check, member, service, endpoint, true, "",
 		map[string]interface{}{

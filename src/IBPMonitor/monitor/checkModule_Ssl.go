@@ -7,6 +7,7 @@ import (
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
+	log "ibp-geodns/src/common/logging"
 )
 
 // We register the SSL check under name "ssl" so it is invoked if
@@ -84,7 +85,9 @@ func dialAndCheckTLS(
 	if success {
 		// Mark success
 		UpdateDomainResultLocal(check, domain, service, member, true, "", dataMap, isIPv6)
+		log.Log(log.Debug, "SSL check completed for %s %s isIPv6=%v success=%v", member.Details.Name, domain, isIPv6, true)
 	} else {
 		UpdateDomainResultLocal(check, domain, service, member, false, errText, dataMap, isIPv6)
+		log.Log(log.Debug, "SSL check failed for %s %s isIPv6=%v success=%v", member.Details.Name, domain, isIPv6, false)
 	}
 }
