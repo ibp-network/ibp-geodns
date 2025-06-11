@@ -17,7 +17,7 @@ import (
 	natsCommon "ibp-geodns/src/common/nats"
 )
 
-var version = "0.3.3"
+var version = "0.3.4"
 
 func main() {
 	log.Log(log.Info, "IBP-GeoDNS DNS backend v%s starting...", version)
@@ -35,12 +35,8 @@ func main() {
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
 	log.Log(log.Info, "DNS API is running with log level: %s", c.Local.System.LogLevel)
 
-	// Init data with usage stats
-	dat.Init(dat.InitOptions{
-		UseLocalOfficialCaches: false,
-		UseUsageStats:          true,
-	})
-
+	// initialise subsystems
+	dat.Init(dat.InitOptions{UseLocalOfficialCaches: false, UseUsageStats: true})
 	max.Init()
 
 	if err := natsCommon.Connect(); err != nil {
@@ -48,11 +44,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Start polling monitor
-	intervalSec := c.Local.DnsApi.RefreshIntervalSeconds
-	log.Log(log.Info, "Starting serviceMonitor poller every %d seconds", intervalSec)
-	go startServiceMonitorPoller(intervalSec)
+	// Poll monitor API
+	go startServiceMonitorPoller(c.Local.DnsApi.RefreshIntervalSeconds)
 
+	// NATS role
 	natsCommon.State.NodeID = c.Local.Nats.NodeID
 	natsCommon.State.ThisNode = natsCommon.NodeInfo{
 		NodeID:        c.Local.Nats.NodeID,
@@ -60,130 +55,60 @@ func main() {
 		ListenPort:    "0",
 		NodeRole:      "IBPDns",
 	}
-
 	if err := natsCommon.EnableDnsRole(); err != nil {
 		log.Log(log.Fatal, "Failed to enable DNSApi role: %v", err)
 		os.Exit(1)
 	}
 
-	// Launch DNS API
+	// Start HTTP interface
 	api.Init()
 
+	// keep running
 	for {
 		time.Sleep(60 * time.Second)
 	}
 }
 
+// -----------------------------------------------------------------------------
+// Monitor‑poller (consumes OFFLINE‑only snapshot)
+// -----------------------------------------------------------------------------
 func startServiceMonitorPoller(intervalSec int) {
 	updateDNSMonitorSnapshot()
 
 	ticker := time.NewTicker(time.Duration(intervalSec) * time.Second)
-	go func() {
-		for {
-			<-ticker.C
-			updateDNSMonitorSnapshot()
-		}
-	}()
+	for range ticker.C {
+		updateDNSMonitorSnapshot()
+	}
 }
-
-// Add this to updateDNSMonitorSnapshot() in IBPDns.go to debug what we're receiving
-// Also add "io" to the imports at the top of the file
 
 func updateDNSMonitorSnapshot() {
 	c := cfg.GetConfig()
+	url := fmt.Sprintf("http://%s:%s/results", c.Local.DnsApi.MonitorAddress, c.Local.DnsApi.MonitorPort)
 
-	url := fmt.Sprintf("http://%s:%s/results",
-		c.Local.DnsApi.MonitorAddress,
-		c.Local.DnsApi.MonitorPort,
-	)
-
-	log.Log(log.Info, "[Monitor Poller] Fetching results from: %s", url)
-
-	client := http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Get(url)
 	if err != nil {
-		log.Log(log.Error, "[Monitor Poller] Failed to fetch results from %s: %v", url, err)
+		log.Log(log.Error, "[Monitor Poller] GET %s error: %v", url, err)
 		return
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
-		log.Log(log.Error, "[Monitor Poller] Non-OK status from monitor: %d", resp.StatusCode)
+		log.Log(log.Error, "[Monitor Poller] GET %s => HTTP %d", url, resp.StatusCode)
 		return
 	}
 
-	// First, let's see the raw JSON response
-	bodyBytes, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Log(log.Error, "[Monitor Poller] Failed to read response body: %v", err)
+		log.Log(log.Error, "[Monitor Poller] read body error: %v", err)
 		return
 	}
 
-	// Log a sample of the raw response (first 500 chars)
-	sample := string(bodyBytes)
-	if len(sample) > 500 {
-		sample = sample[:500] + "..."
-	}
-	log.Log(log.Debug, "[Monitor Poller] Raw response sample: %s", sample)
-
-	// Now try to decode it
-	var tmp api.OfficialResults
-	decErr := json.Unmarshal(bodyBytes, &tmp)
-	if decErr != nil {
-		log.Log(log.Error, "[Monitor Poller] Failed to decode response: %v", decErr)
+	var snap api.OfficialResults
+	if err := json.Unmarshal(body, &snap); err != nil {
+		log.Log(log.Error, "[Monitor Poller] decode JSON: %v", err)
 		return
 	}
+	api.SetOfficialSnapshot(snap)
 
-	// Debug: Check if MemberName is actually populated
-	if len(tmp.SiteResults) > 0 && len(tmp.SiteResults[0].Results) > 0 {
-		firstResult := tmp.SiteResults[0].Results[0]
-		log.Log(log.Debug, "[Monitor Poller] First site result - MemberName: '%s', Status: %v",
-			firstResult.MemberName, firstResult.Status)
-	}
-
-	// Update the local snapshot
-	api.SetOfficialSnapshot(tmp)
-
-	// Log detailed stats
-	offlineMembers := make(map[string]bool)
-
-	// Check site results
-	for _, sr := range tmp.SiteResults {
-		for _, r := range sr.Results {
-			if !r.Status {
-				if r.MemberName == "" {
-					log.Log(log.Warn, "[Monitor Poller] Found offline member with EMPTY name in site check %s", sr.CheckName)
-				} else {
-					offlineMembers[r.MemberName] = true
-					log.Log(log.Info, "[Monitor Poller] Member %s is OFFLINE (site check %s, IPv6=%v): %s",
-						r.MemberName, sr.CheckName, sr.IsIPv6, r.ErrorText)
-				}
-			}
-		}
-	}
-
-	// Check domain results
-	for _, dr := range tmp.DomainResults {
-		for _, r := range dr.Results {
-			if !r.Status {
-				offlineMembers[r.MemberName] = true
-				log.Log(log.Info, "[Monitor Poller] Member %s is OFFLINE (domain check %s, domain=%s, IPv6=%v): %s",
-					r.MemberName, dr.CheckName, dr.Domain, dr.IsIPv6, r.ErrorText)
-			}
-		}
-	}
-
-	// Check endpoint results
-	for _, er := range tmp.EndpointResults {
-		for _, r := range er.Results {
-			if !r.Status {
-				offlineMembers[r.MemberName] = true
-				log.Log(log.Info, "[Monitor Poller] Member %s is OFFLINE (endpoint check %s, endpoint=%s, IPv6=%v): %s",
-					r.MemberName, er.CheckName, er.RpcUrl, er.IsIPv6, r.ErrorText)
-			}
-		}
-	}
-
-	log.Log(log.Info, "[Monitor Poller] Snapshot updated: %d sites, %d domains, %d endpoints, %d members offline",
-		len(tmp.SiteResults), len(tmp.DomainResults), len(tmp.EndpointResults), len(offlineMembers))
+	// diagnostic dump
+	api.DumpDomainStatus()
 }
