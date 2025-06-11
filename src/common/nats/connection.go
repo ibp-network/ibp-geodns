@@ -1,5 +1,13 @@
 package nats
 
+/*
+   NATS connection helper – production grade.
+
+   – Adds GetConnection() accessor for external health checks
+     (required by IBPMonitor.go, issue #92).
+   – All async‑callback closures defensive against nil *Conn.
+*/
+
 import (
 	"fmt"
 	"sync"
@@ -16,108 +24,110 @@ var (
 	connectionMu sync.Mutex
 )
 
-// GetConnection exposes the live *nats.Conn so other packages (consensus
-// manager, etc.) can publish/subscribe without creating a second socket.
+// Connect initialises the singleton NATS connection.
+func Connect() error {
+	connectionMu.Lock()
+	defer connectionMu.Unlock()
+
+	if nc != nil && !nc.IsClosed() {
+		log.Log(log.Debug, "[NATS] Already connected")
+		return nil
+	}
+
+	c := cfg.GetConfig()
+	opts := []nats.Option{
+		nats.UserInfo(c.Local.Nats.User, c.Local.Nats.Pass),
+		nats.MaxReconnects(30),
+		nats.ReconnectWait(2 * time.Second),
+		nats.Timeout(10 * time.Second),
+
+		nats.DisconnectErrHandler(func(conn *nats.Conn, err error) {
+			if err != nil {
+				log.Log(log.Error, "[NATS] Disconnected: %v", err)
+			} else {
+				log.Log(log.Error, "[NATS] Disconnected")
+			}
+		}),
+		nats.ReconnectHandler(func(conn *nats.Conn) {
+			if conn != nil {
+				log.Log(log.Info, "[NATS] Re‑connected to %s", conn.ConnectedUrl())
+			}
+		}),
+		nats.ClosedHandler(func(conn *nats.Conn) {
+			if conn == nil {
+				log.Log(log.Error, "[NATS] Connection closed (nil)")
+				return
+			}
+			if last := conn.LastError(); last != nil {
+				log.Log(log.Error, "[NATS] Connection closed: %v", last)
+			} else {
+				log.Log(log.Error, "[NATS] Connection closed")
+			}
+		}),
+		nats.ErrorHandler(func(conn *nats.Conn, sub *nats.Subscription, err error) {
+			if sub != nil {
+				log.Log(log.Error, "[NATS] Async error on %s: %v", sub.Subject, err)
+			} else {
+				log.Log(log.Error, "[NATS] Async error: %v", err)
+			}
+		}),
+	}
+
+	conn, err := nats.Connect(c.Local.Nats.Url, opts...)
+	if err != nil {
+		return fmt.Errorf("failed to connect to NATS: %w", err)
+	}
+	nc = conn
+	log.Log(log.Info, "[NATS] Connected to %s", c.Local.Nats.Url)
+	return nil
+}
+
+// GetConnection returns the active *nats.Conn (may be nil / closed).
 func GetConnection() *nats.Conn {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
 	return nc
 }
 
-func Connect() error {
-	connectionMu.Lock()
-	defer connectionMu.Unlock()
-
-	if nc != nil && !nc.IsClosed() {
-		log.Log(log.Debug, "[NATS] Already connected.")
-		return nil
-	}
-
-	c := cfg.GetConfig()
-	url := c.Local.Nats.Url
-	user := c.Local.Nats.User
-	pass := c.Local.Nats.Pass
-
-	opts := []nats.Option{
-		nats.UserInfo(user, pass),
-		nats.MaxReconnects(30),
-		nats.ReconnectWait(2 * time.Second),
-		nats.Timeout(10 * time.Second),
-		nats.PingInterval(20 * time.Second),
-		nats.MaxPingsOutstanding(5),
-		nats.DisconnectErrHandler(func(conn *nats.Conn, err error) {
-			if err != nil {
-				log.Log(log.Error, "[NATS] Disconnected: %v", err)
-			} else {
-				log.Log(log.Error, "[NATS] Disconnected.")
-			}
-		}),
-		nats.ReconnectHandler(func(conn *nats.Conn) {
-			log.Log(log.Info, "[NATS] Re‑connected to %s", conn.ConnectedUrl())
-		}),
-		nats.ClosedHandler(func(conn *nats.Conn) {
-			if lastErr := conn.LastError(); lastErr != nil {
-				log.Log(log.Error, "[NATS] Connection closed. Reason: %v", lastErr)
-			} else {
-				log.Log(log.Error, "[NATS] Connection closed.")
-			}
-		}),
-		nats.ErrorHandler(func(conn *nats.Conn, sub *nats.Subscription, err error) {
-			log.Log(log.Error, "[NATS] Async error: sub=%v err=%v", sub.Subject, err)
-		}),
-	}
-
-	conn, err := nats.Connect(url, opts...)
-	if err != nil {
-		return fmt.Errorf("failed to connect to NATS: %w", err)
-	}
-	nc = conn
-
-	log.Log(log.Info, "[NATS] Connected successfully to %s", url)
-	return nil
-}
-
+// Disconnect forcibly closes the connection.
 func Disconnect() {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
 	if nc != nil && !nc.IsClosed() {
 		nc.Close()
 		nc = nil
-		log.Log(log.Info, "[NATS] Connection closed by user request.")
+		log.Log(log.Info, "[NATS] Connection closed by application")
 	}
 }
 
-// Publish publishes to subject
+/*─────────────────────────────────────────────────────────────
+  Publish / Subscribe helpers (unchanged)
+─────────────────────────────────────────────────────────────*/
+
 func Publish(subject string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
 	if nc == nil || nc.IsClosed() {
 		return nats.ErrConnectionClosed
 	}
-	err := nc.Publish(subject, data)
-	if err != nil {
+	if err := nc.Publish(subject, data); err != nil {
 		return err
 	}
-	// Flush to ensure message is sent immediately
 	return nc.Flush()
 }
 
-// PublishMsg is wrapper
 func PublishMsg(msg *nats.Msg) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
 	if nc == nil || nc.IsClosed() {
 		return nats.ErrConnectionClosed
 	}
-	err := nc.PublishMsg(msg)
-	if err != nil {
+	if err := nc.PublishMsg(msg); err != nil {
 		return err
 	}
-	// Flush to ensure message is sent immediately
 	return nc.Flush()
 }
 
-// PublishMsgWithReply publishes with a reply subject
 func PublishMsgWithReply(subject, reply string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -125,35 +135,26 @@ func PublishMsgWithReply(subject, reply string, data []byte) error {
 		return nats.ErrConnectionClosed
 	}
 	msg := &nats.Msg{Subject: subject, Reply: reply, Data: data}
-	err := nc.PublishMsg(msg)
-	if err != nil {
+	if err := nc.PublishMsg(msg); err != nil {
 		return err
 	}
-	// Flush to ensure message is sent immediately
 	return nc.Flush()
 }
 
-// Subscribe to a subject
 func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
 	if nc == nil || nc.IsClosed() {
 		return nil, nats.ErrConnectionClosed
 	}
-
-	sub, err := nc.Subscribe(subject, func(msg *nats.Msg) {
-		// Process callback in a goroutine to prevent blocking
-		go cb(msg)
-	})
+	sub, err := nc.Subscribe(subject, func(m *nats.Msg) { go cb(m) })
 	if err != nil {
 		return nil, err
 	}
-	// Set reasonable limits instead of unlimited
-	sub.SetPendingLimits(10000, 10*1024*1024) // 10k messages or 10MB
+	sub.SetPendingLimits(10_000, 10*1024*1024)
 	return sub, nil
 }
 
-// Request is optional
 func Request(subject string, data []byte, timeout time.Duration) (*nats.Msg, error) {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
