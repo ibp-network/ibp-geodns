@@ -60,6 +60,7 @@ func main() {
 		ListenPort:    "0",
 		NodeRole:      "IBPMonitor",
 	}
+
 	if err := natsCommon.EnableMonitorRole(); err != nil {
 		log.Log(log.Fatal, "Failed to enable monitor role for NATS: %v", err)
 		os.Exit(1)

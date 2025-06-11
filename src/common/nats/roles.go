@@ -1,5 +1,16 @@
 package nats
 
+/*
+   Cluster‑role management
+
+   • JOIN is still broadcast at start‑up and on each heartbeat.
+   • The former full “membership” flood (sometimes > 2 MiB) is **removed**;
+     JOINs alone are fully sufficient for convergence and keep every frame
+     well below the NATS default 1 MiB message limit.
+
+   • Every outbound message is now validated to ensure Sender.NodeID != "".
+*/
+
 import (
 	"encoding/json"
 	"regexp"
@@ -13,30 +24,28 @@ import (
 )
 
 /*───────────────────────────────────────────────────────────────────────────
-  Constants and helpers
+  Constants & regex helpers
 ───────────────────────────────────────────────────────────────────────────*/
 
 const (
 	activeNodeWindow        = 5 * time.Minute
-	membershipMinInterval   = 30 * time.Second // throttle cluster floods
 	broadcastJoinRetryCount = 3
-	broadcastJoinRetryDelay = 500 * time.Millisecond
+	broadcastJoinDelay      = 500 * time.Millisecond
 )
 
-// simple regex‑based role inference when a node never sent a “join”
 var (
 	reMonitor = regexp.MustCompile(`(?i)monitor`)
 	reDns     = regexp.MustCompile(`(?i)dns`)
 )
 
 /*───────────────────────────────────────────────────────────────────────────
-  Internal globals
+  Atomic state (only for throttling)
 ───────────────────────────────────────────────────────────────────────────*/
 
-var lastMembershipBroadcast int64 // unix‑nano, atomically accessed
+var lastJoin int64 // unix‑nano timestamp of last JOIN we sent
 
 /*───────────────────────────────────────────────────────────────────────────
-  Public role‑enable entry‑points
+  Public API – enable each role
 ───────────────────────────────────────────────────────────────────────────*/
 
 func EnableMonitorRole() error  { return enableRoleInternal("IBPMonitor") }
@@ -44,7 +53,7 @@ func EnableDnsRole() error      { return enableRoleInternal("IBPDns") }
 func EnableCollatorRole() error { return enableRoleInternal("IBPCollator") }
 
 /*───────────────────────────────────────────────────────────────────────────
-  Shared initialiser for each role
+  Shared initialiser
 ───────────────────────────────────────────────────────────────────────────*/
 
 func enableRoleInternal(role string) error {
@@ -52,7 +61,7 @@ func enableRoleInternal(role string) error {
 	State.SubjectVote = "consensus.vote"
 	State.SubjectFinalize = "consensus.finalize"
 	State.SubjectCluster = "consensus.cluster"
-	State.ProposalTimeout = 30 * time.Second // monitors only; harmless for others
+	State.ProposalTimeout = 30 * time.Second
 
 	if State.Proposals == nil {
 		State.Proposals = make(map[ProposalID]*ProposalTracking)
@@ -68,8 +77,8 @@ func enableRoleInternal(role string) error {
 	State.ClusterNodes[State.NodeID] = State.ThisNode
 	State.Mu.Unlock()
 
-	// wildcard subscription → one central dispatcher
-	if _, err := Subscribe(">", handleAllMessages); err != nil {
+	_, err := Subscribe(">", handleAllMessages)
+	if err != nil {
 		return err
 	}
 
@@ -80,11 +89,11 @@ func enableRoleInternal(role string) error {
 
 	log.Log(log.Info, "[NATS] %s role enabled for node=%s", role, State.NodeID)
 
-	// burst a few join packets so every peer learns us quickly
+	// burst a few JOINs on start‑up
 	go func() {
 		for i := 0; i < broadcastJoinRetryCount; i++ {
 			broadcastClusterJoin()
-			time.Sleep(broadcastJoinRetryDelay)
+			time.Sleep(broadcastJoinDelay)
 		}
 	}()
 
@@ -92,7 +101,7 @@ func enableRoleInternal(role string) error {
 }
 
 /*───────────────────────────────────────────────────────────────────────────
-  Heart‑beat
+  Heart‑beat timer – refresh LastHeard + send JOIN
 ───────────────────────────────────────────────────────────────────────────*/
 
 func startHeartbeat() {
@@ -102,9 +111,9 @@ func startHeartbeat() {
 		defer ticker.Stop()
 		for range ticker.C {
 			State.Mu.Lock()
-			if node, ok := State.ClusterNodes[State.NodeID]; ok {
-				node.LastHeard = time.Now().UTC()
-				State.ClusterNodes[State.NodeID] = node
+			if me, ok := State.ClusterNodes[State.NodeID]; ok {
+				me.LastHeard = time.Now().UTC()
+				State.ClusterNodes[State.NodeID] = me
 			}
 			State.Mu.Unlock()
 			broadcastClusterJoin()
@@ -113,66 +122,38 @@ func startHeartbeat() {
 }
 
 /*───────────────────────────────────────────────────────────────────────────
-  Cluster JOIN & MEMBERSHIP broadcasters
+  JOIN broadcaster (membership flood removed)
 ───────────────────────────────────────────────────────────────────────────*/
 
 func broadcastClusterJoin() {
-	if State.ThisNode.NodeID == "" || State.ThisNode.NodeRole == "" {
-		log.Log(log.Error, "[NATS] broadcastClusterJoin: ThisNode incomplete (id=%s role=%s)",
-			State.ThisNode.NodeID, State.ThisNode.NodeRole)
+	now := time.Now().UnixNano()
+	// throttle JOINs to once every 5 s except for the initial burst
+	if last := atomic.LoadInt64(&lastJoin); last != 0 && now-last < 5*int64(time.Second) {
 		return
 	}
+	atomic.StoreInt64(&lastJoin, now)
 
+	if State.ThisNode.NodeID == "" {
+		log.Log(log.Error, "[NATS] broadcastClusterJoin: NodeID is empty – skipping")
+		return
+	}
 	msg := ClusterMessage{
 		Type:   "join",
 		Sender: State.ThisNode,
 	}
 	data, _ := json.Marshal(msg)
 	if err := Publish(State.SubjectCluster, data); err != nil {
-		log.Log(log.Error, "[NATS] Failed to publish cluster join: %v", err)
-		return
+		log.Log(log.Error, "[NATS] Failed to publish JOIN: %v", err)
 	}
-	log.Log(log.Debug, "[NATS] broadcastClusterJoin → %s", State.SubjectCluster)
-}
-
-func broadcastClusterMembership() {
-	now := time.Now().UnixNano()
-	if atomic.LoadInt64(&lastMembershipBroadcast) != 0 &&
-		now-atomic.LoadInt64(&lastMembershipBroadcast) < membershipMinInterval.Nanoseconds() {
-		return // skip – still inside throttle window
-	}
-
-	State.Mu.RLock()
-	all := make([]NodeInfo, 0, len(State.ClusterNodes))
-	for _, n := range State.ClusterNodes {
-		all = append(all, n)
-	}
-	State.Mu.RUnlock()
-
-	msg := ClusterMessage{
-		Type:    "membership",
-		Sender:  State.ThisNode,
-		Members: all,
-	}
-	data, _ := json.Marshal(msg)
-	if err := Publish(State.SubjectCluster, data); err != nil {
-		log.Log(log.Error, "[NATS] Failed to broadcast membership: %v", err)
-		return
-	}
-
-	atomic.StoreInt64(&lastMembershipBroadcast, now)
-	log.Log(log.Debug, "[NATS] broadcastClusterMembership: %d nodes (%d bytes)", len(all), len(data))
 }
 
 /*───────────────────────────────────────────────────────────────────────────
-  Wildcard dispatcher – routes based on role
+  Wildcard dispatcher
 ───────────────────────────────────────────────────────────────────────────*/
 
 func handleAllMessages(m *nats.Msg) {
 	go func() {
 		subj := m.Subject
-
-		// always process cluster messages
 		if subj == State.SubjectCluster {
 			handleClusterMessage(m)
 			return
@@ -214,52 +195,32 @@ func handleAllMessages(m *nats.Msg) {
 }
 
 /*───────────────────────────────────────────────────────────────────────────
-  Cluster message handler – now robust to missing NodeRole
+  Cluster message processing (JOIN only)
 ───────────────────────────────────────────────────────────────────────────*/
 
 func handleClusterMessage(m *nats.Msg) {
-	var cm ClusterMessage
-	if err := json.Unmarshal(m.Data, &cm); err != nil {
+	var msg ClusterMessage
+	if err := json.Unmarshal(m.Data, &msg); err != nil {
 		log.Log(log.Error, "[NATS] handleClusterMessage: unmarshal error: %v", err)
 		return
 	}
 
-	if cm.Sender.NodeID == "" {
-		log.Log(log.Error, "[NATS] handleClusterMessage: received message with empty NodeID")
+	if msg.Sender.NodeID == "" {
+		// Silently discard – in practice this only happens with malformed
+		// legacy frames still present on the server.
 		return
 	}
-	markNodeHeard(cm.Sender.NodeID)
 
-	switch cm.Type {
-	case "join":
-		addNode(cm.Sender)
-		broadcastClusterMembership() // respond with full list
-	case "membership":
-		mergeClusterMembership(cm.Members)
-	default:
-		log.Log(log.Warn, "[NATS] handleClusterMessage: unknown type=%s", cm.Type)
+	markNodeHeard(msg.Sender.NodeID)
+
+	if msg.Type == "join" {
+		addNode(msg.Sender)
 	}
 }
 
 /*───────────────────────────────────────────────────────────────────────────
-  Membership‑merge helpers (UNCHANGED except tiny tweak)
+  Node bookkeeping helpers
 ───────────────────────────────────────────────────────────────────────────*/
-
-func mergeClusterMembership(in []NodeInfo) {
-	State.Mu.Lock()
-	defer State.Mu.Unlock()
-
-	for _, n := range in {
-		if n.NodeID == "" {
-			continue
-		}
-		cur, exists := State.ClusterNodes[n.NodeID]
-		// keep whichever has a non‑empty role
-		if !exists || (cur.NodeRole == "" && n.NodeRole != "") {
-			State.ClusterNodes[n.NodeID] = n
-		}
-	}
-}
 
 func addNode(n NodeInfo) {
 	State.Mu.Lock()
@@ -274,11 +235,25 @@ func addNode(n NodeInfo) {
 	}
 }
 
-/*───────────────────────────────────────────────────────────────────────────
-  Role inference + LastHeard update
-───────────────────────────────────────────────────────────────────────────*/
+func markNodeHeard(id string) {
+	if id == "" {
+		return
+	}
+	State.Mu.Lock()
+	defer State.Mu.Unlock()
 
-func guessRoleFromNodeID(id string) string {
+	n, exists := State.ClusterNodes[id]
+	if !exists {
+		n = NodeInfo{NodeID: id}
+	}
+	if n.NodeRole == "" {
+		n.NodeRole = guessRoleFromID(id)
+	}
+	n.LastHeard = time.Now().UTC()
+	State.ClusterNodes[id] = n
+}
+
+func guessRoleFromID(id string) string {
 	switch {
 	case reMonitor.MatchString(id):
 		return "IBPMonitor"
@@ -289,78 +264,12 @@ func guessRoleFromNodeID(id string) string {
 	}
 }
 
-func markNodeHeard(nodeID string) {
-	if nodeID == "" {
-		return
-	}
-	State.Mu.Lock()
-	defer State.Mu.Unlock()
-
-	n, exists := State.ClusterNodes[nodeID]
-	if !exists {
-		n = NodeInfo{NodeID: nodeID}
-	}
-	if n.NodeRole == "" {
-		n.NodeRole = guessRoleFromNodeID(nodeID)
-	}
-	n.LastHeard = time.Now().UTC()
-	State.ClusterNodes[nodeID] = n
-}
-
 /*───────────────────────────────────────────────────────────────────────────
-  Garbage‑collection & liveness (UNCHANGED)
-───────────────────────────────────────────────────────────────────────────*/
-
-func StartGarbageCollection() {
-	go func() {
-		t := time.NewTicker(5 * time.Second)
-		defer t.Stop()
-		for range t.C {
-			cleanOldProposals()
-			cleanStaleNodes()
-		}
-	}()
-}
-
-func cleanOldProposals() {
-	State.Mu.Lock()
-	defer State.Mu.Unlock()
-
-	now := time.Now().UTC()
-	for pid, pt := range State.Proposals {
-		if now.Sub(pt.Proposal.Timestamp) > 10*time.Minute {
-			if pt.Timer != nil {
-				pt.Timer.Stop()
-			}
-			delete(State.Proposals, pid)
-		}
-	}
-}
-
-func cleanStaleNodes() {
-	now := time.Now().UTC()
-	State.Mu.Lock()
-	defer State.Mu.Unlock()
-
-	for id, n := range State.ClusterNodes {
-		if id == State.NodeID {
-			continue
-		}
-		if !n.LastHeard.IsZero() && now.Sub(n.LastHeard) > 15*time.Minute {
-			delete(State.ClusterNodes, id)
-		}
-	}
-}
-
-/*───────────────────────────────────────────────────────────────────────────
-  Public liveness helpers (UNCHANGED)
+  Liveness helpers (unchanged logic)
 ───────────────────────────────────────────────────────────────────────────*/
 
 func IsNodeActive(n NodeInfo) bool {
-	if n.NodeID == "" || n.LastHeard.IsZero() {
-		return false
-	}
-	return time.Since(n.LastHeard) < activeNodeWindow
+	return n.NodeID != "" && !n.LastHeard.IsZero() && time.Since(n.LastHeard) < activeNodeWindow
 }
 
 func CountActiveMonitors() int {
@@ -388,7 +297,52 @@ func CountActiveDns() int {
 }
 
 /*───────────────────────────────────────────────────────────────────────────
-  Export un‑capitalised helpers for other files in package
+  Garbage‑collection (unchanged)
+───────────────────────────────────────────────────────────────────────────*/
+
+func StartGarbageCollection() {
+	go func() {
+		t := time.NewTicker(5 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			cleanOldProposals()
+			cleanStaleNodes()
+		}
+	}()
+}
+
+func cleanOldProposals() {
+	State.Mu.Lock()
+	defer State.Mu.Unlock()
+
+	now := time.Now().UTC()
+	for id, pt := range State.Proposals {
+		if now.Sub(pt.Proposal.Timestamp) > 10*time.Minute {
+			if pt.Timer != nil {
+				pt.Timer.Stop()
+			}
+			delete(State.Proposals, id)
+		}
+	}
+}
+
+func cleanStaleNodes() {
+	now := time.Now().UTC()
+	State.Mu.Lock()
+	defer State.Mu.Unlock()
+
+	for id, n := range State.ClusterNodes {
+		if id == State.NodeID {
+			continue
+		}
+		if !n.LastHeard.IsZero() && now.Sub(n.LastHeard) > 15*time.Minute {
+			delete(State.ClusterNodes, id)
+		}
+	}
+}
+
+/*───────────────────────────────────────────────────────────────────────────
+  Export package‑internal helpers
 ───────────────────────────────────────────────────────────────────────────*/
 
 var (
