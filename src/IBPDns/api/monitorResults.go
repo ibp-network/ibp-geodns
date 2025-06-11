@@ -2,6 +2,7 @@ package api
 
 import (
 	"sync"
+	"time"
 )
 
 // OfficialResults is our local copy of the monitor's official results
@@ -34,13 +35,13 @@ type MonitorResultEndpoint struct {
 	Results   []MonitorResultGeneric `json:"Results"`
 }
 
-// MonitorResultGeneric holds each member result
 type MonitorResultGeneric struct {
 	MemberName string                 `json:"MemberName"`
 	Status     bool                   `json:"Status"`
 	ErrorText  string                 `json:"ErrorText"`
 	Data       map[string]interface{} `json:"Data"`
 	IsIPv6     bool                   `json:"IsIPv6"`
+	Checktime  time.Time              `json:"Checktime"` // ← NEW
 }
 
 // We rename the underlying variables to reflect they are official results

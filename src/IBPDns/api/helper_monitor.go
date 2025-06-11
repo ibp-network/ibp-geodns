@@ -1,128 +1,160 @@
 package api
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
-// IsMemberOnlineForDomain checks the *official* snapshot for a member's site/domain/endpoint status
-// A member is considered OFFLINE if they fail ANY relevant check (IPv4 OR IPv6, site OR domain OR endpoint)
-func IsMemberOnlineForDomain(domain, memberName string) bool {
-	// Retrieve the official results snapshot
-	snap := GetOfficialSnapshot()
-
-	// Check site-level failures (both IPv4 and IPv6)
-	// If ANY site check fails, member is offline
-	for _, sr := range snap.SiteResults {
-		for _, r := range sr.Results {
-			if r.MemberName == memberName && !r.Status {
-				return false // Failed site check = offline
-			}
+func latestStatus(results []MonitorResultGeneric, member string, ipv6Filter *bool) (bool, bool) {
+	found := false
+	var newest time.Time
+	var latest bool
+	for _, r := range results {
+		if r.MemberName != member {
+			continue
+		}
+		if ipv6Filter != nil && r.IsIPv6 != *ipv6Filter {
+			continue
+		}
+		if !found || r.Checktime.After(newest) {
+			found = true
+			latest = r.Status
+			newest = r.Checktime
 		}
 	}
-
-	// Check domain-level failures for this specific domain (both IPv4 and IPv6)
-	// If ANY domain check fails for this domain, member is offline for this domain
-	for _, dr := range snap.DomainResults {
-		if strings.EqualFold(dr.Domain, domain) {
-			for _, r := range dr.Results {
-				if r.MemberName == memberName && !r.Status {
-					return false // Failed domain check = offline for this domain
-				}
-			}
-		}
-	}
-
-	// Check endpoint-level failures for this specific domain (both IPv4 and IPv6)
-	// If ANY endpoint check fails for this domain, member is offline for this domain
-	for _, er := range snap.EndpointResults {
-		if strings.EqualFold(er.Domain, domain) {
-			for _, r := range er.Results {
-				if r.MemberName == memberName && !r.Status {
-					return false // Failed endpoint check = offline for this domain
-				}
-			}
-		}
-	}
-
-	return true // No failures found = online
+	return found, latest
 }
 
-// IsMemberOnlineForDomainIPv4 checks only IPv4-related status for a domain
-// This is used when we specifically want to serve IPv4 records
-func IsMemberOnlineForDomainIPv4(domain, memberName string) bool {
-	snap := GetOfficialSnapshot()
+/* ---------------- Aggregate helpers ---------------------------*/
 
-	// Check IPv4 site-level failures
-	for _, sr := range snap.SiteResults {
-		if !sr.IsIPv6 { // Only check IPv4 site results
-			for _, r := range sr.Results {
-				if r.MemberName == memberName && !r.Status {
-					return false
-				}
+func newestSiteStatus(sites []MonitorResultSite, member string, ipv6Filter *bool) (bool, bool) {
+	found := false
+	var newest time.Time
+	var latest bool
+	for _, sr := range sites {
+		if ipv6Filter != nil && sr.IsIPv6 != *ipv6Filter {
+			continue
+		}
+		if ok, st := latestStatus(sr.Results, member, ipv6Filter); ok {
+			if !found || moreRecent(sr.Results, member, ipv6Filter, newest) {
+				found, latest = true, st
+				newest = newestChecktime(sr.Results, member, ipv6Filter)
 			}
 		}
 	}
+	return found, latest
+}
 
-	// Check IPv4 domain-level failures for this specific domain
-	for _, dr := range snap.DomainResults {
-		if !dr.IsIPv6 && strings.EqualFold(dr.Domain, domain) {
-			for _, r := range dr.Results {
-				if r.MemberName == memberName && !r.Status {
-					return false
-				}
+func newestDomainStatus(domains []MonitorResultDomain, member, domain string, ipv6Filter *bool) (bool, bool) {
+	found := false
+	var newest time.Time
+	var latest bool
+	for _, dr := range domains {
+		if !strings.EqualFold(dr.Domain, domain) {
+			continue
+		}
+		if ipv6Filter != nil && dr.IsIPv6 != *ipv6Filter {
+			continue
+		}
+		if ok, st := latestStatus(dr.Results, member, ipv6Filter); ok {
+			if !found || moreRecent(dr.Results, member, ipv6Filter, newest) {
+				found, latest = true, st
+				newest = newestChecktime(dr.Results, member, ipv6Filter)
 			}
 		}
 	}
+	return found, latest
+}
 
-	// Check IPv4 endpoint-level failures for this specific domain
-	for _, er := range snap.EndpointResults {
-		if !er.IsIPv6 && strings.EqualFold(er.Domain, domain) {
-			for _, r := range er.Results {
-				if r.MemberName == memberName && !r.Status {
-					return false
-				}
+func newestEndpointStatus(endpoints []MonitorResultEndpoint, member, domain string, ipv6Filter *bool) (bool, bool) {
+	found := false
+	var newest time.Time
+	var latest bool
+	for _, er := range endpoints {
+		if !strings.EqualFold(er.Domain, domain) {
+			continue
+		}
+		if ipv6Filter != nil && er.IsIPv6 != *ipv6Filter {
+			continue
+		}
+		if ok, st := latestStatus(er.Results, member, ipv6Filter); ok {
+			if !found || moreRecent(er.Results, member, ipv6Filter, newest) {
+				found, latest = true, st
+				newest = newestChecktime(er.Results, member, ipv6Filter)
 			}
 		}
 	}
+	return found, latest
+}
 
+func newestChecktime(results []MonitorResultGeneric, member string, ipv6Filter *bool) time.Time {
+	var newest time.Time
+	for _, r := range results {
+		if r.MemberName == member && (ipv6Filter == nil || r.IsIPv6 == *ipv6Filter) {
+			if r.Checktime.After(newest) {
+				newest = r.Checktime
+			}
+		}
+	}
+	return newest
+}
+
+func moreRecent(results []MonitorResultGeneric, member string, ipv6Filter *bool, ref time.Time) bool {
+	for _, r := range results {
+		if r.MemberName == member && (ipv6Filter == nil || r.IsIPv6 == *ipv6Filter) {
+			if r.Checktime.After(ref) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+/* ---------------- Public helpers ------------------------------*/
+
+func IsMemberOnlineForDomain(domain, member string) bool {
+	sites, domains, eps := GetOfficialSnapshot().SiteResults, GetOfficialSnapshot().DomainResults, GetOfficialSnapshot().EndpointResults
+
+	if ok, st := newestSiteStatus(sites, member, nil); ok && !st {
+		return false
+	}
+	if ok, st := newestDomainStatus(domains, member, domain, nil); ok && !st {
+		return false
+	}
+	if ok, st := newestEndpointStatus(eps, member, domain, nil); ok && !st {
+		return false
+	}
 	return true
 }
 
-// IsMemberOnlineForDomainIPv6 checks only IPv6-related status for a domain
-// This is used when we specifically want to serve IPv6 records
-func IsMemberOnlineForDomainIPv6(domain, memberName string) bool {
-	snap := GetOfficialSnapshot()
+func IsMemberOnlineForDomainIPv4(domain, member string) bool {
+	ipv6 := false
+	sites, domains, eps := GetOfficialSnapshot().SiteResults, GetOfficialSnapshot().DomainResults, GetOfficialSnapshot().EndpointResults
 
-	// Check IPv6 site-level failures
-	for _, sr := range snap.SiteResults {
-		if sr.IsIPv6 { // Only check IPv6 site results
-			for _, r := range sr.Results {
-				if r.MemberName == memberName && !r.Status {
-					return false
-				}
-			}
-		}
+	if ok, st := newestSiteStatus(sites, member, &ipv6); ok && !st {
+		return false
 	}
-
-	// Check IPv6 domain-level failures for this specific domain
-	for _, dr := range snap.DomainResults {
-		if dr.IsIPv6 && strings.EqualFold(dr.Domain, domain) {
-			for _, r := range dr.Results {
-				if r.MemberName == memberName && !r.Status {
-					return false
-				}
-			}
-		}
+	if ok, st := newestDomainStatus(domains, member, domain, &ipv6); ok && !st {
+		return false
 	}
-
-	// Check IPv6 endpoint-level failures for this specific domain
-	for _, er := range snap.EndpointResults {
-		if er.IsIPv6 && strings.EqualFold(er.Domain, domain) {
-			for _, r := range er.Results {
-				if r.MemberName == memberName && !r.Status {
-					return false
-				}
-			}
-		}
+	if ok, st := newestEndpointStatus(eps, member, domain, &ipv6); ok && !st {
+		return false
 	}
+	return true
+}
 
+func IsMemberOnlineForDomainIPv6(domain, member string) bool {
+	ipv6 := true
+	sites, domains, eps := GetOfficialSnapshot().SiteResults, GetOfficialSnapshot().DomainResults, GetOfficialSnapshot().EndpointResults
+
+	if ok, st := newestSiteStatus(sites, member, &ipv6); ok && !st {
+		return false
+	}
+	if ok, st := newestDomainStatus(domains, member, domain, &ipv6); ok && !st {
+		return false
+	}
+	if ok, st := newestEndpointStatus(eps, member, domain, &ipv6); ok && !st {
+		return false
+	}
 	return true
 }

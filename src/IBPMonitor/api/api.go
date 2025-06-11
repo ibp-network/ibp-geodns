@@ -5,6 +5,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
@@ -29,129 +30,95 @@ func Init() {
 	)
 }
 
+// ------------------------- results handler -------------------------
+
 func handleResults(w http.ResponseWriter, r *http.Request) {
-	// Query the official results from data
 	sites, domains, endpoints := dat.GetOfficialResults()
 
-	// The DNS expects a specific JSON structure with MemberName as a string
-	// We need to transform from our internal structure (which has full Member objects)
-	// to what the DNS expects
+	/* ----------------------------------------------------------------
+	   Transform internal → public JSON.
+	   Now includes Checktime (RFC 3339) so downstream can decide which
+	   status is the latest instead of flagging a member offline forever.
+	-----------------------------------------------------------------*/
 
-	// Convert site results
-	var apiSites []interface{}
+	// -------- Site --------------------------------------------------
+	apiSites := make([]interface{}, 0, len(sites))
 	for _, site := range sites {
-		apiSite := map[string]interface{}{
+		out := map[string]interface{}{
 			"CheckName": site.Check.Name,
 			"IsIPv6":    site.IsIPv6,
 			"Results":   []interface{}{},
 		}
-
-		results := []interface{}{}
-		for _, result := range site.Results {
-			apiResult := map[string]interface{}{
-				"MemberName": result.Member.Details.Name, // Extract name from Member object
-				"Status":     result.Status,
-				"ErrorText":  result.ErrorText,
-				"Data":       result.Data,
-				"IsIPv6":     result.IsIPv6,
-			}
-			results = append(results, apiResult)
+		results := make([]interface{}, 0, len(site.Results))
+		for _, res := range site.Results {
+			results = append(results, map[string]interface{}{
+				"MemberName": res.Member.Details.Name,
+				"Status":     res.Status,
+				"ErrorText":  res.ErrorText,
+				"Data":       res.Data,
+				"IsIPv6":     res.IsIPv6,
+				"Checktime":  res.Checktime.Format(time.RFC3339), // ← NEW
+			})
 		}
-		apiSite["Results"] = results
-		apiSites = append(apiSites, apiSite)
+		out["Results"] = results
+		apiSites = append(apiSites, out)
 	}
 
-	// Convert domain results
-	var apiDomains []interface{}
-	for _, domain := range domains {
-		apiDomain := map[string]interface{}{
-			"CheckName": domain.Check.Name,
-			"Domain":    domain.Domain,
-			"IsIPv6":    domain.IsIPv6,
+	// -------- Domain ------------------------------------------------
+	apiDomains := make([]interface{}, 0, len(domains))
+	for _, dom := range domains {
+		out := map[string]interface{}{
+			"CheckName": dom.Check.Name,
+			"Domain":    dom.Domain,
+			"IsIPv6":    dom.IsIPv6,
 			"Results":   []interface{}{},
 		}
-
-		results := []interface{}{}
-		for _, result := range domain.Results {
-			apiResult := map[string]interface{}{
-				"MemberName": result.Member.Details.Name, // Extract name from Member object
-				"Status":     result.Status,
-				"ErrorText":  result.ErrorText,
-				"Data":       result.Data,
-				"IsIPv6":     result.IsIPv6,
-			}
-			results = append(results, apiResult)
+		results := make([]interface{}, 0, len(dom.Results))
+		for _, res := range dom.Results {
+			results = append(results, map[string]interface{}{
+				"MemberName": res.Member.Details.Name,
+				"Status":     res.Status,
+				"ErrorText":  res.ErrorText,
+				"Data":       res.Data,
+				"IsIPv6":     res.IsIPv6,
+				"Checktime":  res.Checktime.Format(time.RFC3339), // ← NEW
+			})
 		}
-		apiDomain["Results"] = results
-		apiDomains = append(apiDomains, apiDomain)
+		out["Results"] = results
+		apiDomains = append(apiDomains, out)
 	}
 
-	// Convert endpoint results
-	var apiEndpoints []interface{}
-	for _, endpoint := range endpoints {
-		apiEndpoint := map[string]interface{}{
-			"CheckName": endpoint.Check.Name,
-			"Domain":    endpoint.Domain,
-			"RpcUrl":    endpoint.RpcUrl,
-			"IsIPv6":    endpoint.IsIPv6,
+	// -------- Endpoint ---------------------------------------------
+	apiEndpoints := make([]interface{}, 0, len(endpoints))
+	for _, ep := range endpoints {
+		out := map[string]interface{}{
+			"CheckName": ep.Check.Name,
+			"Domain":    ep.Domain,
+			"RpcUrl":    ep.RpcUrl,
+			"IsIPv6":    ep.IsIPv6,
 			"Results":   []interface{}{},
 		}
-
-		results := []interface{}{}
-		for _, result := range endpoint.Results {
-			apiResult := map[string]interface{}{
-				"MemberName": result.Member.Details.Name, // Extract name from Member object
-				"Status":     result.Status,
-				"ErrorText":  result.ErrorText,
-				"Data":       result.Data,
-				"IsIPv6":     result.IsIPv6,
-			}
-			results = append(results, apiResult)
+		results := make([]interface{}, 0, len(ep.Results))
+		for _, res := range ep.Results {
+			results = append(results, map[string]interface{}{
+				"MemberName": res.Member.Details.Name,
+				"Status":     res.Status,
+				"ErrorText":  res.ErrorText,
+				"Data":       res.Data,
+				"IsIPv6":     res.IsIPv6,
+				"Checktime":  res.Checktime.Format(time.RFC3339), // ← NEW
+			})
 		}
-		apiEndpoint["Results"] = results
-		apiEndpoints = append(apiEndpoints, apiEndpoint)
+		out["Results"] = results
+		apiEndpoints = append(apiEndpoints, out)
 	}
 
-	// Return the properly formatted response
-	out := map[string]interface{}{
+	resp := map[string]interface{}{
 		"SiteResults":     apiSites,
 		"DomainResults":   apiDomains,
 		"EndpointResults": apiEndpoints,
 	}
 
-	// Log some debug info
-	offlineMembers := make(map[string]bool)
-
-	// Check site results
-	for _, site := range sites {
-		for _, result := range site.Results {
-			if !result.Status {
-				offlineMembers[result.Member.Details.Name] = true
-			}
-		}
-	}
-
-	// Check domain results
-	for _, domain := range domains {
-		for _, result := range domain.Results {
-			if !result.Status {
-				offlineMembers[result.Member.Details.Name] = true
-			}
-		}
-	}
-
-	// Check endpoint results
-	for _, endpoint := range endpoints {
-		for _, result := range endpoint.Results {
-			if !result.Status {
-				offlineMembers[result.Member.Details.Name] = true
-			}
-		}
-	}
-
-	log.Log(log.Debug, "Monitor API: Returning %d site results, %d domain results, %d endpoint results with %d offline members",
-		len(sites), len(domains), len(endpoints), len(offlineMembers))
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(out)
+	_ = json.NewEncoder(w).Encode(resp)
 }
