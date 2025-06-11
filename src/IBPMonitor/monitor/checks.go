@@ -1,18 +1,16 @@
 package monitor
 
 import (
-	"bytes"
-	"encoding/json"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
 
-	ibpcons "ibp-geodns/src/IBPMonitor/consensus"
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
 	log "ibp-geodns/src/common/logging"
 	max "ibp-geodns/src/common/maxmind"
+	natsCommon "ibp-geodns/src/common/nats"
 )
 
 // ----------------------------------------------------------------------
@@ -38,36 +36,6 @@ type (
 	CheckDomainFunc   func(check cfg.Check, domain string, service cfg.Service, member cfg.Member)
 	CheckEndpointFunc func(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member)
 )
-
-var consensusMgr *ibpcons.Manager
-
-// SetConsensusManager is called once from IBPMonitor.main after the manager
-// has been created.
-func SetConsensusManager(m *ibpcons.Manager) {
-	consensusMgr = m
-}
-
-// maybeProposeSnapshot compares local vs. official and, if different,
-// publishes a new snapshot proposal through the consensus manager.
-func maybeProposeSnapshot() {
-	if consensusMgr == nil {
-		return
-	}
-	// Build LOCAL snapshot
-	localSnap := dat.BuildSnapshot(dat.GetLocalResults())
-
-	// Build OFFICIAL snapshot
-	oSite, oDom, oEp := dat.GetOfficialResults()
-	officialSnap := dat.BuildSnapshot(oSite, oDom, oEp)
-
-	// Compare byte‑wise
-	lb, _ := json.Marshal(localSnap)
-	ob, _ := json.Marshal(officialSnap)
-
-	if !bytes.Equal(lb, ob) {
-		consensusMgr.ProposeSnapshot(localSnap)
-	}
-}
 
 // ----------------------------------------------------------------------
 // Registration helpers
@@ -186,12 +154,19 @@ func runSiteCheck(check cfg.Check, fn CheckSiteFunc) {
 	}
 }
 
-// UpdateSiteResultLocal – only the last few lines changed.
-func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, errorMsg string,
-	dataMap map[string]interface{}, isIPv6 bool) {
-
+func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
+	// 1) cache locally
 	dat.UpdateLocalSiteResult(check, member, status, errorMsg, dataMap, isIPv6)
-	maybeProposeSnapshot()
+
+	// 2) compare with official snapshot
+	found, officialStatus := dat.GetOfficialSiteStatus(check.Name, member.Details.Name, isIPv6)
+	if !found {
+		natsCommon.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap, isIPv6)
+		return
+	}
+	if officialStatus != status {
+		natsCommon.ProposeCheckStatus("site", check.Name, member.Details.Name, "", "", status, errorMsg, dataMap, isIPv6)
+	}
 }
 
 // ------------------------------------------------------------------
@@ -258,7 +233,7 @@ func runDomainCheck(check cfg.Check, fn CheckDomainFunc) {
 
 				for domain := range domains {
 					go domainCheckWrapper(check, fn, domain, svc, member)
-					time.Sleep(100 * time.Millisecond)
+					time.Sleep(30 * time.Millisecond)
 				}
 			}
 		}
@@ -289,13 +264,19 @@ func domainCheckWrapper(check cfg.Check, fn CheckDomainFunc, domain string, serv
 	}
 }
 
-// UpdateDomainResultLocal – same change.
-func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service,
-	member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{},
-	isIPv6 bool) {
+func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service, member cfg.Member,
+	status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
 
 	dat.UpdateLocalDomainResult(check, member, service, domain, status, errorMsg, dataMap, isIPv6)
-	maybeProposeSnapshot()
+
+	found, officialStatus := dat.GetOfficialDomainStatus(check.Name, member.Details.Name, domain, isIPv6)
+	if !found {
+		natsCommon.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap, isIPv6)
+		return
+	}
+	if officialStatus != status {
+		natsCommon.ProposeCheckStatus("domain", check.Name, member.Details.Name, domain, "", status, errorMsg, dataMap, isIPv6)
+	}
 }
 
 // ------------------------------------------------------------------
@@ -349,7 +330,7 @@ func runEndpointCheck(check cfg.Check, fn CheckEndpointFunc) {
 							for _, provider := range svc.Providers {
 								for _, rpcURL := range provider.RpcUrls {
 									go endpointCheckWrapper(check, fn, rpcURL, svc, member)
-									time.Sleep(100 * time.Millisecond)
+									time.Sleep(30 * time.Millisecond)
 								}
 							}
 						}
@@ -384,14 +365,27 @@ func endpointCheckWrapper(check cfg.Check, fn CheckEndpointFunc, endpoint string
 	}
 }
 
-// UpdateEndpointResultLocal – same change.
-func UpdateEndpointResultLocal(check cfg.Check, member cfg.Member, service cfg.Service,
-	endpoint string, status bool, errorMsg string, dataMap map[string]interface{},
-	isIPv6 bool) {
-
+func UpdateEndpointResultLocal(
+	check cfg.Check,
+	member cfg.Member,
+	service cfg.Service,
+	endpoint string,
+	status bool,
+	errorMsg string,
+	dataMap map[string]interface{},
+	isIPv6 bool,
+) {
 	domain := parseUrlForDomain(endpoint)
 	dat.UpdateLocalEndpointResult(check, member, service, domain, endpoint, status, errorMsg, dataMap, isIPv6)
-	maybeProposeSnapshot()
+
+	found, officialStatus := dat.GetOfficialEndpointStatus(check.Name, member.Details.Name, domain, endpoint, isIPv6)
+	if !found {
+		natsCommon.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap, isIPv6)
+		return
+	}
+	if officialStatus != status {
+		natsCommon.ProposeCheckStatus("endpoint", check.Name, member.Details.Name, domain, endpoint, status, errorMsg, dataMap, isIPv6)
+	}
 }
 
 // ------------------------------------------------------------------

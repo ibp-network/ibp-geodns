@@ -6,7 +6,6 @@ import (
 	"time"
 
 	api "ibp-geodns/src/IBPMonitor/api"
-	ibpcons "ibp-geodns/src/IBPMonitor/consensus"
 	"ibp-geodns/src/IBPMonitor/monitor"
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
@@ -42,13 +41,6 @@ func main() {
 		log.Log(log.Fatal, "Failed to connect to NATS: %v", err)
 		os.Exit(1)
 	}
-
-	// -----------------------------------------------------------------------
-	// consensus manager  (NEW)
-	// -----------------------------------------------------------------------
-	nc := natsCommon.GetConnection()
-	consMgr := ibpcons.NewManager(c.Local.Nats.NodeID, nc, 1) // quorum re‑computed later
-	monitor.SetConsensusManager(consMgr)
 
 	// -----------------------------------------------------------------------
 	// existing NATS heartbeat/roles (kept for metrics)
