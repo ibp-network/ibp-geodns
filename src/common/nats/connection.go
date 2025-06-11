@@ -200,7 +200,7 @@ func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	if err != nil {
 		return nil, err
 	}
-	sub.SetPendingLimits(10_000, 10*1024*1024)
+	sub.SetPendingLimits(100000, 32000000)
 	return sub, nil
 }
 
