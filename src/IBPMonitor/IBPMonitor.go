@@ -14,23 +14,24 @@ import (
 	natsCommon "ibp-geodns/src/common/nats"
 )
 
-var version = "0.4.0"
+var version = "0.4.1"
 
 func main() {
-	log.Log(log.Info, "IBP‑GeoDNS serviceMonitor v%s starting ...", version)
+	log.Log(log.Info, "IBP‑GeoDNS serviceMonitor v%s starting …", version)
 
-	cfgFile := flag.String("config", "ibpmonitor.json", "Path to the configuration file")
+	cfgPath := flag.String("config", "ibpmonitor.json", "Path to the configuration file")
 	flag.Parse()
 
-	if _, err := os.Stat(*cfgFile); os.IsNotExist(err) {
-		log.Log(log.Fatal, "Configuration file not found: %s", *cfgFile)
+	if _, err := os.Stat(*cfgPath); os.IsNotExist(err) {
+		log.Log(log.Fatal, "Configuration file not found: %s", *cfgPath)
 		os.Exit(1)
 	}
 
-	// -----------------------------------------------------------------------
+	//-----------------------------------------------------------------------
 	// bootstrap subsystems
-	// -----------------------------------------------------------------------
-	cfg.Init(*cfgFile)
+	//-----------------------------------------------------------------------
+
+	cfg.Init(*cfgPath)
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
 
@@ -42,9 +43,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// -----------------------------------------------------------------------
-	// existing NATS heartbeat/roles (kept for metrics)
-	// -----------------------------------------------------------------------
+	//-----------------------------------------------------------------------
+	// advertise ourselves (IBPMonitor role)
+	//-----------------------------------------------------------------------
+
 	natsCommon.State.NodeID = c.Local.Nats.NodeID
 	natsCommon.State.ThisNode = natsCommon.NodeInfo{
 		NodeID:        c.Local.Nats.NodeID,
@@ -58,11 +60,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// -----------------------------------------------------------------------
-	// start checks + API
-	// -----------------------------------------------------------------------
+	//-----------------------------------------------------------------------
+	// start health‑checks & HTTP API
+	//-----------------------------------------------------------------------
+
 	monitor.Init()
 	api.Init()
+
+	//-----------------------------------------------------------------------
+	// run forever
+	//-----------------------------------------------------------------------
 
 	for {
 		time.Sleep(60 * time.Second)
