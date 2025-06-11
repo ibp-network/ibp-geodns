@@ -8,7 +8,8 @@ import (
 	max "ibp-geodns/src/common/maxmind"
 )
 
-// dailyUsageKey is the unique combination that we store in memory before flushing to DB.
+// dailyUsageKey is the unique combination that we store in memory
+// before flushing to DB.
 type dailyUsageKey struct {
 	Date        string
 	Domain      string
@@ -25,16 +26,18 @@ type usageMemory struct {
 	data map[dailyUsageKey]int
 }
 
-// global in-memory usage stats
+// global in‑memory usage stats
 var usageMem = &usageMemory{
 	data: make(map[dailyUsageKey]int),
 }
 
-// RecordDnsHit is called from the DNS query logic with client IP, domain, and assigned member.
+// RecordDnsHit is called from the DNS query logic with client IP,
+// domain, and assigned member.
 func RecordDnsHit(isIPv6 bool, clientIP, domain, memberName string) {
 	if domain == "" || clientIP == "" {
 		return
 	}
+
 	// Do geo lookups
 	countryCode := max.GetCountryCode(clientIP)
 	if countryCode == "" {
@@ -48,7 +51,7 @@ func RecordDnsHit(isIPv6 bool, clientIP, domain, memberName string) {
 
 	// build key
 	now := time.Now().UTC()
-	dateStr := now.Format("2006-01-02") // example: "2025-05-28"
+	dateStr := now.Format("2006-01-02") // e.g. "2025-05-28"
 
 	key := dailyUsageKey{
 		Date:        dateStr,
@@ -64,32 +67,34 @@ func RecordDnsHit(isIPv6 bool, clientIP, domain, memberName string) {
 	usageMem.data[key]++
 	usageMem.mu.Unlock()
 
-	log.Log(log.Debug, "[RecordDnsHit] domain=%s, member=%s, ip=%s, isIPv6=%v => increment usageMem", domain, memberName, clientIP, isIPv6)
+	log.Log(log.Debug,
+		"[RecordDnsHit] domain=%s, member=%s, ip=%s, isIPv6=%v => increment usageMem",
+		domain, memberName, clientIP, isIPv6)
 }
 
-// FlushUsageToDatabase processes all usage for a specific date from memory and writes it to MySQL.
-func FlushUsageToDatabase(date string) {
+// FlushUsageToDatabase writes *all* accumulated usage (for every date)
+// to MySQL and clears the in‑memory map.
+//
+// NOTE: Previously this function only flushed a single date, which left
+// stale keys in RAM indefinitely.  The implementation now iterates over
+// **every** key ensuring the map cannot grow without bound.
+func FlushUsageToDatabase(triggerDate string) {
 	usageMem.mu.Lock()
 	defer usageMem.mu.Unlock()
 
-	// gather all keys for the given date
-	var keysToFlush []dailyUsageKey
-	for k := range usageMem.data {
-		if k.Date == date {
-			keysToFlush = append(keysToFlush, k)
-		}
-	}
-
-	if len(keysToFlush) == 0 {
-		log.Log(log.Info, "FlushUsageToDatabase: no usage found for date=%s", date)
+	if len(usageMem.data) == 0 {
+		log.Log(log.Info,
+			"[FlushUsageToDatabase] No usage to flush (triggerDate=%s)",
+			triggerDate)
 		return
 	}
 
-	log.Log(log.Info, "FlushUsageToDatabase: found %d usage entries for date=%s", len(keysToFlush), date)
+	log.Log(log.Info,
+		"[FlushUsageToDatabase] Flushing %d usage records (triggerDate=%s)",
+		len(usageMem.data), triggerDate)
 
-	for _, k := range keysToFlush {
-		hits := usageMem.data[k]
-
+	flushed := 0
+	for k, hits := range usageMem.data {
 		rec := UsageRecord{
 			Date:        k.Date,
 			Domain:      k.Domain,
@@ -101,14 +106,20 @@ func FlushUsageToDatabase(date string) {
 			Hits:        hits,
 		}
 
-		err := UpsertUsageRecord(rec)
-		if err != nil {
-			log.Log(log.Error, "FlushUsageToDatabase: upsert error for domain=%s member=%s: %v", k.Domain, k.MemberName, err)
+		if err := UpsertUsageRecord(rec); err != nil {
+			log.Log(log.Error,
+				"[FlushUsageToDatabase] upsert error domain=%s member=%s date=%s: %v",
+				rec.Domain, rec.MemberName, rec.Date, err)
+			// we still continue; failing one record should not abort all
+			continue
 		}
 
-		// remove it from memory
+		// remove the key after successful flush
 		delete(usageMem.data, k)
+		flushed++
 	}
 
-	log.Log(log.Info, "FlushUsageToDatabase: done flushing %d usage records for date=%s", len(keysToFlush), date)
+	log.Log(log.Info,
+		"[FlushUsageToDatabase] Completed flush: %d records written, map size now %d",
+		flushed, len(usageMem.data))
 }
