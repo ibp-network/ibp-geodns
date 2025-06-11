@@ -158,7 +158,7 @@ func handleProposal(m *nats.Msg) {
 ──────────────────────────────────────────────
 */
 func voteOnProposal(prop Proposal) {
-	time.Sleep(50 * time.Millisecond) // allow storage propagation
+	time.Sleep(5 * time.Millisecond) // allow storage propagation
 
 	found, localStatus := checkLocalStatus(
 		prop.CheckType, prop.CheckName, prop.MemberName,
