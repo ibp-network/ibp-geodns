@@ -16,7 +16,7 @@ import (
    ---------------------------------------------------------------------------
 */
 
-// ---------------- key helpers ------------------------------------------------
+// ---------- key helpers ------------------------------------------------------
 func keySite(chk string, v6 bool) string {
 	if v6 {
 		return chk + "|v6"
@@ -36,30 +36,30 @@ func keyEndpoint(chk, dom, rpc string, v6 bool) string {
 	return chk + "|" + dom + "|" + rpc + "|v4"
 }
 
-// ---------------- build OFFLINE site -----------------------------------------
-func buildOfflineSiteResults(in []dat.SiteResult) []dat.SiteResult {
+// ---------- OFFLINE site -----------------------------------------------------
+func buildOfflineSiteResults(input []dat.SiteResult) []dat.SiteResult {
 	m := make(map[string]*dat.SiteResult)
-	for _, s := range in {
-		k := keySite(s.Check.Name, s.IsIPv6)
+	for _, src := range input {
+		k := keySite(src.Check.Name, src.IsIPv6)
 		if _, ok := m[k]; !ok {
-			m[k] = &dat.SiteResult{Check: s.Check, IsIPv6: s.IsIPv6}
+			m[k] = &dat.SiteResult{Check: src.Check, IsIPv6: src.IsIPv6}
 		}
-		for _, r := range s.Results {
-			if r.Status { // keep ONLY offline
+		for _, r := range src.Results {
+			if r.Status { // we keep *only* offline
 				continue
 			}
 			dst := m[k]
-			replace := true
+			repl := true
 			for i, ex := range dst.Results {
 				if ex.Member.Details.Name == r.Member.Details.Name {
 					if r.Checktime.After(ex.Checktime) {
 						dst.Results[i] = r
 					}
-					replace = false
+					repl = false
 					break
 				}
 			}
-			if replace {
+			if repl {
 				dst.Results = append(dst.Results, r)
 			}
 		}
@@ -73,30 +73,30 @@ func buildOfflineSiteResults(in []dat.SiteResult) []dat.SiteResult {
 	return out
 }
 
-// ---------------- build OFFLINE domain ---------------------------------------
-func buildOfflineDomainResults(in []dat.DomainResult) []dat.DomainResult {
+// ---------- OFFLINE domain ---------------------------------------------------
+func buildOfflineDomainResults(input []dat.DomainResult) []dat.DomainResult {
 	m := make(map[string]*dat.DomainResult)
-	for _, d := range in {
-		k := keyDomain(d.Check.Name, d.Domain, d.IsIPv6)
+	for _, src := range input {
+		k := keyDomain(src.Check.Name, src.Domain, src.IsIPv6)
 		if _, ok := m[k]; !ok {
-			m[k] = &dat.DomainResult{Check: d.Check, Service: d.Service, Domain: d.Domain, IsIPv6: d.IsIPv6}
+			m[k] = &dat.DomainResult{Check: src.Check, Service: src.Service, Domain: src.Domain, IsIPv6: src.IsIPv6}
 		}
-		for _, r := range d.Results {
+		for _, r := range src.Results {
 			if r.Status {
 				continue
 			}
 			dst := m[k]
-			replace := true
+			repl := true
 			for i, ex := range dst.Results {
 				if ex.Member.Details.Name == r.Member.Details.Name {
 					if r.Checktime.After(ex.Checktime) {
 						dst.Results[i] = r
 					}
-					replace = false
+					repl = false
 					break
 				}
 			}
-			if replace {
+			if repl {
 				dst.Results = append(dst.Results, r)
 			}
 		}
@@ -110,30 +110,30 @@ func buildOfflineDomainResults(in []dat.DomainResult) []dat.DomainResult {
 	return out
 }
 
-// ---------------- build OFFLINE endpoint -------------------------------------
-func buildOfflineEndpointResults(in []dat.EndpointResult) []dat.EndpointResult {
+// ---------- OFFLINE endpoint -------------------------------------------------
+func buildOfflineEndpointResults(input []dat.EndpointResult) []dat.EndpointResult {
 	m := make(map[string]*dat.EndpointResult)
-	for _, e := range in {
-		k := keyEndpoint(e.Check.Name, e.Domain, e.RpcUrl, e.IsIPv6)
+	for _, src := range input {
+		k := keyEndpoint(src.Check.Name, src.Domain, src.RpcUrl, src.IsIPv6)
 		if _, ok := m[k]; !ok {
-			m[k] = &dat.EndpointResult{Check: e.Check, Service: e.Service, Domain: e.Domain, RpcUrl: e.RpcUrl, IsIPv6: e.IsIPv6}
+			m[k] = &dat.EndpointResult{Check: src.Check, Service: src.Service, Domain: src.Domain, RpcUrl: src.RpcUrl, IsIPv6: src.IsIPv6}
 		}
-		for _, r := range e.Results {
+		for _, r := range src.Results {
 			if r.Status {
 				continue
 			}
 			dst := m[k]
-			replace := true
+			repl := true
 			for i, ex := range dst.Results {
 				if ex.Member.Details.Name == r.Member.Details.Name {
 					if r.Checktime.After(ex.Checktime) {
 						dst.Results[i] = r
 					}
-					replace = false
+					repl = false
 					break
 				}
 			}
-			if replace {
+			if repl {
 				dst.Results = append(dst.Results, r)
 			}
 		}
@@ -149,7 +149,7 @@ func buildOfflineEndpointResults(in []dat.EndpointResult) []dat.EndpointResult {
 
 /*
    ---------------------------------------------------------------------------
-   API start‑up
+   API initialisation
    ---------------------------------------------------------------------------
 */
 
@@ -161,7 +161,8 @@ func Init() {
 
 	log.Log(log.Info, "Starting serviceMonitor API on %s:%s",
 		c.Local.MonitorApi.ListenAddress,
-		c.Local.MonitorApi.ListenPort)
+		c.Local.MonitorApi.ListenPort,
+	)
 
 	go http.ListenAndServe(
 		c.Local.MonitorApi.ListenAddress+":"+c.Local.MonitorApi.ListenPort,
@@ -170,19 +171,19 @@ func Init() {
 }
 
 /*
----------------------------------------------------------------------------
-/results – returns ONLY official **offline** records
----------------------------------------------------------------------------
+   ---------------------------------------------------------------------------
+   /results – returns **official OFFLINE** results only
+   ---------------------------------------------------------------------------
 */
+
 func handleResults(w http.ResponseWriter, r *http.Request) {
 	offSites, offDomains, offEndpoints := dat.GetOfficialResults()
 
-	siteOffline := buildOfflineSiteResults(offSites)
-	domainOffline := buildOfflineDomainResults(offDomains)
-	endpointOffline := buildOfflineEndpointResults(offEndpoints)
+	sites := buildOfflineSiteResults(offSites)
+	domains := buildOfflineDomainResults(offDomains)
+	endpoints := buildOfflineEndpointResults(offEndpoints)
 
-	// small helper to flatten []dat.Result
-	toSlim := func(res []dat.Result) []interface{} {
+	slim := func(res []dat.Result) []interface{} {
 		out := make([]interface{}, 0, len(res))
 		for _, r := range res {
 			out = append(out, map[string]interface{}{
@@ -197,36 +198,34 @@ func handleResults(w http.ResponseWriter, r *http.Request) {
 		return out
 	}
 
-	// Site
-	apiSites := make([]interface{}, 0, len(siteOffline))
-	for _, s := range siteOffline {
+	// convert
+	apiSites := make([]interface{}, 0, len(sites))
+	for _, s := range sites {
 		apiSites = append(apiSites, map[string]interface{}{
 			"CheckName": s.Check.Name,
 			"IsIPv6":    s.IsIPv6,
-			"Results":   toSlim(s.Results),
+			"Results":   slim(s.Results),
 		})
 	}
 
-	// Domain
-	apiDomains := make([]interface{}, 0, len(domainOffline))
-	for _, d := range domainOffline {
+	apiDomains := make([]interface{}, 0, len(domains))
+	for _, d := range domains {
 		apiDomains = append(apiDomains, map[string]interface{}{
 			"CheckName": d.Check.Name,
 			"Domain":    d.Domain,
 			"IsIPv6":    d.IsIPv6,
-			"Results":   toSlim(d.Results),
+			"Results":   slim(d.Results),
 		})
 	}
 
-	// Endpoint
-	apiEndpoints := make([]interface{}, 0, len(endpointOffline))
-	for _, e := range endpointOffline {
+	apiEndpoints := make([]interface{}, 0, len(endpoints))
+	for _, e := range endpoints {
 		apiEndpoints = append(apiEndpoints, map[string]interface{}{
 			"CheckName": e.Check.Name,
 			"Domain":    e.Domain,
 			"RpcUrl":    e.RpcUrl,
 			"IsIPv6":    e.IsIPv6,
-			"Results":   toSlim(e.Results),
+			"Results":   slim(e.Results),
 		})
 	}
 

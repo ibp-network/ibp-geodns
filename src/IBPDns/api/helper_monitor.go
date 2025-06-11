@@ -5,16 +5,15 @@ import (
 )
 
 /*
-   This file now works with **offline‑only** snapshots.
-
-   If any matching record is present ⇒ the member is OFFLINE.
-   If no record exists           ⇒ the member is ONLINE.
+   OFFLINE‑only snapshot logic
+   ‑ if a matching record exists  ⇒ member is OFFLINE
+   ‑ otherwise                  ⇒ member is ONLINE
 */
 
-// --------------- helpers -----------------------------------------------------
-func isOfflineSite(sites []MonitorResultSite, member string, v6Filter *bool) bool {
+// ------------------------------------------------------------------ helpers --
+func offSite(sites []MonitorResultSite, member string, v6 *bool) bool {
 	for _, sr := range sites {
-		if v6Filter != nil && sr.IsIPv6 != *v6Filter {
+		if v6 != nil && sr.IsIPv6 != *v6 {
 			continue
 		}
 		for _, r := range sr.Results {
@@ -26,12 +25,12 @@ func isOfflineSite(sites []MonitorResultSite, member string, v6Filter *bool) boo
 	return false
 }
 
-func isOfflineDomain(domains []MonitorResultDomain, member, domain string, v6Filter *bool) bool {
+func offDomain(domains []MonitorResultDomain, member, dom string, v6 *bool) bool {
 	for _, dr := range domains {
-		if !strings.EqualFold(dr.Domain, domain) {
+		if !strings.EqualFold(dr.Domain, dom) {
 			continue
 		}
-		if v6Filter != nil && dr.IsIPv6 != *v6Filter {
+		if v6 != nil && dr.IsIPv6 != *v6 {
 			continue
 		}
 		for _, r := range dr.Results {
@@ -43,12 +42,12 @@ func isOfflineDomain(domains []MonitorResultDomain, member, domain string, v6Fil
 	return false
 }
 
-func isOfflineEndpoint(eps []MonitorResultEndpoint, member, domain string, v6Filter *bool) bool {
+func offEndpoint(eps []MonitorResultEndpoint, member, dom string, v6 *bool) bool {
 	for _, er := range eps {
-		if !strings.EqualFold(er.Domain, domain) {
+		if !strings.EqualFold(er.Domain, dom) {
 			continue
 		}
-		if v6Filter != nil && er.IsIPv6 != *v6Filter {
+		if v6 != nil && er.IsIPv6 != *v6 {
 			continue
 		}
 		for _, r := range er.Results {
@@ -60,14 +59,12 @@ func isOfflineEndpoint(eps []MonitorResultEndpoint, member, domain string, v6Fil
 	return false
 }
 
-// --------------- public ------------------------------------------------------
-
-// ONLINE if **no** corresponding offline record exists
+// ----------------------------------------------------------- public helpers --
 func IsMemberOnlineForDomain(domain, member string) bool {
-	snap := GetOfficialSnapshot()
-	if isOfflineSite(snap.SiteResults, member, nil) ||
-		isOfflineDomain(snap.DomainResults, member, domain, nil) ||
-		isOfflineEndpoint(snap.EndpointResults, member, domain, nil) {
+	s := GetOfficialSnapshot()
+	if offSite(s.SiteResults, member, nil) ||
+		offDomain(s.DomainResults, member, domain, nil) ||
+		offEndpoint(s.EndpointResults, member, domain, nil) {
 		return false
 	}
 	return true
@@ -75,10 +72,10 @@ func IsMemberOnlineForDomain(domain, member string) bool {
 
 func IsMemberOnlineForDomainIPv4(domain, member string) bool {
 	ipv6 := false
-	snap := GetOfficialSnapshot()
-	if isOfflineSite(snap.SiteResults, member, &ipv6) ||
-		isOfflineDomain(snap.DomainResults, member, domain, &ipv6) ||
-		isOfflineEndpoint(snap.EndpointResults, member, domain, &ipv6) {
+	s := GetOfficialSnapshot()
+	if offSite(s.SiteResults, member, &ipv6) ||
+		offDomain(s.DomainResults, member, domain, &ipv6) ||
+		offEndpoint(s.EndpointResults, member, domain, &ipv6) {
 		return false
 	}
 	return true
@@ -86,10 +83,10 @@ func IsMemberOnlineForDomainIPv4(domain, member string) bool {
 
 func IsMemberOnlineForDomainIPv6(domain, member string) bool {
 	ipv6 := true
-	snap := GetOfficialSnapshot()
-	if isOfflineSite(snap.SiteResults, member, &ipv6) ||
-		isOfflineDomain(snap.DomainResults, member, domain, &ipv6) ||
-		isOfflineEndpoint(snap.EndpointResults, member, domain, &ipv6) {
+	s := GetOfficialSnapshot()
+	if offSite(s.SiteResults, member, &ipv6) ||
+		offDomain(s.DomainResults, member, domain, &ipv6) ||
+		offEndpoint(s.EndpointResults, member, domain, &ipv6) {
 		return false
 	}
 	return true

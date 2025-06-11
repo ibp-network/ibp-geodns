@@ -4,29 +4,27 @@ import (
 	log "ibp-geodns/src/common/logging"
 )
 
-// DumpDomainStatus prints current online / offline state per domain & member.
-// It is called from the monitor‑poller after every refresh so operators can
-// immediately verify that OFFLINE results are honoured.
+// DumpDomainStatus prints ONLINE/OFFLINE per (domain,member) after each poll.
+// This is purely operational‑diagnostic and does not affect runtime logic.
 func DumpDomainStatus() {
 	ServiceRecords.mu.RLock()
 	defer ServiceRecords.mu.RUnlock()
 
-	for domain, svc := range ServiceRecords.Services {
-		log.Log(log.Info, "[Status] Domain = %s  (members=%d)", domain, len(svc.Members))
-		for memberName := range svc.Members {
-			on4 := IsMemberOnlineForDomainIPv4(domain, memberName)
-			on6 := IsMemberOnlineForDomainIPv6(domain, memberName)
+	for dom, sc := range ServiceRecords.Services {
+		log.Log(log.Info, "[Status] Domain = %s  (members=%d)", dom, len(sc.Members))
+		for mem := range sc.Members {
+			v4 := IsMemberOnlineForDomainIPv4(dom, mem)
+			v6 := IsMemberOnlineForDomainIPv6(dom, mem)
 
-			// if a member lacks both IPs we simply note it
 			state := "ONLINE"
-			if !on4 && !on6 {
+			if !v4 && !v6 {
 				state = "OFFLINE"
-			} else if !on4 {
+			} else if !v4 {
 				state = "PARTIAL(v4 OFF)"
-			} else if !on6 {
+			} else if !v6 {
 				state = "PARTIAL(v6 OFF)"
 			}
-			log.Log(log.Info, "  - %-16s %s", memberName, state)
+			log.Log(log.Info, "  - %-16s %s", mem, state)
 		}
 	}
 }
