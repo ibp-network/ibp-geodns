@@ -93,7 +93,7 @@ func propose(
 		Timestamp:      time.Now().UTC(),
 	}
 
-	log.Log(log.Info,
+	log.Log(log.Debug,
 		"[CONSENSUS] ➜ PROPOSAL created id=%s type=%s member=%s status=%v v6=%v",
 		prop.ID, prop.CheckType, prop.MemberName, prop.ProposedStatus, prop.IsIPv6)
 	log.Log(log.Debug, "[CONSENSUS]     details=%+v", prop)
@@ -131,7 +131,7 @@ func handleProposal(m *nats.Msg) {
 		log.Log(log.Error, "[NATS] handleProposal: unmarshal error: %v", err)
 		return
 	}
-	log.Log(log.Info,
+	log.Log(log.Debug,
 		"[CONSENSUS] ⇦ PROPOSAL received id=%s type=%s member=%s status=%v v6=%v",
 		prop.ID, prop.CheckType, prop.MemberName, prop.ProposedStatus, prop.IsIPv6)
 	markNodeHeard(prop.SenderNodeID)
@@ -230,7 +230,7 @@ func decideLocked(pt *ProposalTracking) {
 	}
 
 	if pt.Finalized {
-		log.Log(log.Info,
+		log.Log(log.Debug,
 			"[CONSENSUS] ✔ finalize id=%s PASS=%v yes=%d no=%d (%d active monitors)",
 			pt.Proposal.ID, pt.Passed, yes, no, total)
 
@@ -284,7 +284,7 @@ func handleFinalize(m *nats.Msg) {
 		log.Log(log.Error, "[NATS] handleFinalize: unmarshal error: %v", err)
 		return
 	}
-	log.Log(log.Info,
+	log.Log(log.Debug,
 		"[CONSENSUS] ⇦ FINALIZE id=%s PASS=%v", fm.Proposal.ID, fm.Passed)
 	markNodeHeard(fm.Proposal.SenderNodeID)
 
