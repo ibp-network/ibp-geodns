@@ -233,7 +233,7 @@ func runDomainCheck(check cfg.Check, fn CheckDomainFunc) {
 
 				for domain := range domains {
 					go domainCheckWrapper(check, fn, domain, svc, member)
-					time.Sleep(30 * time.Millisecond)
+					time.Sleep(100 * time.Millisecond)
 				}
 			}
 		}
@@ -330,7 +330,7 @@ func runEndpointCheck(check cfg.Check, fn CheckEndpointFunc) {
 							for _, provider := range svc.Providers {
 								for _, rpcURL := range provider.RpcUrls {
 									go endpointCheckWrapper(check, fn, rpcURL, svc, member)
-									time.Sleep(30 * time.Millisecond)
+									time.Sleep(100 * time.Millisecond)
 								}
 							}
 						}

@@ -18,7 +18,7 @@ func EnableMonitorRole() error {
 	State.SubjectVote = "consensus.vote"
 	State.SubjectFinalize = "consensus.finalize"
 	State.SubjectCluster = "consensus.cluster"
-	State.ProposalTimeout = 12 * time.Second
+	State.ProposalTimeout = 30 * time.Second
 
 	if State.Proposals == nil {
 		State.Proposals = make(map[ProposalID]*ProposalTracking)
@@ -406,7 +406,7 @@ func cleanOldProposals() {
 	defer State.Mu.Unlock()
 
 	now := time.Now().UTC()
-	threshold := 15 * time.Minute
+	threshold := 10 * time.Minute
 	for pid, pt := range State.Proposals {
 		if now.Sub(pt.Proposal.Timestamp) > threshold {
 			delete(State.Proposals, pid)
