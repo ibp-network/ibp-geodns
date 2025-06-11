@@ -230,7 +230,7 @@ func decideLocked(pt *ProposalTracking) {
 	}
 
 	if pt.Finalized {
-		log.Log(log.Debug,
+		log.Log(log.Info,
 			"[CONSENSUS] ✔ finalize id=%s PASS=%v yes=%d no=%d (%d active monitors)",
 			pt.Proposal.ID, pt.Passed, yes, no, total)
 
