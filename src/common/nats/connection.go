@@ -16,7 +16,14 @@ var (
 	connectionMu sync.Mutex
 )
 
-// Connect sets up the global NATS connection
+// GetConnection exposes the live *nats.Conn so other packages (consensus
+// manager, etc.) can publish/subscribe without creating a second socket.
+func GetConnection() *nats.Conn {
+	connectionMu.Lock()
+	defer connectionMu.Unlock()
+	return nc
+}
+
 func Connect() error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -35,9 +42,9 @@ func Connect() error {
 		nats.UserInfo(user, pass),
 		nats.MaxReconnects(30),
 		nats.ReconnectWait(2 * time.Second),
-		nats.Timeout(10 * time.Second),      // Add connection timeout
-		nats.PingInterval(20 * time.Second), // Keep connection alive
-		nats.MaxPingsOutstanding(5),         // Fail fast if connection is dead
+		nats.Timeout(10 * time.Second),
+		nats.PingInterval(20 * time.Second),
+		nats.MaxPingsOutstanding(5),
 		nats.DisconnectErrHandler(func(conn *nats.Conn, err error) {
 			if err != nil {
 				log.Log(log.Error, "[NATS] Disconnected: %v", err)
@@ -46,7 +53,7 @@ func Connect() error {
 			}
 		}),
 		nats.ReconnectHandler(func(conn *nats.Conn) {
-			log.Log(log.Info, "[NATS] Reconnected to %s", conn.ConnectedUrl())
+			log.Log(log.Info, "[NATS] Re‑connected to %s", conn.ConnectedUrl())
 		}),
 		nats.ClosedHandler(func(conn *nats.Conn) {
 			if lastErr := conn.LastError(); lastErr != nil {
@@ -70,7 +77,6 @@ func Connect() error {
 	return nil
 }
 
-// Disconnect forcibly closes
 func Disconnect() {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()

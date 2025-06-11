@@ -6,6 +6,7 @@ import (
 	"time"
 
 	api "ibp-geodns/src/IBPMonitor/api"
+	ibpcons "ibp-geodns/src/IBPMonitor/consensus"
 	"ibp-geodns/src/IBPMonitor/monitor"
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
@@ -14,10 +15,10 @@ import (
 	natsCommon "ibp-geodns/src/common/nats"
 )
 
-var version = "0.3.3"
+var version = "0.4.0"
 
 func main() {
-	log.Log(log.Info, "IBP-GeoDNS serviceMonitor v%s starting...", version)
+	log.Log(log.Info, "IBP‑GeoDNS serviceMonitor v%s starting ...", version)
 
 	cfgFile := flag.String("config", "ibpmonitor.json", "Path to the configuration file")
 	flag.Parse()
@@ -27,28 +28,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 1) Initialize config
+	// -----------------------------------------------------------------------
+	// bootstrap subsystems
+	// -----------------------------------------------------------------------
 	cfg.Init(*cfgFile)
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
-	log.Log(log.Info, "serviceMonitor is running with log level: %s", c.Local.System.LogLevel)
 
-	// 2) Initialize data
-	dat.Init(dat.InitOptions{
-		UseLocalOfficialCaches: true,
-		UseUsageStats:          false,
-	})
-
-	// 3) Initialize MaxMind
+	dat.Init(dat.InitOptions{UseLocalOfficialCaches: true, UseUsageStats: false})
 	max.Init()
 
-	// 4) Connect to NATS
 	if err := natsCommon.Connect(); err != nil {
 		log.Log(log.Fatal, "Failed to connect to NATS: %v", err)
 		os.Exit(1)
 	}
 
-	// 5) Set NodeID + ThisNode
+	// -----------------------------------------------------------------------
+	// consensus manager  (NEW)
+	// -----------------------------------------------------------------------
+	nc := natsCommon.GetConnection()
+	consMgr := ibpcons.NewManager(c.Local.Nats.NodeID, nc, 1) // quorum re‑computed later
+	monitor.SetConsensusManager(consMgr)
+
+	// -----------------------------------------------------------------------
+	// existing NATS heartbeat/roles (kept for metrics)
+	// -----------------------------------------------------------------------
 	natsCommon.State.NodeID = c.Local.Nats.NodeID
 	natsCommon.State.ThisNode = natsCommon.NodeInfo{
 		NodeID:        c.Local.Nats.NodeID,
@@ -56,20 +60,17 @@ func main() {
 		ListenPort:    "0",
 		NodeRole:      "IBPMonitor",
 	}
-
-	// 6) Enable Monitor role
 	if err := natsCommon.EnableMonitorRole(); err != nil {
 		log.Log(log.Fatal, "Failed to enable monitor role for NATS: %v", err)
 		os.Exit(1)
 	}
 
-	// 7) Start checks
+	// -----------------------------------------------------------------------
+	// start checks + API
+	// -----------------------------------------------------------------------
 	monitor.Init()
-
-	// 8) Start serviceMonitor API
 	api.Init()
 
-	// 9) Keep alive
 	for {
 		time.Sleep(60 * time.Second)
 	}

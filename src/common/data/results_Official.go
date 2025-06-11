@@ -20,6 +20,42 @@ var Official = OfficialResults{
 	Mu:              sync.RWMutex{},
 }
 
+type Snapshot struct {
+	SiteResults     []SiteResult     `json:"site"`
+	DomainResults   []DomainResult   `json:"domain"`
+	EndpointResults []EndpointResult `json:"endpoint"`
+}
+
+var (
+	muOfficial sync.RWMutex
+	official   Snapshot
+)
+
+// GetOfficialResults returns *immutable* slices.
+// Callers MUST NOT mutate the returned data.
+func GetOfficialResults() ([]SiteResult, []DomainResult, []EndpointResult) {
+	muOfficial.RLock()
+	defer muOfficial.RUnlock()
+	return official.SiteResults, official.DomainResults, official.EndpointResults
+}
+
+// SetOfficialSnapshot atomically replaces the entire official snapshot.
+func SetOfficialSnapshot(snap Snapshot) {
+	muOfficial.Lock()
+	official = snap
+	muOfficial.Unlock()
+}
+
+// BuildSnapshot is a convenience helper that takes the three
+// local result collections and produces a snapshot suitable for consensus.
+func BuildSnapshot(site []SiteResult, dom []DomainResult, eps []EndpointResult) Snapshot {
+	return Snapshot{
+		SiteResults:     site,
+		DomainResults:   dom,
+		EndpointResults: eps,
+	}
+}
+
 // --- store helpers ---------------------------------------------------------
 
 func SetOfficialSiteResults(results []SiteResult) {
@@ -38,14 +74,6 @@ func SetOfficialEndpointResults(results []EndpointResult) {
 	Official.Mu.Lock()
 	defer Official.Mu.Unlock()
 	Official.EndpointResults = results
-}
-
-// --- fetch helper ----------------------------------------------------------
-
-func GetOfficialResults() (sites []SiteResult, domains []DomainResult, endpoints []EndpointResult) {
-	Official.Mu.RLock()
-	defer Official.Mu.RUnlock()
-	return Official.SiteResults, Official.DomainResults, Official.EndpointResults
 }
 
 /*
