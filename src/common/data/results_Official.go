@@ -133,6 +133,8 @@ func UpdateOfficialSiteResult(check cfg.Check, member cfg.Member, status bool, e
 			sr.Results[rIndex] = newResult
 		}
 	}
+
+	publishSnapshotLocked()
 }
 
 func UpdateOfficialDomainResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string,
@@ -190,6 +192,8 @@ func UpdateOfficialDomainResult(check cfg.Check, member cfg.Member, service cfg.
 			dr.Results[rIndex] = newResult
 		}
 	}
+
+	publishSnapshotLocked()
 }
 
 func UpdateOfficialEndpointResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string, endpoint string,
@@ -248,6 +252,8 @@ func UpdateOfficialEndpointResult(check cfg.Check, member cfg.Member, service cf
 			er.Results[rIndex] = newResult
 		}
 	}
+
+	publishSnapshotLocked()
 }
 
 /*
@@ -341,4 +347,13 @@ func GetOfficialEndpointStatus(checkName, memberName, domain, endpoint string, i
 		}
 	}
 	return found, latest
+}
+
+func publishSnapshotLocked() {
+	snap := BuildSnapshot(
+		Official.SiteResults,
+		Official.DomainResults,
+		Official.EndpointResults,
+	)
+	SetOfficialSnapshot(snap)
 }
