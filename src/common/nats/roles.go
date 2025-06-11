@@ -12,6 +12,7 @@ import (
 
 // We define everything about node roles, cluster membership, marking
 // lastHeard, and so on.
+const activeNodeWindow = 5 * time.Minute
 
 func EnableMonitorRole() error {
 	State.SubjectPropose = "consensus.propose"
@@ -479,10 +480,7 @@ func IsNodeActive(ni NodeInfo) bool {
 	if ni.LastHeard.IsZero() {
 		return false
 	}
-	if time.Since(ni.LastHeard) > 2*time.Minute {
-		return false
-	}
-	return true
+	return time.Since(ni.LastHeard) < activeNodeWindow
 }
 
 // CountActiveDns returns how many IBPDns nodes are active

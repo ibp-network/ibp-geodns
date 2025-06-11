@@ -5,7 +5,8 @@ import (
 	"time"
 )
 
-// NodeState holds global cluster info for the node
+/* ───────── Node / proposal bookkeeping ───────── */
+
 type NodeState struct {
 	NodeID          string
 	ThisNode        NodeInfo
@@ -21,22 +22,18 @@ type NodeState struct {
 	JoinUrl         string
 }
 
-// State is the global NodeState instance
 var State NodeState
 
-// NodeInfo represents another node in the cluster
 type NodeInfo struct {
 	NodeID        string    `json:"NodeID"`
 	PublicAddress string    `json:"PublicAddress"`
 	ListenAddress string    `json:"ListenAddress"`
 	ListenPort    string    `json:"ListenPort"`
-	NodeRole      string    `json:"NodeRole"` // "IBPMonitor", "IBPDns", "IBPCollator", etc.
-	LastHeard     time.Time // Tracks last time we heard from this node
+	NodeRole      string    `json:"NodeRole"`
+	LastHeard     time.Time `json:"LastHeard"`
 }
 
-// ----------------------------------------------------------------------------
-// Proposal / Voting
-// ----------------------------------------------------------------------------
+/* ───────── Voting types ───────── */
 
 type ProposalID string
 
@@ -70,10 +67,6 @@ type Vote struct {
 	Agree        bool       `json:"Agree"`
 	Timestamp    time.Time  `json:"Timestamp"`
 }
-
-// ----------------------------------------------------------------------------
-// Finalize message  (now includes the Proposal so late‑arriving nodes can apply)
-// ----------------------------------------------------------------------------
 
 type FinalizeMessage struct {
 	ProposalID  ProposalID `json:"ProposalID"`
