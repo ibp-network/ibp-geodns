@@ -171,6 +171,8 @@ func handleAllMessages(m *nats.Msg) {
 				handleMonitorStatsData(m)
 			case subj == "dns.usage.usageData" || strings.Contains(subj, "usageReply"):
 				handleDnsUsageData(m)
+			case subj == State.SubjectFinalize || strings.Contains(subj, "usageReply"):
+				handleFinalize(m)
 			}
 		}
 	}()
