@@ -12,7 +12,7 @@ import (
 
 type Proposal struct {
 	ID        string
-	IPv6      string
+	IsIPv6    bool
 	Domain    string
 	Member    string
 	CheckName string
@@ -39,7 +39,7 @@ func StoreProposal(p Proposal) error {
 		    member     = VALUES(member),
 		    check_name = VALUES(check_name),
 		    check_type = VALUES(check_type)
-	`, p.ID, p.IPv6, p.Domain, p.Member, p.CheckName, p.CheckType, p.CreatedAt.UTC())
+	`, p.ID, p.IsIPv6, p.Domain, p.Member, p.CheckName, p.CheckType, p.CreatedAt.UTC())
 	return err
 }
 

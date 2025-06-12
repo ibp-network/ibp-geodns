@@ -11,6 +11,7 @@ import (
 
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
+	data2 "ibp-geodns/src/common/data2/"
 	log "ibp-geodns/src/common/logging"
 
 	"github.com/google/uuid"
@@ -288,8 +289,26 @@ func handleFinalize(m *nats.Msg) {
 		"[CONSENSUS] ⇦ FINALIZE id=%s PASS=%v", fm.Proposal.ID, fm.Passed)
 	markNodeHeard(fm.Proposal.SenderNodeID)
 
-	if fm.Passed {
+	/* -----------------------------------------------------------------
+	   Apply the decision only on the node types that need it:
+	   • IBPMonitor keeps the authoritative in‑memory snapshot.
+	   • IBPCollator persists the decision to MySQL via data2.
+	   ----------------------------------------------------------------- */
+	if fm.Passed && State.ThisNode.NodeRole == "IBPMonitor" {
 		applyOfficialChanges(fm.Proposal)
+	} else if fm.Passed && State.ThisNode.NodeRole == "IBPCollator" {
+		// Persist the accepted proposal for audit / billing.
+		if err := data2.StoreProposal(data2.Proposal{
+			ID:        string(fm.Proposal.ID),
+			IsIPv6:    fm.Proposal.IsIPv6,
+			Domain:    fm.Proposal.DomainName,
+			Member:    fm.Proposal.MemberName,
+			CheckName: fm.Proposal.CheckName,
+			CheckType: fm.Proposal.CheckType,
+			CreatedAt: fm.Proposal.Timestamp,
+		}); err != nil {
+			log.Log(log.Error, "[NATS] handleFinalize: data2.StoreProposal: %v", err)
+		}
 	}
 }
 

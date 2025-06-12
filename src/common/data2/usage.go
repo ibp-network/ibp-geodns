@@ -2,6 +2,8 @@ package data2
 
 import (
 	"database/sql"
+	log "ibp-geodns/src/common/logging"
+	"ibp-geodns/src/common/nats"
 	"time"
 )
 
@@ -51,4 +53,37 @@ func nullOrEmpty(s string) sql.NullString {
 		return sql.NullString{}
 	}
 	return sql.NullString{String: s, Valid: true}
+}
+
+// StoreUsageRecords persists a batch of NATS usage‑records.
+func StoreUsageRecords(in []nats.UsageRecord) error {
+
+	for _, rec := range in {
+		// Parse the YYYY‑MM‑DD date coming from the DNS nodes
+		dt, err := time.Parse("2006-01-02", rec.Date)
+		if err != nil {
+			log.Log(log.Warn,
+				"[data2] StoreUsageRecords: invalid date %q – skipping (%v)",
+				rec.Date, err)
+			continue
+		}
+
+		u := UsageRecord{
+			Date:        dt,
+			NodeID:      nats.State.NodeID, // the collator that writes the row
+			Domain:      rec.Domain,
+			MemberName:  rec.MemberName,
+			Asn:         rec.Asn,
+			NetworkName: rec.NetworkName,
+			CountryCode: rec.CountryCode,
+			CountryName: rec.CountryName,
+			IsIPv6:      false, // TBD when the wire‑format is upgraded
+			Hits:        rec.Hits,
+		}
+
+		if err := UpsertUsage(u); err != nil {
+			return err // bubble up so caller can log/handle
+		}
+	}
+	return nil
 }

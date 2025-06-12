@@ -1,17 +1,10 @@
 package main
 
-/*
-   IBP GeoDNS – Collator service
-   -----------------------------
-   • Consolidates proposals / votes / finalize messages coming from the
-     monitoring & DNS layers.
-   • Persists every change to MySQL for long‑term audit.
-   • Periodically requests per‑DNS‑node usage statistics so that billing
-     remains centralised.
-   • Listens on the same NATS cluster as every other component.
-
-   Build:  go build ./src/IBPCollator
-   Run  :  ./IBPCollator -config /path/to/collator.json
+/*  IBP‑GeoDNS ‑ Collator service
+    --------------------------------
+    Consolidates proposals / votes / finalise messages,
+    gathers usage statistics from all DNS nodes and
+    persists everything to MySQL for long‑term audit.
 */
 
 import (
@@ -29,32 +22,12 @@ import (
 	"github.com/nats-io/nats.go"
 
 	cfg "ibp-geodns/src/common/config"
-	"ibp-geodns/src/common/data2"
+	data2 "ibp-geodns/src/common/data2"
 	log "ibp-geodns/src/common/logging"
 	natsCommon "ibp-geodns/src/common/nats"
 )
 
-/* -------------------------------------------------------------------------- */
-/*  Configuration                                                             */
-/* -------------------------------------------------------------------------- */
-
-// Config is loaded from the JSON file passed via -config.
-type Config struct {
-	Node string `json:"node"`
-
-	MySQL struct {
-		// <user>:<pass>@tcp(<host>:<port>)/<db>?parseTime=true
-		DSN      string `json:"dsn"`
-		MaxOpen  int    `json:"max_open"`
-		MaxIdle  int    `json:"max_idle"`
-		ConnLife int    `json:"conn_max_lifetime_seconds"`
-	} `json:"mysql"`
-
-	NATS struct {
-		URL          string        `json:"url"`
-		ReconnectDur time.Duration `json:"reconnect_wait_ms"`
-	} `json:"nats"`
-}
+var version = cfg.GetVersion()
 
 /* -------------------------------------------------------------------------- */
 /*  Collator runtime structure                                                */
@@ -63,60 +36,33 @@ type Config struct {
 type collator struct {
 	cfg   cfg.Config
 	db    *sql.DB
-	nc    *nats.Conn
-	votes map[string]Vote // last vote received, keyed by member name
-	mu    sync.Mutex      // protects votes
-}
-
-/* -------------------------------------------------------------------------- */
-/*  NATS payloads                                                             */
-/* -------------------------------------------------------------------------- */
-
-// Vote is broadcast by IBPDns nodes when they vote on a proposal.
-type Vote struct {
-	Member   string `json:"member"`
-	Proposal string `json:"proposal_id"`
-	Value    bool   `json:"value"`
-}
-
-// Finalize is emitted by the chair node to close a voting round.
-type Finalize struct {
-	Proposal string `json:"proposal_id"`
-}
-
-// Proposal carries all metadata required to create a check row in MySQL.
-type Proposal struct {
-	ID        string    `json:"id"`
-	IPv6      string    `json:"ipv6"`
-	Domain    string    `json:"domain"`
-	Member    string    `json:"member"`
-	CheckName string    `json:"check_name"`
-	CheckType string    `json:"check_type"`
-	CreatedAt time.Time `json:"created_at"`
+	votes map[string]natsCommon.Vote // keyed by NodeID (not member name any more)
+	mu    sync.Mutex
 }
 
 /* -------------------------------------------------------------------------- */
 /*  main()                                                                    */
 /* -------------------------------------------------------------------------- */
-var version = cfg.GetVersion()
 
 func main() {
-	log.Log(log.Info, "IBPCollator %s starting...", version)
+	log.Log(log.Info, "IBP‑GeoDNS Collator v%s starting…", version)
 
-	cfgFile := flag.String("config", "ibpdns.json", "Path to configuration file")
+	cfgFile := flag.String("config", "ibpcollator.json", "Path to configuration file")
 	flag.Parse()
 
 	if _, err := os.Stat(*cfgFile); os.IsNotExist(err) {
-		log.Log(log.Fatal, "Configuration file not found: %s", *cfgFile)
+		log.Log(log.Fatal, "configuration file not found: %s", *cfgFile)
 		os.Exit(1)
 	}
+
+	/* ---- configuration & logging --------------------------------------- */
 
 	cfg.Init(*cfgFile)
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
-	log.Log(log.Info, "DNS API is running with log level: %s", c.Local.System.LogLevel)
+	log.Log(log.Info, "collator log‑level: %s", c.Local.System.LogLevel)
 
-	/* ---- MySQL ----------------------------------------------------------- */
+	/* ---- MySQL --------------------------------------------------------- */
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
 		c.Local.Mysql.User,
@@ -128,160 +74,224 @@ func main() {
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "MySQL connection failed: %v\n", err)
+		log.Log(log.Fatal, "MySQL connection failed: %v", err)
 		os.Exit(1)
 	}
 	if err := db.Ping(); err != nil {
-		fmt.Fprintf(os.Stderr, "unable to ping MySQL: %v\n", err)
+		log.Log(log.Fatal, "unable to ping MySQL: %v", err)
 		os.Exit(1)
 	}
-	data2.Init() // ensure data2.DB is initialised
-	fmt.Println("[data2] Connected to MySQL")
+	data2.Init() // make sure data2.DB is initialised
+	log.Log(log.Info, "[data2] connected to MySQL")
 
-	/* ---- NATS ------------------------------------------------------------ */
+	/* ---- NATS ---------------------------------------------------------- */
 
 	if err := natsCommon.Connect(); err != nil {
-		log.Log(log.Fatal, "Failed to connect to NATS: %v", err)
+		log.Log(log.Fatal, "failed to connect to NATS: %v", err)
 		os.Exit(1)
 	}
 
-	// NATS role
+	// Advertise ourselves with the **correct** role so the rest of the
+	// cluster can see us and the wildcard subscription dispatcher in
+	// src/common/nats/roles.go sends the right messages our way.
 	natsCommon.State.NodeID = c.Local.Nats.NodeID
 	natsCommon.State.ThisNode = natsCommon.NodeInfo{
 		NodeID:        c.Local.Nats.NodeID,
 		ListenAddress: "0.0.0.0",
 		ListenPort:    "0",
-		NodeRole:      "IBPDns",
+		NodeRole:      "IBPCollator",
 	}
-
 	if err := natsCommon.EnableCollatorRole(); err != nil {
-		log.Log(log.Fatal, "Failed to enable DNSApi role: %v", err)
+		log.Log(log.Fatal, "failed to enable Collator role: %v", err)
 		os.Exit(1)
 	}
 
-	/* ---- Bring the collator to life ------------------------------------- */
+	/* ---- bring the collator to life ----------------------------------- */
 
 	col := &collator{
 		cfg:   c,
 		db:    db,
-		nc:    natsCommon.GetConnection(),
-		votes: make(map[string]Vote),
+		votes: make(map[string]natsCommon.Vote),
 	}
 	if err := col.subscribe(); err != nil {
-		fmt.Fprintf(os.Stderr, "[collator] subscribe error: %v\n", err)
+		log.Log(log.Fatal, "subscription error: %v", err)
 		os.Exit(1)
 	}
-	fmt.Println("[collator] subscriptions active")
+	log.Log(log.Info, "[collator] NATS subscriptions active")
 
 	go col.startUsageCollector()
 
-	/* ---- Graceful shutdown --------------------------------------------- */
+	/* ---- graceful shutdown -------------------------------------------- */
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
-	fmt.Println("signal received – shutting down …")
-
-	db.Close()
-	fmt.Println("bye")
+	log.Log(log.Info, "signal received — shutting down")
+	_ = db.Close()
+	log.Log(log.Info, "bye")
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Subscription & handlers                                                   */
+/*  NATS subscriptions & handlers                                             */
 /* -------------------------------------------------------------------------- */
 
 func (c *collator) subscribe() error {
-	// Votes
-	if _, err := c.nc.Subscribe("ibp.vote", c.handleVote); err != nil {
+	// proposals
+	if _, err := natsCommon.Subscribe(natsCommon.State.SubjectPropose, c.handleProposal); err != nil {
 		return err
 	}
-	// Finalize round
-	if _, err := c.nc.Subscribe("ibp.finalize", c.handleFinalize); err != nil {
+	// votes
+	if _, err := natsCommon.Subscribe(natsCommon.State.SubjectVote, c.handleVote); err != nil {
 		return err
 	}
-	// Proposals
-	if _, err := c.nc.Subscribe("ibp.proposal", c.handleProposal); err != nil {
+	// finalisation
+	if _, err := natsCommon.Subscribe(natsCommon.State.SubjectFinalize, c.handleFinalize); err != nil {
 		return err
 	}
+	// usage data is broadcast (non‑request/reply) – the wildcard dispatcher
+	// in roles.go already routes it to handleDnsUsageData, which marks nodes
+	// as heard.  We subscribe here as well so we can store it.
+	if _, err := natsCommon.Subscribe("dns.usage.usageData", c.handleUsageData); err != nil {
+		return err
+	}
+
 	return nil
 }
 
+/* ---------------------------- Proposal ------------------------------------ */
+
+func (c *collator) handleProposal(m *nats.Msg) {
+	var p natsCommon.Proposal
+	if err := json.Unmarshal(m.Data, &p); err != nil {
+		log.Log(log.Error, "[collator] bad proposal payload: %v", err)
+		return
+	}
+	if p.Timestamp.IsZero() {
+		p.Timestamp = time.Now().UTC()
+	}
+
+	if err := data2.StoreProposal(data2.Proposal{
+		ID:        string(p.ID),
+		IsIPv6:    p.IsIPv6,
+		Domain:    p.DomainName,
+		Member:    p.MemberName,
+		CheckName: p.CheckName,
+		CheckType: p.CheckType,
+		CreatedAt: p.Timestamp,
+	}); err != nil {
+		log.Log(log.Error, "[collator] StoreProposal: %v", err)
+	}
+}
+
+/* ------------------------------ Vote -------------------------------------- */
+
 func (c *collator) handleVote(m *nats.Msg) {
-	var v Vote
+	var v natsCommon.Vote
 	if err := json.Unmarshal(m.Data, &v); err != nil {
-		fmt.Printf("[collator] bad vote payload: %v\n", err)
+		log.Log(log.Error, "[collator] bad vote payload: %v", err)
+		return
+	}
+
+	key := v.NodeID
+	if key == "" {
+		key = v.SenderNodeID
+	}
+	if key == "" {
+		// should never happen, but guard anyway
 		return
 	}
 
 	c.mu.Lock()
-	c.votes[v.Member] = v
+	c.votes[key] = v
 	c.mu.Unlock()
 }
 
+/* ---------------------------- Finalise ------------------------------------ */
+
 func (c *collator) handleFinalize(m *nats.Msg) {
-	var f Finalize
-	if err := json.Unmarshal(m.Data, &f); err != nil {
-		fmt.Printf("[collator] bad finalize payload: %v\n", err)
+	var fm natsCommon.FinalizeMessage
+	if err := json.Unmarshal(m.Data, &fm); err != nil {
+		log.Log(log.Error, "[collator] bad finalize payload: %v", err)
 		return
 	}
 
+	/* tally local vote cache for this proposal */
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Tally votes for this proposal
 	yes, total := 0, 0
 	for _, v := range c.votes {
-		if v.Proposal == f.Proposal {
+		if v.ProposalID == fm.Proposal.ID {
 			total++
-			if v.Value {
+			if v.Agree {
 				yes++
 			}
+			// delete to keep map size bounded
+			delete(c.votes, v.NodeID)
 		}
 	}
-	c.deleteVotesForProposal(f.Proposal)
+	c.mu.Unlock()
 
-	fmt.Printf("[collator] finalize %s – yes=%d / %d\n", f.Proposal, yes, total)
-	if err := data2.MarkProposalFinal(f.Proposal, yes, total); err != nil {
-		fmt.Printf("[collator] MarkProposalFinal: %v\n", err)
+	log.Log(log.Info, "[collator] FINALISE %s  yes=%d / %d  passed=%v",
+		fm.Proposal.ID, yes, total, fm.Passed)
+
+	if err := data2.MarkProposalFinal(string(fm.Proposal.ID), yes, total); err != nil {
+		log.Log(log.Error, "[collator] MarkProposalFinal: %v", err)
 	}
 }
 
-func (c *collator) deleteVotesForProposal(pid string) {
-	for k, v := range c.votes {
-		if v.Proposal == pid {
-			delete(c.votes, k)
-		}
-	}
-}
+/* ---------------------------- Usage data ---------------------------------- */
 
-func (c *collator) handleProposal(m *nats.Msg) {
-	var p Proposal
-	if err := json.Unmarshal(m.Data, &p); err != nil {
-		fmt.Printf("[collator] bad proposal payload: %v\n", err)
+func (c *collator) handleUsageData(m *nats.Msg) {
+	var resp natsCommon.UsageResponse
+	if err := json.Unmarshal(m.Data, &resp); err != nil {
+		log.Log(log.Error, "[collator] usage‑data unmarshal error: %v", err)
 		return
 	}
-	if p.CreatedAt.IsZero() {
-		p.CreatedAt = time.Now().UTC()
+
+	if len(resp.UsageRecords) == 0 {
+		return
 	}
 
-	if err := data2.StoreProposal(data2.Proposal(p)); err != nil {
-		fmt.Printf("[collator] StoreProposal: %v\n", err)
+	if err := data2.StoreUsageRecords(resp.UsageRecords); err != nil {
+		log.Log(log.Error, "[collator] StoreUsageRecords: %v", err)
 	}
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Usage collector (periodic broadcast)                                      */
+/*  Usage collector (periodic request/aggregation)                            */
 /* -------------------------------------------------------------------------- */
 
 func (c *collator) startUsageCollector() {
-	tick := time.NewTicker(30 * time.Minute)
-	defer tick.Stop()
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
 
-	for range tick.C {
-		if err := c.nc.Publish("ibp.usage.request", nil); err != nil {
-			fmt.Printf("[collator] usage request error: %v\n", err)
-		} else {
-			fmt.Println("[collator] requesting usage from all DNS nodes")
+	for {
+		<-ticker.C
+
+		today := time.Now().UTC().Format("2006-01-02")
+		req := natsCommon.UsageRequest{
+			StartDate:  today,
+			EndDate:    today,
+			Domain:     "",
+			MemberName: "",
+			Country:    "",
 		}
+
+		records, err := natsCommon.RequestAllDnsUsage(req, 20*time.Second)
+		if err != nil {
+			log.Log(log.Error, "[collator] RequestAllDnsUsage: %v", err)
+			continue
+		}
+
+		if len(records) == 0 {
+			log.Log(log.Info, "[collator] usage collector: 0 records returned (no active DNS nodes?)")
+			continue
+		}
+
+		if err := data2.StoreUsageRecords(records); err != nil {
+			log.Log(log.Error, "[collator] StoreUsageRecords: %v", err)
+			continue
+		}
+
+		log.Log(log.Info, "[collator] stored %d DNS‑usage record(s)", len(records))
 	}
 }
