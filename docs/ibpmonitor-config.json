@@ -1,6 +1,6 @@
 {
     "System": {
-        "WorkDir": "D:\\Sync\\Projects\\stake.plus\\code\\ibp-geodns-v2\\",
+        "WorkDir": "/opt/ibp-geodns/",
         "LogLevel": "Debug",
         "ConfigUrls": {
             "StaticDNSConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/geodns-static.json",

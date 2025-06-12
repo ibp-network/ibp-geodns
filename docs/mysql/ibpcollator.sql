@@ -24,6 +24,7 @@ CREATE TABLE `ibpcollator_netStatus` (
   `start_time`  DATETIME NOT NULL DEFAULT(NOW()),
   `end_time` DATETIME DEFAULT NULL,
   `error` TEXT,
+  `vote_data` JSON NOT NULL,
   `additional_data` JSON DEFAULT NULL,
   PRIMARY KEY (`check_type`(2),`check_name`(16),`check_url`(64),`member_name`(24),`domain_name`(48),`is_ipv6`(1)),
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
