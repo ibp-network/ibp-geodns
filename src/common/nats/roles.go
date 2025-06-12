@@ -23,7 +23,7 @@ import (
 /*──────────────────────────── constants ──────────────────────────────*/
 
 const (
-	activeNodeWindow        = 5 * time.Minute
+	activeNodeWindow        = 10 * time.Minute
 	broadcastJoinRetryCount = 3
 	broadcastJoinDelay      = 500 * time.Millisecond
 )
@@ -96,7 +96,7 @@ func enableRoleInternal(role string) error {
 func startHeartbeat() {
 	go func() {
 		time.Sleep(2 * time.Second) // allow subscriptions to settle
-		t := time.NewTicker(300 * time.Second)
+		t := time.NewTicker(90 * time.Second)
 		defer t.Stop()
 		for range t.C {
 			State.Mu.Lock()

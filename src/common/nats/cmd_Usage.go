@@ -310,6 +310,8 @@ func handleDnsUsageData(m *nats.Msg) {
 		log.Log(log.Error, "[NATS] handleDnsUsageData: unmarshal error: %v", err)
 		return
 	}
+	markNodeHeard(resp.NodeID)
+
 	log.Log(log.Debug, "[NATS] handleDnsUsageData: got %d usage records from node=%s",
 		len(resp.UsageRecords), resp.NodeID)
 	// Collator would process these records here
