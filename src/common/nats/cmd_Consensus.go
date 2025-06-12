@@ -11,7 +11,7 @@ import (
 
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
-	data2 "ibp-geodns/src/common/data2/"
+	data2 "ibp-geodns/src/common/data2"
 	log "ibp-geodns/src/common/logging"
 
 	"github.com/google/uuid"
