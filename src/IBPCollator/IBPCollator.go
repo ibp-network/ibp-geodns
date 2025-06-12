@@ -31,6 +31,7 @@ import (
 	cfg "ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data2"
 	log "ibp-geodns/src/common/logging"
+	natsCommon "ibp-geodns/src/common/nats"
 )
 
 /* -------------------------------------------------------------------------- */
@@ -139,22 +140,31 @@ func main() {
 
 	/* ---- NATS ------------------------------------------------------------ */
 
-	nc, err := nats.Connect(
-		c.Local.Nats.Url,
-		nats.Name(fmt.Sprintf("IBPCollator‑%s", c.Local.Nats.NodeID)),
-	)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cannot connect to NATS: %v\n", err)
+	if err := natsCommon.Connect(); err != nil {
+		log.Log(log.Fatal, "Failed to connect to NATS: %v", err)
 		os.Exit(1)
 	}
-	fmt.Printf("[NATS] Connected (%s)\n", c.Local.Nats.Url)
+
+	// NATS role
+	natsCommon.State.NodeID = c.Local.Nats.NodeID
+	natsCommon.State.ThisNode = natsCommon.NodeInfo{
+		NodeID:        c.Local.Nats.NodeID,
+		ListenAddress: "0.0.0.0",
+		ListenPort:    "0",
+		NodeRole:      "IBPDns",
+	}
+
+	if err := natsCommon.EnableCollatorRole(); err != nil {
+		log.Log(log.Fatal, "Failed to enable DNSApi role: %v", err)
+		os.Exit(1)
+	}
 
 	/* ---- Bring the collator to life ------------------------------------- */
 
 	col := &collator{
 		cfg:   c,
 		db:    db,
-		nc:    nc,
+		nc:    natsCommon.GetConnection(),
 		votes: make(map[string]Vote),
 	}
 	if err := col.subscribe(); err != nil {
@@ -172,7 +182,6 @@ func main() {
 	<-sig
 	fmt.Println("signal received – shutting down …")
 
-	nc.Drain()
 	db.Close()
 	fmt.Println("bye")
 }
