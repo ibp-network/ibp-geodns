@@ -17,7 +17,7 @@ import (
 var version = cfg.GetVersion()
 
 func main() {
-	log.Log(log.Info, "IBP‑GeoDNS serviceMonitor v%s starting …", version)
+	log.Log(log.Info, "IBPMonitor %s starting...", version)
 
 	cfgPath := flag.String("config", "ibpmonitor.json", "Path to the configuration file")
 	flag.Parse()
