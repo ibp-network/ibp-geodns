@@ -28,8 +28,9 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/nats-io/nats.go"
 
-	"ibp-geodns/src/common/config"
+	cfg "ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data2"
+	log "ibp-geodns/src/common/logging"
 )
 
 /* -------------------------------------------------------------------------- */
@@ -59,7 +60,7 @@ type Config struct {
 /* -------------------------------------------------------------------------- */
 
 type collator struct {
-	cfg   Config
+	cfg   cfg.Config
 	db    *sql.DB
 	nc    *nats.Conn
 	votes map[string]Vote // last vote received, keyed by member name
@@ -96,36 +97,32 @@ type Proposal struct {
 /* -------------------------------------------------------------------------- */
 /*  main()                                                                    */
 /* -------------------------------------------------------------------------- */
+var version = cfg.GetVersion()
 
 func main() {
-	/* ---- CLI flags ------------------------------------------------------- */
+	log.Log(log.Info, "IBP-GeoDNS DNS backend v%s starting...", version)
 
-	cfgPath := flag.String("config", "", "path to JSON configuration file")
+	cfgFile := flag.String("config", "ibpdns.json", "Path to configuration file")
 	flag.Parse()
-	if *cfgPath == "" {
-		fmt.Fprintln(os.Stderr, "ERROR: -config flag is required")
+
+	if _, err := os.Stat(*cfgFile); os.IsNotExist(err) {
+		log.Log(log.Fatal, "Configuration file not found: %s", *cfgFile)
 		os.Exit(1)
 	}
 
-	/* ---- Load config ----------------------------------------------------- */
-
-	var cfg Config
-	if err := readJSONFile(*cfgPath, &cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to read config: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("IBP‑GeoDNS Collator v0.4.1 starting (node=%s)\n", cfg.Node)
+	cfg.Init(*cfgFile)
+	c := cfg.GetConfig()
+	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
+	log.Log(log.Info, "DNS API is running with log level: %s", c.Local.System.LogLevel)
 
 	/* ---- MySQL ----------------------------------------------------------- */
 
-	globalCfg := config.GetConfig() // reuse cluster‑wide JSON for credentials
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
-		globalCfg.Local.Mysql.User,
-		globalCfg.Local.Mysql.Pass,
-		globalCfg.Local.Mysql.Host,
-		globalCfg.Local.Mysql.Port,
-		globalCfg.Local.Mysql.DB,
+		c.Local.Mysql.User,
+		c.Local.Mysql.Pass,
+		c.Local.Mysql.Host,
+		c.Local.Mysql.Port,
+		c.Local.Mysql.DB,
 	)
 
 	db, err := sql.Open("mysql", dsn)
@@ -143,20 +140,19 @@ func main() {
 	/* ---- NATS ------------------------------------------------------------ */
 
 	nc, err := nats.Connect(
-		cfg.NATS.URL,
-		nats.Name(fmt.Sprintf("IBPCollator‑%s", cfg.Node)),
-		nats.ReconnectWait(cfg.NATS.ReconnectDur*time.Millisecond),
+		c.Local.Nats.Url,
+		nats.Name(fmt.Sprintf("IBPCollator‑%s", c.Local.Nats.NodeID)),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cannot connect to NATS: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("[NATS] Connected (%s)\n", cfg.NATS.URL)
+	fmt.Printf("[NATS] Connected (%s)\n", c.Local.Nats.Url)
 
 	/* ---- Bring the collator to life ------------------------------------- */
 
 	col := &collator{
-		cfg:   cfg,
+		cfg:   c,
 		db:    db,
 		nc:    nc,
 		votes: make(map[string]Vote),
@@ -279,17 +275,4 @@ func (c *collator) startUsageCollector() {
 			fmt.Println("[collator] requesting usage from all DNS nodes")
 		}
 	}
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Utility                                                                   */
-/* -------------------------------------------------------------------------- */
-
-func readJSONFile(path string, v any) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	return json.NewDecoder(f).Decode(v)
 }
