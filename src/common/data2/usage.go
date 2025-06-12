@@ -1,0 +1,54 @@
+package data2
+
+import (
+	"database/sql"
+	"time"
+)
+
+// UsageRecord mirrors ibpcollator_usage
+type UsageRecord struct {
+	Date        time.Time
+	NodeID      string
+	Domain      string
+	MemberName  string
+	Asn         string
+	NetworkName string
+	CountryCode string
+	CountryName string
+	IsIPv6      bool
+	Hits        int
+}
+
+// UpsertUsage writes / increments a row in ibpcollator_usage.
+func UpsertUsage(r UsageRecord) error {
+	q := `INSERT INTO ibpcollator_usage
+		(date,node_id,domain_name,member_name,network_asn,network_name,country_code,country_name,is_ipv6,hits)
+		VALUES (?,?,?,?,?,?,?,?,?,?)
+		ON DUPLICATE KEY UPDATE hits = hits + VALUES(hits)`
+
+	ipFlag := "ipv4"
+	if r.IsIPv6 {
+		ipFlag = "ipv6"
+	}
+
+	_, err := DB.Exec(q,
+		r.Date.Format("2006-01-02"),
+		r.NodeID,
+		r.Domain,
+		nullOrEmpty(r.MemberName),
+		nullOrEmpty(r.Asn),
+		nullOrEmpty(r.NetworkName),
+		nullOrEmpty(r.CountryCode),
+		nullOrEmpty(r.CountryName),
+		ipFlag,
+		r.Hits,
+	)
+	return err
+}
+
+func nullOrEmpty(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: s, Valid: true}
+}

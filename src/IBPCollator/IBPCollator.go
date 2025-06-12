@@ -1,100 +1,209 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
-	nconn "ibp-geodns/src/common/nats"
+	nc "ibp-geodns/src/common/nats"
+
+	d2 "ibp-geodns/src/common/data2"
+
+	"github.com/nats-io/nats.go"
 )
 
-var version = "0.3.3"
+var version = "1.0.0"
 
+// ---------- main ----------
 func main() {
-	log.Log(log.Info, "IBP-GeoDNS Collator v%s starting...", version)
+	fmt.Printf("IBP‑GeoDNS Collator v%s starting\n", version)
 
-	configPath := flag.String("config", "ibpcollator.json", "Path to config file")
+	confPath := flag.String("config", "ibpcollator.json", "Path to config file")
 	flag.Parse()
 
-	if _, err := os.Stat(*configPath); os.IsNotExist(err) {
-		fmt.Printf("Configuration file not found: %s\n", *configPath)
-		os.Exit(1)
+	if _, err := os.Stat(*confPath); os.IsNotExist(err) {
+		log.Log(log.Fatal, "[collator] config file missing: %s", *confPath)
 	}
 
-	cfg.Init(*configPath)
+	cfg.Init(*confPath)
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
-	log.Log(log.Info, "[Collator] Starting with config=%s", *configPath)
 
-	err := nconn.Connect()
-	if err != nil {
-		log.Log(log.Fatal, "[Collator] Failed to connect to NATS: %v", err)
-		os.Exit(1)
+	// 1. MySQL (blocking)
+	d2.Init()
+
+	// 2. NATS
+	if err := nc.Connect(); err != nil {
+		log.Log(log.Fatal, "[collator] NATS connect error: %v", err)
 	}
+	defer nc.Disconnect()
 
-	nconn.State.NodeID = c.Local.Nats.NodeID
-	nconn.State.ThisNode = nconn.NodeInfo{
+	nc.State.NodeID = c.Local.Nats.NodeID
+	nc.State.ThisNode = nc.NodeInfo{
 		NodeID:        c.Local.Nats.NodeID,
+		PublicAddress: "",
 		ListenAddress: "0.0.0.0",
 		ListenPort:    "0",
 		NodeRole:      "IBPCollator",
 	}
-
-	err = nconn.EnableCollatorRole()
-	if err != nil {
-		log.Log(log.Fatal, "[Collator] Failed to enable Collator role: %v", err)
-		os.Exit(1)
+	if err := nc.EnableCollatorRole(); err != nil {
+		log.Log(log.Fatal, "[collator] enable role error: %v", err)
 	}
 
-	// (Optional) Wait a bit for membership if needed
-	time.Sleep(1 * time.Second)
+	// 3. Consensus listeners
+	initConsensusListeners()
 
-	log.Log(log.Info, "[Collator] Requesting usage data from all IBPDns nodes...")
-	usageReq := nconn.UsageRequest{
-		StartDate:  "2025-06-07",
-		EndDate:    "2025-06-07",
+	// 4. Schedule usage polling
+	go startUsageCollector()
+
+	// Block forever
+	select {}
+}
+
+// ---------- consensus wiring ----------
+func initConsensusListeners() {
+	// votes
+	_, err := nc.Subscribe(nc.State.SubjectVote, handleVote)
+	if err != nil {
+		log.Log(log.Fatal, "[collator] subscribe vote: %v", err)
+	}
+
+	// final decisions
+	_, err = nc.Subscribe(nc.State.SubjectFinalize, handleFinalize)
+	if err != nil {
+		log.Log(log.Fatal, "[collator] subscribe finalize: %v", err)
+	}
+	log.Log(log.Info, "[collator] subscribed to vote & finalize subjects")
+}
+
+// In‑memory vote cache  (ProposalID -> map[nodeID]bool)
+var voteCache = make(map[nc.ProposalID]map[string]bool)
+
+// ---------- handlers ----------
+func handleVote(m *nats.Msg) {
+	var v nc.Vote
+	if err := json.Unmarshal(m.Data, &v); err != nil {
+		log.Log(log.Error, "[collator] vote unmarshal: %v", err)
+		return
+	}
+	if voteCache[v.ProposalID] == nil {
+		voteCache[v.ProposalID] = make(map[string]bool)
+	}
+	voteCache[v.ProposalID][v.NodeID] = v.Agree
+}
+
+func handleFinalize(m *nats.Msg) {
+	var fm nc.FinalizeMessage
+	if err := json.Unmarshal(m.Data, &fm); err != nil {
+		log.Log(log.Error, "[collator] finalize unmarshal: %v", err)
+		return
+	}
+
+	prop := fm.Proposal
+	votes := voteCache[prop.ID]
+	delete(voteCache, prop.ID) // free memory
+
+	// Build record
+	rec := d2.NetStatusRecord{
+		CheckType: checkTypeToInt(prop.CheckType),
+		CheckName: prop.CheckName,
+		CheckURL:  deriveCheckURL(prop),
+		Domain:    prop.DomainName,
+		Member:    prop.MemberName,
+		Status:    prop.ProposedStatus,
+		IsIPv6:    prop.IsIPv6,
+		StartTime: time.Now().UTC(),
+		VoteData:  votes,
+	}
+
+	if prop.ProposedStatus {
+		// member came ONLINE – close any open downtime
+		if err := d2.CloseOpenEvent(rec); err != nil {
+			log.Log(log.Error, "[collator] close open event: %v", err)
+		}
+	} else {
+		// OFFLINE – open / update event
+		if err := d2.InsertNetStatus(rec); err != nil {
+			log.Log(log.Error, "[collator] insert netStatus: %v", err)
+		}
+	}
+}
+
+// ---------- usage collection ----------
+func startUsageCollector() {
+	// first run shortly after boot
+	time.Sleep(20 * time.Second)
+	runUsageCollection()
+
+	ticker := time.NewTicker(4 * time.Hour)
+	for range ticker.C {
+		runUsageCollection()
+	}
+}
+
+func runUsageCollection() {
+	log.Log(log.Info, "[collator] requesting usage from all DNS nodes")
+	today := time.Now().UTC().Format("2006-01-02")
+	req := nc.UsageRequest{
+		StartDate:  today,
+		EndDate:    today,
 		Domain:     "",
 		MemberName: "",
 		Country:    "",
 	}
-	usageRecords, err := nconn.RequestAllDnsUsage(usageReq, 5*time.Second)
+
+	records, err := nc.RequestAllDnsUsage(req, 10*time.Second)
 	if err != nil {
-		log.Log(log.Error, "[Collator] Usage request error: %v", err)
-	} else {
-		log.Log(log.Info, "[Collator] Received total of %d usage records", len(usageRecords))
+		log.Log(log.Error, "[collator] usage request error: %v", err)
+		return
 	}
-
-	log.Log(log.Info, "[Collator] Requesting downtime data from all IBPMonitor nodes...")
-	dtReq := nconn.DowntimeRequest{
-		StartTime:  time.Date(2025, 6, 07, 0, 0, 0, 0, time.UTC),
-		EndTime:    time.Date(2025, 6, 07, 23, 59, 59, 0, time.UTC),
-		MemberName: "",
+	for _, r := range records {
+		u := d2.UsageRecord{
+			Date:        parseDate(r.Date),
+			NodeID:      nc.State.NodeID,
+			Domain:      r.Domain,
+			MemberName:  r.MemberName,
+			Asn:         r.Asn,
+			NetworkName: r.NetworkName,
+			CountryCode: r.CountryCode,
+			CountryName: r.CountryName,
+			IsIPv6:      false, // TODO: extend UsageRecord to transport v6/v4 info
+			Hits:        r.Hits,
+		}
+		if err := d2.UpsertUsage(u); err != nil {
+			log.Log(log.Error, "[collator] usage upsert: %v", err)
+		}
 	}
-	dtEvents, err := nconn.RequestAllMonitorsDowntime(dtReq, 5*time.Second)
-	if err != nil {
-		log.Log(log.Error, "[Collator] Downtime request error: %v", err)
-	} else {
-		log.Log(log.Info, "[Collator] Received total of %d downtime events", len(dtEvents))
+	log.Log(log.Info, "[collator] usage collection finished – %d rows", len(records))
+}
+
+// ---------- helpers ----------
+func parseDate(s string) time.Time {
+	t, _ := time.Parse("2006-01-02", s)
+	return t
+}
+
+func checkTypeToInt(s string) int {
+	switch strings.ToLower(s) {
+	case "site":
+		return 0
+	case "domain":
+		return 1
+	case "endpoint":
+		return 2
+	default:
+		return 9
 	}
+}
 
-	fmt.Printf("=== Usage Records (count=%d) ===\n", len(usageRecords))
-	for i, rec := range usageRecords {
-		fmt.Printf("[%d] Date=%s Domain=%s Member=%s Country=%s Hits=%d\n",
-			i+1, rec.Date, rec.Domain, rec.MemberName, rec.CountryCode, rec.Hits)
+func deriveCheckURL(p nc.Proposal) string {
+	if p.CheckType == "endpoint" {
+		return p.Endpoint
 	}
-
-	fmt.Printf("\n=== Downtime Events (count=%d) ===\n", len(dtEvents))
-	for i, evt := range dtEvents {
-		fmt.Printf("[%d] Member=%s CheckType=%s CheckName=%s Domain=%s Endpoint=%s Status=%v Start=%s End=%s\n",
-			i+1, evt.MemberName, evt.CheckType, evt.CheckName, evt.DomainName, evt.Endpoint,
-			evt.Status, evt.StartTime.Format(time.RFC3339), evt.EndTime.Format(time.RFC3339))
-	}
-
-	log.Log(log.Info, "[Collator] Done, exiting now.")
-
-	time.Sleep(1 * time.Second)
-	nconn.Disconnect()
+	return p.DomainName
 }

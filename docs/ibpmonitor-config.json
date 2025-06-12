@@ -10,8 +10,7 @@
             "ServicesRequestsConfig": "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/services_rpc_requests.json"
         },
         "ConfigReloadTime": 3600,
-        "CacheSaveTime": 90,
-        "MinimumOfflineTime": 3600
+        "MinimumOfflineTime": 900
     },
     "Maxmind": {
         "AccountID": "",
@@ -55,20 +54,20 @@
             "Name": "ssl",
             "Enabled": 1,
             "CheckType": "domain",
-            "Timeout": 60,
-            "CheckInterval": 3600,
+            "Timeout": 90,
+            "CheckInterval": 1800,
             "ExtraOptions": {
-                "ConnectTimeout": 6
+                "ConnectTimeout": 10
             }
         },
         {
             "Name": "wss",
             "Enabled": 1,
             "CheckType": "endpoint",
-            "Timeout": 60,
+            "Timeout": 90,
             "CheckInterval": 1800,
             "ExtraOptions": {
-                "ConnectTimeout": 6
+                "ConnectTimeout": 10
             }
         }
     ]
