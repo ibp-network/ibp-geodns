@@ -1,5 +1,19 @@
 package main
 
+/*
+   IBP GeoDNS – Collator service
+   -----------------------------
+   • Consolidates proposals / votes / finalize messages coming from the
+     monitoring & DNS layers.
+   • Persists every change to MySQL for long‑term audit.
+   • Periodically requests per‑DNS‑node usage statistics so that billing
+     remains centralised.
+   • Listens on the same NATS cluster as every other component.
+
+   Build:  go build ./src/IBPCollator
+   Run  :  ./IBPCollator -config /path/to/collator.json
+*/
+
 import (
 	"database/sql"
 	"encoding/json"
@@ -14,21 +28,20 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/nats-io/nats.go"
 
+	"ibp-geodns/src/common/config"
 	"ibp-geodns/src/common/data2"
 )
 
-/*
-   ──────────────────────────────────────────────────────────────────────────────
-   CONFIGURATION
-   ──────────────────────────────────────────────────────────────────────────────
-*/
+/* -------------------------------------------------------------------------- */
+/*  Configuration                                                             */
+/* -------------------------------------------------------------------------- */
 
-// Config is read from the ­‑config CLI flag (JSON file).
+// Config is loaded from the JSON file passed via -config.
 type Config struct {
 	Node string `json:"node"`
 
 	MySQL struct {
-		// Format: <user>:<pass>@tcp(<host>:<port>)/<db>?charset=utf8mb4&parseTime=true
+		// <user>:<pass>@tcp(<host>:<port>)/<db>?parseTime=true
 		DSN      string `json:"dsn"`
 		MaxOpen  int    `json:"max_open"`
 		MaxIdle  int    `json:"max_idle"`
@@ -41,11 +54,21 @@ type Config struct {
 	} `json:"nats"`
 }
 
-/*
-   ──────────────────────────────────────────────────────────────────────────────
-   DOMAIN TYPES
-   ──────────────────────────────────────────────────────────────────────────────
-*/
+/* -------------------------------------------------------------------------- */
+/*  Collator runtime structure                                                */
+/* -------------------------------------------------------------------------- */
+
+type collator struct {
+	cfg   Config
+	db    *sql.DB
+	nc    *nats.Conn
+	votes map[string]Vote // last vote received, keyed by member name
+	mu    sync.Mutex      // protects votes
+}
+
+/* -------------------------------------------------------------------------- */
+/*  NATS payloads                                                             */
+/* -------------------------------------------------------------------------- */
 
 // Vote is broadcast by IBPDns nodes when they vote on a proposal.
 type Vote struct {
@@ -70,64 +93,55 @@ type Proposal struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-/*
-   ──────────────────────────────────────────────────────────────────────────────
-   COLLATOR STRUCTURE
-   ──────────────────────────────────────────────────────────────────────────────
-*/
-
-type collator struct {
-	cfg Config
-	db  *sql.DB
-	nc  *nats.Conn
-
-	// votes stores the last vote received from every member, keyed by member name.
-	votes   map[string]Vote
-	votesMu sync.Mutex
-}
-
-/*
-   ──────────────────────────────────────────────────────────────────────────────
-   MAIN
-   ──────────────────────────────────────────────────────────────────────────────
-*/
+/* -------------------------------------------------------------------------- */
+/*  main()                                                                    */
+/* -------------------------------------------------------------------------- */
 
 func main() {
-	// ────── parse CLI flags ───────────────────────────────────────────────────
+	/* ---- CLI flags ------------------------------------------------------- */
+
 	cfgPath := flag.String("config", "", "path to JSON configuration file")
 	flag.Parse()
 	if *cfgPath == "" {
-		fmt.Fprintln(os.Stderr, "‑config flag is required")
+		fmt.Fprintln(os.Stderr, "ERROR: -config flag is required")
 		os.Exit(1)
 	}
 
-	// ────── load configuration file ───────────────────────────────────────────
+	/* ---- Load config ----------------------------------------------------- */
+
 	var cfg Config
 	if err := readJSONFile(*cfgPath, &cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to read config: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("IBP‑GeoDNS Collator vv0.4.1 starting (node=%s)\n", cfg.Node)
+	fmt.Printf("IBP‑GeoDNS Collator v0.4.1 starting (node=%s)\n", cfg.Node)
 
-	// ────── initialise MySQL ──────────────────────────────────────────────────
-	db, err := sql.Open("mysql", cfg.MySQL.DSN)
+	/* ---- MySQL ----------------------------------------------------------- */
+
+	globalCfg := config.GetConfig() // reuse cluster‑wide JSON for credentials
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
+		globalCfg.Local.Mysql.User,
+		globalCfg.Local.Mysql.Pass,
+		globalCfg.Local.Mysql.Host,
+		globalCfg.Local.Mysql.Port,
+		globalCfg.Local.Mysql.DB,
+	)
+
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "MySQL connection failed: %v\n", err)
 		os.Exit(1)
 	}
-	db.SetMaxOpenConns(cfg.MySQL.MaxOpen)
-	db.SetMaxIdleConns(cfg.MySQL.MaxIdle)
-	db.SetConnMaxLifetime(time.Duration(cfg.MySQL.ConnLife) * time.Second)
-
 	if err := db.Ping(); err != nil {
 		fmt.Fprintf(os.Stderr, "unable to ping MySQL: %v\n", err)
 		os.Exit(1)
 	}
-	data2.Init()
+	data2.Init() // ensure data2.DB is initialised
 	fmt.Println("[data2] Connected to MySQL")
 
-	// ────── initialise NATS ───────────────────────────────────────────────────
+	/* ---- NATS ------------------------------------------------------------ */
+
 	nc, err := nats.Connect(
 		cfg.NATS.URL,
 		nats.Name(fmt.Sprintf("IBPCollator‑%s", cfg.Node)),
@@ -139,24 +153,24 @@ func main() {
 	}
 	fmt.Printf("[NATS] Connected (%s)\n", cfg.NATS.URL)
 
-	c := &collator{
+	/* ---- Bring the collator to life ------------------------------------- */
+
+	col := &collator{
 		cfg:   cfg,
 		db:    db,
 		nc:    nc,
 		votes: make(map[string]Vote),
 	}
-
-	// ────── subscribe to subjects ─────────────────────────────────────────────
-	if err := c.subscribe(); err != nil {
-		fmt.Fprintf(os.Stderr, "subscription error: %v\n", err)
+	if err := col.subscribe(); err != nil {
+		fmt.Fprintf(os.Stderr, "[collator] subscribe error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("[collator] subscribed to vote, finalize & proposal subjects")
+	fmt.Println("[collator] subscriptions active")
 
-	// ────── usage collector runs in background ────────────────────────────────
-	go c.startUsageCollector()
+	go col.startUsageCollector()
 
-	// ────── graceful shutdown handling ────────────────────────────────────────
+	/* ---- Graceful shutdown --------------------------------------------- */
+
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
@@ -167,11 +181,9 @@ func main() {
 	fmt.Println("bye")
 }
 
-/*
-   ──────────────────────────────────────────────────────────────────────────────
-   SUBSCRIPTION & HANDLERS
-   ──────────────────────────────────────────────────────────────────────────────
-*/
+/* -------------------------------------------------------------------------- */
+/*  Subscription & handlers                                                   */
+/* -------------------------------------------------------------------------- */
 
 func (c *collator) subscribe() error {
 	// Votes
@@ -182,7 +194,7 @@ func (c *collator) subscribe() error {
 	if _, err := c.nc.Subscribe("ibp.finalize", c.handleFinalize); err != nil {
 		return err
 	}
-	// Proposals (new requirement)
+	// Proposals
 	if _, err := c.nc.Subscribe("ibp.proposal", c.handleProposal); err != nil {
 		return err
 	}
@@ -196,9 +208,9 @@ func (c *collator) handleVote(m *nats.Msg) {
 		return
 	}
 
-	c.votesMu.Lock()
+	c.mu.Lock()
 	c.votes[v.Member] = v
-	c.votesMu.Unlock()
+	c.mu.Unlock()
 }
 
 func (c *collator) handleFinalize(m *nats.Msg) {
@@ -208,8 +220,8 @@ func (c *collator) handleFinalize(m *nats.Msg) {
 		return
 	}
 
-	c.votesMu.Lock()
-	defer c.votesMu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	// Tally votes for this proposal
 	yes, total := 0, 0
@@ -221,19 +233,18 @@ func (c *collator) handleFinalize(m *nats.Msg) {
 			}
 		}
 	}
-	deleteVotesForProposal(c.votes, f.Proposal)
+	c.deleteVotesForProposal(f.Proposal)
 
-	fmt.Printf("[collator] finalize %s – yes=%d / %d\n", f.Proposal, yes, total)
-	// Production logic to mark the proposal accepted/declined in DB
+	fmt.Printf("[collator] finalize %s – yes=%d / %d\n", f.Proposal, yes, total)
 	if err := data2.MarkProposalFinal(f.Proposal, yes, total); err != nil {
 		fmt.Printf("[collator] MarkProposalFinal: %v\n", err)
 	}
 }
 
-func deleteVotesForProposal(m map[string]Vote, pid string) {
-	for k, v := range m {
+func (c *collator) deleteVotesForProposal(pid string) {
+	for k, v := range c.votes {
 		if v.Proposal == pid {
-			delete(m, k)
+			delete(c.votes, k)
 		}
 	}
 }
@@ -253,11 +264,9 @@ func (c *collator) handleProposal(m *nats.Msg) {
 	}
 }
 
-/*
-   ──────────────────────────────────────────────────────────────────────────────
-   USAGE COLLECTOR (unchanged behaviour, but simplified)
-   ──────────────────────────────────────────────────────────────────────────────
-*/
+/* -------------------------------------------------------------------------- */
+/*  Usage collector (periodic broadcast)                                      */
+/* -------------------------------------------------------------------------- */
 
 func (c *collator) startUsageCollector() {
 	tick := time.NewTicker(30 * time.Minute)
@@ -272,11 +281,9 @@ func (c *collator) startUsageCollector() {
 	}
 }
 
-/*
-   ──────────────────────────────────────────────────────────────────────────────
-   HELPERS
-   ──────────────────────────────────────────────────────────────────────────────
-*/
+/* -------------------------------------------------------------------------- */
+/*  Utility                                                                   */
+/* -------------------------------------------------------------------------- */
 
 func readJSONFile(path string, v any) error {
 	f, err := os.Open(path)
