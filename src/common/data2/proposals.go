@@ -1,23 +1,19 @@
 package data2
 
-import (
-	"time"
-)
+import "time"
 
-/*
-   ──────────────────────────────────────────────────────────────────────────────
-   SHARED DB INITIALISER
-   ──────────────────────────────────────────────────────────────────────────────
-*/
+/*─────────────────────────────────────────────────────────────
+  HELPER – LIVE MONITOR COUNT (LOCK HELD BY CALLER)
+─────────────────────────────────────────────────────────────*/
 
-type Proposal struct {
-	ID        string
-	IsIPv6    bool
-	Domain    string
-	Member    string
-	CheckName string
-	CheckType string
-	CreatedAt time.Time
+func countActiveMonitorsLocked() int {
+	n := 0
+	for _, node := range State.ClusterNodes {
+		if node.NodeRole == "IBPMonitor" && isNodeActive(node.NodeID) {
+			n++
+		}
+	}
+	return n
 }
 
 /*
@@ -54,4 +50,15 @@ func MarkProposalFinal(id string, yes, total int) error {
 		 WHERE id = ?
 	`, yes, total, id)
 	return err
+}
+
+func isNodeActive(nodeID string) bool {
+	State.Mu.RLock()
+	defer State.Mu.RUnlock()
+
+	n, ok := State.ClusterNodes[nodeID]
+	if !ok {
+		return false
+	}
+	return time.Since(n.LastHeard) < 2*time.Minute
 }

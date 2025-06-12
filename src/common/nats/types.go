@@ -1,6 +1,7 @@
 package nats
 
 import (
+	"ibp-geodns/src/common/data2"
 	"sync"
 	"time"
 )
@@ -8,6 +9,8 @@ import (
 /* ────────────────────────────────────────────────────────────
    NODE / PROPOSAL BOOK‑KEEPING
    ────────────────────────────────────────────────────────────*/
+
+type UsageRequest = data2.UsageRequest
 
 type NodeState struct {
 	NodeID          string
@@ -81,14 +84,6 @@ type FinalizeMessage struct {
 /* ────────────────────────────────────────────────────────────
    USAGE‑/STATS‑related TYPES (unchanged)
    ────────────────────────────────────────────────────────────*/
-
-type UsageRequest struct {
-	StartDate  string `json:"startDate"`
-	EndDate    string `json:"endDate"`
-	Domain     string `json:"domain"`
-	MemberName string `json:"memberName"`
-	Country    string `json:"country"`
-}
 
 type UsageRecord struct {
 	Date        string `json:"date"`

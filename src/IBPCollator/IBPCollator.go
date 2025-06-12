@@ -45,7 +45,7 @@ type collator struct {
 /* -------------------------------------------------------------------------- */
 
 func main() {
-	log.Log(log.Info, "IBP‑GeoDNS Collator v%s starting…", version)
+	log.Log(log.Info, "IBP‑GeoDNS Collator v%s starting …", version)
 
 	cfgFile := flag.String("config", "ibpcollator.json", "Path to configuration file")
 	flag.Parse()
@@ -55,14 +55,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	/* ---- configuration & logging --------------------------------------- */
+	/* ---- configuration & logging ------------------------------- */
 
 	cfg.Init(*cfgFile)
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
 	log.Log(log.Info, "collator log‑level: %s", c.Local.System.LogLevel)
 
-	/* ---- MySQL --------------------------------------------------------- */
+	/* ---- MySQL -------------------------------------------------- */
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
 		c.Local.Mysql.User,
@@ -71,7 +71,6 @@ func main() {
 		c.Local.Mysql.Port,
 		c.Local.Mysql.DB,
 	)
-
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		log.Log(log.Fatal, "MySQL connection failed: %v", err)
@@ -81,19 +80,17 @@ func main() {
 		log.Log(log.Fatal, "unable to ping MySQL: %v", err)
 		os.Exit(1)
 	}
-	data2.Init() // make sure data2.DB is initialised
+	data2.Init()
 	log.Log(log.Info, "[data2] connected to MySQL")
 
-	/* ---- NATS ---------------------------------------------------------- */
+	/* ---- NATS --------------------------------------------------- */
 
 	if err := natsCommon.Connect(); err != nil {
 		log.Log(log.Fatal, "failed to connect to NATS: %v", err)
 		os.Exit(1)
 	}
 
-	// Advertise ourselves with the **correct** role so the rest of the
-	// cluster can see us and the wildcard subscription dispatcher in
-	// src/common/nats/roles.go sends the right messages our way.
+	// Advertise ourselves to the cluster.
 	natsCommon.State.NodeID = c.Local.Nats.NodeID
 	natsCommon.State.ThisNode = natsCommon.NodeInfo{
 		NodeID:        c.Local.Nats.NodeID,
@@ -106,7 +103,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	/* ---- bring the collator to life ----------------------------------- */
+	/* ---- bring the collator to life ---------------------------- */
 
 	col := &collator{
 		cfg:   c,
@@ -121,12 +118,12 @@ func main() {
 
 	go col.startUsageCollector()
 
-	/* ---- graceful shutdown -------------------------------------------- */
+	/* ---- graceful shutdown ------------------------------------- */
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
-	log.Log(log.Info, "signal received — shutting down")
+	log.Log(log.Info, "signal received – shutting down")
 	_ = db.Close()
 	log.Log(log.Info, "bye")
 }
@@ -136,25 +133,18 @@ func main() {
 /* -------------------------------------------------------------------------- */
 
 func (c *collator) subscribe() error {
-	// proposals
 	if _, err := natsCommon.Subscribe(natsCommon.State.SubjectPropose, c.handleProposal); err != nil {
 		return err
 	}
-	// votes
 	if _, err := natsCommon.Subscribe(natsCommon.State.SubjectVote, c.handleVote); err != nil {
 		return err
 	}
-	// finalisation
 	if _, err := natsCommon.Subscribe(natsCommon.State.SubjectFinalize, c.handleFinalize); err != nil {
 		return err
 	}
-	// usage data is broadcast (non‑request/reply) – the wildcard dispatcher
-	// in roles.go already routes it to handleDnsUsageData, which marks nodes
-	// as heard.  We subscribe here as well so we can store it.
 	if _, err := natsCommon.Subscribe("dns.usage.usageData", c.handleUsageData); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -246,12 +236,35 @@ func (c *collator) handleUsageData(m *nats.Msg) {
 		log.Log(log.Error, "[collator] usage‑data unmarshal error: %v", err)
 		return
 	}
-
 	if len(resp.UsageRecords) == 0 {
 		return
 	}
 
-	if err := data2.StoreUsageRecords(resp.UsageRecords); err != nil {
+	// ---- convert to data2.UsageRecord ---------------------------------
+	records := make([]data2.UsageRecord, 0, len(resp.UsageRecords))
+	for _, r := range resp.UsageRecords {
+		// the DNS nodes send YYYY‑MM‑DD; convert to time.Time
+		dt, err := time.Parse("2006-01-02", r.Date)
+		if err != nil {
+			log.Log(log.Warn, "[collator] invalid date %q skipped", r.Date)
+			continue
+		}
+		records = append(records, data2.UsageRecord{
+			Date:        dt,
+			NodeID:      resp.NodeID, //  the DNS node that generated the slice
+			Domain:      r.Domain,
+			MemberName:  r.MemberName,
+			Asn:         r.Asn,
+			NetworkName: r.NetworkName,
+			CountryCode: r.CountryCode,
+			CountryName: r.CountryName,
+			IsIPv6:      false, // current wire‑format has no v6 flag
+			Hits:        r.Hits,
+		})
+	}
+	// -------------------------------------------------------------------
+
+	if err := data2.StoreUsageRecords(records); err != nil {
 		log.Log(log.Error, "[collator] StoreUsageRecords: %v", err)
 	}
 }
@@ -268,7 +281,7 @@ func (c *collator) startUsageCollector() {
 		<-ticker.C
 
 		today := time.Now().UTC().Format("2006-01-02")
-		req := natsCommon.UsageRequest{
+		req := data2.UsageRequest{
 			StartDate:  today,
 			EndDate:    today,
 			Domain:     "",
@@ -276,22 +289,44 @@ func (c *collator) startUsageCollector() {
 			Country:    "",
 		}
 
-		records, err := natsCommon.RequestAllDnsUsage(req, 20*time.Second)
+		/*  ---- get usage from ALL DNS nodes via NATS ------------- */
+
+		raw, err := natsCommon.RequestAllDnsUsage(req, 20*time.Second)
 		if err != nil {
 			log.Log(log.Error, "[collator] RequestAllDnsUsage: %v", err)
 			continue
 		}
-
-		if len(records) == 0 {
-			log.Log(log.Info, "[collator] usage collector: 0 records returned (no active DNS nodes?)")
+		if len(raw) == 0 {
+			log.Log(log.Info, "[collator] usage collector: 0 records returned")
 			continue
+		}
+
+		/* ---- convert & store ----------------------------------- */
+
+		var records []data2.UsageRecord
+		for _, r := range raw {
+			dt, err := time.Parse("2006-01-02", r.Date)
+			if err != nil {
+				continue
+			}
+			records = append(records, data2.UsageRecord{
+				Date:        dt,
+				NodeID:      natsCommon.State.NodeID, // aggregated slice; mark our node
+				Domain:      r.Domain,
+				MemberName:  r.MemberName,
+				Asn:         r.Asn,
+				NetworkName: r.NetworkName,
+				CountryCode: r.CountryCode,
+				CountryName: r.CountryName,
+				IsIPv6:      false, // current wire‑format is v4 only
+				Hits:        r.Hits,
+			})
 		}
 
 		if err := data2.StoreUsageRecords(records); err != nil {
 			log.Log(log.Error, "[collator] StoreUsageRecords: %v", err)
 			continue
 		}
-
 		log.Log(log.Info, "[collator] stored %d DNS‑usage record(s)", len(records))
 	}
 }
