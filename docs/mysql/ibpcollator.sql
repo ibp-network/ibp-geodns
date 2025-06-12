@@ -1,39 +1,3 @@
-DROP TABLE `ibpcollator_usage`;
-CREATE TABLE `ibpcollator_usage` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `date` DATE NOT NULL,
-  `node_id` VARCHAR(32) NOT NULL,
-  `domain_name` VARCHAR(128) NOT NULL,
-  `member_name` VARCHAR(64) DEFAULT NULL,
-  `network_asn` VARCHAR(32) DEFAULT NULL,
-  `network_name` VARCHAR(96) DEFAULT NULL,
-  `country_code` VARCHAR(2) DEFAULT NULL,
-  `country_name` VARCHAR(64) DEFAULT NULL,
-  `is_ipv6` TINYINT NOT NULL,
-  `hits` INT UNSIGNED NOT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY (`date`,`domain_name`,`member_name`,`network_asn`,`network_name`,`country_code`,`country_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-DROP TABLE `ibpcollator_netStatus`;
-CREATE TABLE `ibpcollator_netStatus` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `check_type` TINYINT NOT NULL,
-  `check_name` VARCHAR(32) NOT NULL,
-  `check_url` VARCHAR(128) NOT NULL,
-  `member_name` VARCHAR(48) NOT NULL,
-  `domain_name` VARCHAR(96) NOT NULL,
-  `status` TINYINT NOT NULL,
-  `is_ipv6` TINYINT NOT NULL,
-  `start_time`  DATETIME NOT NULL DEFAULT(NOW()),
-  `end_time` DATETIME DEFAULT NULL,
-  `error` TEXT,
-  `vote_data` JSON NOT NULL,
-  `additional_data` JSON DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY (`check_type`,`check_name`,`check_url`,`member_name`,`domain_name`,`is_ipv6`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
 DROP TABLE `ibpcollator_members`;
 CREATE TABLE `ibpcollator_members` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -95,3 +59,38 @@ CREATE TABLE `ibpcollator_service_provider` (
   UNIQUE KEY (`service_id`, `provider_index`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+DROP TABLE `ibpcollator_usage`;
+CREATE TABLE `ibpcollator_usage` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `date` DATE NOT NULL,
+  `node_id` VARCHAR(32) NOT NULL,
+  `domain_name` VARCHAR(128) NOT NULL,
+  `member_name` VARCHAR(64) DEFAULT NULL,
+  `network_asn` VARCHAR(32) DEFAULT NULL,
+  `network_name` VARCHAR(96) DEFAULT NULL,
+  `country_code` VARCHAR(2) DEFAULT NULL,
+  `country_name` VARCHAR(64) DEFAULT NULL,
+  `is_ipv6` TINYINT NOT NULL,
+  `hits` INT UNSIGNED NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY (`date`,`domain_name`,`member_name`,`network_asn`,`network_name`,`country_code`,`country_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+DROP TABLE `ibpcollator_netStatus`;
+CREATE TABLE `ibpcollator_netStatus` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `check_type` TINYINT NOT NULL,
+  `check_name` VARCHAR(32) NOT NULL,
+  `check_url` VARCHAR(128) NOT NULL,
+  `member_name` VARCHAR(48) NOT NULL,
+  `domain_name` VARCHAR(96) NOT NULL,
+  `status` TINYINT NOT NULL,
+  `is_ipv6` TINYINT NOT NULL,
+  `start_time`  DATETIME NOT NULL DEFAULT(NOW()),
+  `end_time` DATETIME DEFAULT NULL,
+  `error` TEXT,
+  `vote_data` JSON NOT NULL,
+  `additional_data` JSON DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY (`check_type`,`check_name`,`check_url`,`member_name`,`domain_name`,`is_ipv6`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
