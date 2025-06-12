@@ -17,7 +17,7 @@ import (
 	natsCommon "ibp-geodns/src/common/nats"
 )
 
-var version = "0.3.4"
+var version = cfg.GetVersion()
 
 func main() {
 	log.Log(log.Info, "IBP-GeoDNS DNS backend v%s starting...", version)

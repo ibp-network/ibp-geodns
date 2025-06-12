@@ -14,7 +14,7 @@ import (
 	natsCommon "ibp-geodns/src/common/nats"
 )
 
-var version = "0.4.1"
+var version = cfg.GetVersion()
 
 func main() {
 	log.Log(log.Info, "IBP‑GeoDNS serviceMonitor v%s starting …", version)

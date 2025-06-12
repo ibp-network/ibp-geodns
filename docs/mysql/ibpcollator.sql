@@ -1,24 +1,28 @@
+DROP TABLE `ibpcollator_usage`;
 CREATE TABLE `ibpcollator_usage` (
-  `id` int unsigned NOT NULL AUTO_INCREMENT,
-  `date` date NOT NULL,
-  `node_id` varchar(24) COLLATE utf8mb4_general_ci NOT NULL,
-  `domain_name` varchar(96) COLLATE utf8mb4_general_ci NOT NULL,
-  `member_name` varchar(48) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `network_asn` varchar(16) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `network_name` varchar(48) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `country_code` char(2) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `country_name` varchar(48) COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `is_ipv6` enum('ipv4','ipv6') NOT NULL,
-  `hits` int unsigned NOT NULL DEFAULT '0',
-  PRIMARY KEY (`date`,`domain_name`(48),`member_name`(24),`network_asn`(13),`network_name`(24),`country_code`(2),`country_name`(24)),
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `date` DATE NOT NULL,
+  `node_id` VARCHAR(32) NOT NULL,
+  `domain_name` VARCHAR(128) NOT NULL,
+  `member_name` VARCHAR(64) DEFAULT NULL,
+  `network_asn` VARCHAR(32) DEFAULT NULL,
+  `network_name` VARCHAR(96) DEFAULT NULL,
+  `country_code` VARCHAR(2) DEFAULT NULL,
+  `country_name` VARCHAR(64) DEFAULT NULL,
+  `is_ipv6` TINYINT NOT NULL,
+  `hits` INT UNSIGNED NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY (`date`,`domain_name`,`member_name`,`network_asn`,`network_name`,`country_code`,`country_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+DROP TABLE `ibpcollator_netStatus`;
 CREATE TABLE `ibpcollator_netStatus` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `check_type` TINYINT NOT NULL,
   `check_name` VARCHAR(32) NOT NULL,
   `check_url` VARCHAR(128) NOT NULL,
-  `domain_name` VARCHAR(96) NOT NULL,
   `member_name` VARCHAR(48) NOT NULL,
+  `domain_name` VARCHAR(96) NOT NULL,
   `status` TINYINT NOT NULL,
   `is_ipv6` TINYINT NOT NULL,
   `start_time`  DATETIME NOT NULL DEFAULT(NOW()),
@@ -26,11 +30,13 @@ CREATE TABLE `ibpcollator_netStatus` (
   `error` TEXT,
   `vote_data` JSON NOT NULL,
   `additional_data` JSON DEFAULT NULL,
-  PRIMARY KEY (`check_type`(2),`check_name`(16),`check_url`(64),`member_name`(24),`domain_name`(48),`is_ipv6`(1)),
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  PRIMARY KEY (`id`),
+  UNIQUE KEY (`check_type`,`check_name`,`check_url`,`member_name`,`domain_name`,`is_ipv6`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+DROP TABLE `ibpcollator_members`;
 CREATE TABLE `ibpcollator_members` (
-  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `member_index` VARCHAR(48) NOT NULL,
   `member_name` VARCHAR(48) NOT NULL,
   `member_website` VARCHAR(128) NOT NULL,
@@ -46,10 +52,12 @@ CREATE TABLE `ibpcollator_members` (
   `location_latitude` DECIMAL(9,6)  NOT NULL,
   `location_longitude`  DECIMAL(9,6)  NOT NULL,
   PRIMARY KEY (`id`),
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  UNIQUE KEY (`member_index`, `member_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+DROP TABLE `ibpcollator_services`;
 CREATE TABLE `ibpcollator_services` (
-  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `service_index` VARCHAR(48) NOT NULL,
   `configuration_name` VARCHAR(48) NOT NULL,
   `configuration_type` TINYINT NOT NULL,
@@ -63,22 +71,27 @@ CREATE TABLE `ibpcollator_services` (
   `provisioned_disk` SMALLINT NOT NULL,
   `provisioned_bandwidth` SMALLINT NOT NULL,
   PRIMARY KEY (`id`),
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  UNIQUE KEY (`service_index`, `configuration_name`, `configuration_networkname`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+DROP TABLE `ibpcollator_service_assignment`;
 CREATE TABLE `ibpcollator_service_assignment` (
-  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `service_id` BIGINT NOT NULL,
   `member_id` BIGINT NOT NULL,
   PRIMARY KEY (`id`),
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  UNIQUE KEY (`service_id`, `member_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-CREATE TABLE `iibpcollator_service_provider` (
-  `id` BIGINT NOT NULL AUTO_INCREMENT,
-  `service_id` BIGINT NOT NULL,
+DROP TABLE `ibpcollator_service_provider`;
+CREATE TABLE `ibpcollator_service_provider` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `service_id` INT UNSIGNED NOT NULL,
   `provider_index` VARCHAR(48) DEFAULT NULL,
   `provider_rpcUrl1` VARCHAR(128) DEFAULT NULL,
   `provider_rpcUrl2` VARCHAR(128) DEFAULT NULL,
   `provider_rpcUrl3` VARCHAR(128) DEFAULT NULL,
   PRIMARY KEY (`id`),
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  UNIQUE KEY (`service_id`, `provider_index`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 

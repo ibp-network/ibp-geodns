@@ -17,7 +17,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-var version = "1.0.0"
+var version = cfg.GetVersion()
 
 // ---------- main ----------
 func main() {
