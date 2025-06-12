@@ -34,7 +34,7 @@ func Init() {
 
 	DB.SetConnMaxIdleTime(2 * time.Minute)
 	DB.SetMaxIdleConns(5)
-	DB.SetMaxOpenConns(100)
+	DB.SetMaxOpenConns(40)
 	DB.SetConnMaxLifetime(4 * time.Hour)
 
 	// retry loop (30 s max)
