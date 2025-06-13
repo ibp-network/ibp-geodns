@@ -15,6 +15,9 @@ import (
 
 const minConsensusVotes = 2
 
+// ──────────────────────────────────────────────────────────────────────────────
+// PROPOSAL ENTRY‑POINT
+// ──────────────────────────────────────────────────────────────────────────────
 func ProposeCheckStatus(
 	checkType, checkName, memberName,
 	domainName, endpoint string,
@@ -68,7 +71,7 @@ func propose(
 	}
 
 	log.Log(log.Debug,
-		"[CONSENSUS] ➜ PROPOSAL created id=%s type=%s member=%s status=%v v6=%v",
+		"[CONSENSUS] → PROPOSAL created id=%s type=%s member=%s status=%v v6=%v",
 		prop.ID, prop.CheckType, prop.MemberName, prop.ProposedStatus, prop.IsIPv6)
 	log.Log(log.Debug, "[CONSENSUS]     details=%+v", prop)
 
@@ -92,6 +95,9 @@ func propose(
 	go voteOnProposal(prop)
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// PROPOSAL HANDLING
+// ──────────────────────────────────────────────────────────────────────────────
 func handleProposal(m *nats.Msg) {
 	var prop Proposal
 	if err := json.Unmarshal(m.Data, &prop); err != nil {
@@ -99,7 +105,7 @@ func handleProposal(m *nats.Msg) {
 		return
 	}
 	log.Log(log.Debug,
-		"[CONSENSUS] ⇦ PROPOSAL received id=%s type=%s member=%s status=%v v6=%v",
+		"[CONSENSUS] ← PROPOSAL received id=%s type=%s member=%s status=%v v6=%v",
 		prop.ID, prop.CheckType, prop.MemberName, prop.ProposedStatus, prop.IsIPv6)
 	markNodeHeard(prop.SenderNodeID)
 
@@ -109,7 +115,8 @@ func handleProposal(m *nats.Msg) {
 			Proposal: prop,
 			Votes:    make(map[string]bool),
 		}
-		State.Proposals[prop.ID].Timer = time.AfterFunc(State.ProposalTimeout, func() { forceFinalize(prop.ID) })
+		State.Proposals[prop.ID].Timer = time.AfterFunc(State.ProposalTimeout,
+			func() { forceFinalize(prop.ID) })
 		State.Mu.Unlock()
 		go voteOnProposal(prop)
 		return
@@ -150,7 +157,7 @@ func handleVote(m *nats.Msg) {
 		log.Log(log.Error, "[NATS] handleVote: unmarshal error: %v", err)
 		return
 	}
-	log.Log(log.Debug, "[CONSENSUS] ⇦ vote id=%s from=%s agree=%v", v.ProposalID, v.NodeID, v.Agree)
+	log.Log(log.Debug, "[CONSENSUS] ← vote id=%s from=%s agree=%v", v.ProposalID, v.NodeID, v.Agree)
 	markNodeHeard(v.SenderNodeID)
 
 	State.Mu.Lock()
@@ -191,7 +198,7 @@ func decideLocked(pt *ProposalTracking) {
 
 	if pt.Finalized {
 		log.Log(log.Info,
-			"[CONSENSUS] ✔ finalize id=%s PASS=%v yes=%d no=%d (%d active monitors)",
+			"[CONSENSUS] ⇒ finalize id=%s PASS=%v yes=%d no=%d (%d active monitors)",
 			pt.Proposal.ID, pt.Passed, yes, no, total)
 
 		if pt.Timer != nil {
@@ -212,6 +219,9 @@ func forceFinalize(pid ProposalID) {
 	State.Mu.Unlock()
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// FINALIZATION
+// ──────────────────────────────────────────────────────────────────────────────
 func finalize(pt *ProposalTracking) {
 	msg := FinalizeMessage{
 		Proposal:  pt.Proposal,
@@ -238,29 +248,41 @@ func handleFinalize(m *nats.Msg) {
 		return
 	}
 	log.Log(log.Debug,
-		"[CONSENSUS] ⇦ FINALIZE id=%s PASS=%v", fm.Proposal.ID, fm.Passed)
+		"[CONSENSUS] ← FINALIZE id=%s PASS=%v", fm.Proposal.ID, fm.Passed)
 	markNodeHeard(fm.Proposal.SenderNodeID)
 
 	if fm.Passed && State.ThisNode.NodeRole == "IBPMonitor" {
 		applyOfficialChanges(fm.Proposal)
+
+		//──────────────────────────────────────────────────────────────────
+		// Collator: write authoritative status row to MySQL, never proposal
+		//──────────────────────────────────────────────────────────────────
 	} else if fm.Passed && State.ThisNode.NodeRole == "IBPCollator" {
-		if err := data2.StoreProposal(data2.Proposal{
-			ID:        string(fm.Proposal.ID),
-			IsIPv6:    fm.Proposal.IsIPv6,
+		rec := data2.NetStatusRecord{
+			CheckType: checkTypeToInt(fm.Proposal.CheckType),
+			CheckName: fm.Proposal.CheckName,
+			CheckURL:  deriveCheckURL(fm.Proposal),
 			Domain:    fm.Proposal.DomainName,
 			Member:    fm.Proposal.MemberName,
-			CheckName: fm.Proposal.CheckName,
-			CheckType: fm.Proposal.CheckType,
-			CreatedAt: fm.Proposal.Timestamp,
-		}); err != nil {
-			log.Log(log.Error, "[NATS] handleFinalize: data2.StoreProposal: %v", err)
+			Status:    fm.Proposal.ProposedStatus,
+			IsIPv6:    fm.Proposal.IsIPv6,
+			StartTime: fm.DecidedAt.UTC(),
+			Error:     fm.Proposal.ErrorText,
+			VoteData:  nil, // reserved for future use
+			Extra:     fm.Proposal.Data,
+		}
+		if err := data2.InsertNetStatus(rec); err != nil {
+			log.Log(log.Error, "[NATS] handleFinalize: InsertNetStatus: %v", err)
 		}
 	}
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// APPLY TO OFFICIAL DATA STRUCTURE (MONITORS)
+// ──────────────────────────────────────────────────────────────────────────────
 func applyOfficialChanges(prop Proposal) {
 	log.Log(log.Debug,
-		"[CONSENSUS] ↻ apply official change id=%s type=%s member=%s status=%v v6=%v",
+		"[CONSENSUS] ⇢ apply official change id=%s type=%s member=%s status=%v v6=%v",
 		prop.ID, prop.CheckType, prop.MemberName, prop.ProposedStatus, prop.IsIPv6)
 
 	chk, okChk := findCheckByName(prop.CheckName, prop.CheckType)
@@ -292,6 +314,9 @@ func applyOfficialChanges(prop Proposal) {
 	}
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ──────────────────────────────────────────────────────────────────────────────
 func checkLocalStatus(checkType, checkName, memberName, domainName, endpoint string, isIPv6 bool) (bool, bool) {
 	switch checkType {
 	case "site":
@@ -313,4 +338,30 @@ func countActiveMonitorsLocked() int {
 		}
 	}
 	return n
+}
+
+// Map textual check‑type to the TINYINT used in MySQL schema.
+func checkTypeToInt(t string) int {
+	switch t {
+	case "site":
+		return 1
+	case "domain":
+		return 2
+	case "endpoint":
+		return 3
+	default:
+		return 0
+	}
+}
+
+// Derive the value for `check_url` column based on the proposal.
+func deriveCheckURL(p Proposal) string {
+	switch p.CheckType {
+	case "endpoint":
+		return p.Endpoint
+	case "domain":
+		return p.DomainName
+	default: // "site"
+		return ""
+	}
 }
