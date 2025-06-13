@@ -15,9 +15,6 @@ import (
 
 const minConsensusVotes = 2
 
-// ──────────────────────────────────────────────────────────────────────────────
-// PROPOSAL ENTRY‑POINT
-// ──────────────────────────────────────────────────────────────────────────────
 func ProposeCheckStatus(
 	checkType, checkName, memberName,
 	domainName, endpoint string,
@@ -95,9 +92,6 @@ func propose(
 	go voteOnProposal(prop)
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// PROPOSAL HANDLING
-// ──────────────────────────────────────────────────────────────────────────────
 func handleProposal(m *nats.Msg) {
 	var prop Proposal
 	if err := json.Unmarshal(m.Data, &prop); err != nil {
@@ -219,9 +213,6 @@ func forceFinalize(pid ProposalID) {
 	State.Mu.Unlock()
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// FINALIZATION
-// ──────────────────────────────────────────────────────────────────────────────
 func finalize(pt *ProposalTracking) {
 	msg := FinalizeMessage{
 		Proposal:  pt.Proposal,
@@ -254,9 +245,6 @@ func handleFinalize(m *nats.Msg) {
 	if fm.Passed && State.ThisNode.NodeRole == "IBPMonitor" {
 		applyOfficialChanges(fm.Proposal)
 
-		//──────────────────────────────────────────────────────────────────
-		// Collator: write authoritative status row to MySQL, never proposal
-		//──────────────────────────────────────────────────────────────────
 	} else if fm.Passed && State.ThisNode.NodeRole == "IBPCollator" {
 		rec := data2.NetStatusRecord{
 			CheckType: checkTypeToInt(fm.Proposal.CheckType),
@@ -277,9 +265,6 @@ func handleFinalize(m *nats.Msg) {
 	}
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// APPLY TO OFFICIAL DATA STRUCTURE (MONITORS)
-// ──────────────────────────────────────────────────────────────────────────────
 func applyOfficialChanges(prop Proposal) {
 	log.Log(log.Debug,
 		"[CONSENSUS] ⇢ apply official change id=%s type=%s member=%s status=%v v6=%v",
@@ -314,9 +299,6 @@ func applyOfficialChanges(prop Proposal) {
 	}
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// HELPERS
-// ──────────────────────────────────────────────────────────────────────────────
 func checkLocalStatus(checkType, checkName, memberName, domainName, endpoint string, isIPv6 bool) (bool, bool) {
 	switch checkType {
 	case "site":
@@ -340,7 +322,6 @@ func countActiveMonitorsLocked() int {
 	return n
 }
 
-// Map textual check‑type to the TINYINT used in MySQL schema.
 func checkTypeToInt(t string) int {
 	switch t {
 	case "site":
@@ -354,7 +335,6 @@ func checkTypeToInt(t string) int {
 	}
 }
 
-// Derive the value for `check_url` column based on the proposal.
 func deriveCheckURL(p Proposal) string {
 	switch p.CheckType {
 	case "endpoint":

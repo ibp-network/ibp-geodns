@@ -144,11 +144,14 @@ func handleAllMessages(m *nats.Msg) {
 
 		case "IBPCollator":
 			switch {
+			case subj == State.SubjectPropose:
+				// Cache proposal in memory only — no voting from collator
+				cacheCollatorProposal(m)
 			case subj == "monitor.stats.downtimeData" || strings.Contains(subj, "downtimeReply"):
 				handleMonitorStatsData(m)
 			case subj == "dns.usage.usageData" || strings.Contains(subj, "usageReply"):
 				handleDnsUsageData(m)
-			case subj == State.SubjectFinalize || strings.Contains(subj, "usageReply"):
+			case subj == State.SubjectFinalize:
 				handleFinalize(m)
 			}
 		}
