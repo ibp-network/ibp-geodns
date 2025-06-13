@@ -6,13 +6,6 @@ import (
 	"time"
 )
 
-/*
-   ---------------------------------------------------------------------------
-   Global container & simple setters/getters
-   ---------------------------------------------------------------------------
-*/
-
-// Official holds the cluster‑consensus results.
 var Official = OfficialResults{
 	SiteResults:     make([]SiteResult, 0),
 	DomainResults:   make([]DomainResult, 0),
@@ -31,23 +24,18 @@ var (
 	official   Snapshot
 )
 
-// GetOfficialResults returns *immutable* slices.
-// Callers MUST NOT mutate the returned data.
 func GetOfficialResults() ([]SiteResult, []DomainResult, []EndpointResult) {
 	muOfficial.RLock()
 	defer muOfficial.RUnlock()
 	return official.SiteResults, official.DomainResults, official.EndpointResults
 }
 
-// SetOfficialSnapshot atomically replaces the entire official snapshot.
 func SetOfficialSnapshot(snap Snapshot) {
 	muOfficial.Lock()
 	official = snap
 	muOfficial.Unlock()
 }
 
-// BuildSnapshot is a convenience helper that takes the three
-// local result collections and produces a snapshot suitable for consensus.
 func BuildSnapshot(site []SiteResult, dom []DomainResult, eps []EndpointResult) Snapshot {
 	return Snapshot{
 		SiteResults:     site,
@@ -55,8 +43,6 @@ func BuildSnapshot(site []SiteResult, dom []DomainResult, eps []EndpointResult) 
 		EndpointResults: eps,
 	}
 }
-
-// --- store helpers ---------------------------------------------------------
 
 func SetOfficialSiteResults(results []SiteResult) {
 	Official.Mu.Lock()
@@ -75,12 +61,6 @@ func SetOfficialEndpointResults(results []EndpointResult) {
 	defer Official.Mu.Unlock()
 	Official.EndpointResults = results
 }
-
-/*
-   ---------------------------------------------------------------------------
-   Update functions  (unchanged behaviour)
-   ---------------------------------------------------------------------------
-*/
 
 func UpdateOfficialSiteResult(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
 	Official.Mu.Lock()
@@ -256,13 +236,6 @@ func UpdateOfficialEndpointResult(check cfg.Check, member cfg.Member, service cf
 	publishSnapshotLocked()
 }
 
-/*
-   ---------------------------------------------------------------------------
-   New “latest‑status” helpers
-   ---------------------------------------------------------------------------
-*/
-
-// latestStatusFromResults walks a slice and returns the *newest* Status.
 func latestStatusFromResults(results []Result, memberName string) (found bool, latest bool, newest time.Time) {
 	for _, r := range results {
 		if r.Member.Details.Name != memberName {
@@ -276,12 +249,6 @@ func latestStatusFromResults(results []Result, memberName string) (found bool, l
 	}
 	return
 }
-
-/*
-   ---------------------------------------------------------------------------
-   Public query helpers – now use newest check‑time
-   ---------------------------------------------------------------------------
-*/
 
 func GetOfficialSiteStatus(checkName, memberName string, isIPv6 bool) (bool, bool) {
 	sites, _, _ := GetOfficialResults()

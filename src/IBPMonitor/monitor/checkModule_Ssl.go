@@ -10,29 +10,23 @@ import (
 	log "ibp-geodns/src/common/logging"
 )
 
-// We register the SSL check under name "ssl" so it is invoked if
-// the config has a domain-level check with { "Name": "ssl", "CheckType": "domain" }.
 func init() {
 	RegisterDomainCheck("ssl", SslCheck)
 }
 
-// SslCheck tries IPv4 if present, then IPv6 if present, similar to the ping module.
 func SslCheck(check cfg.Check, domain string, service cfg.Service, member cfg.Member) {
 	ip4 := member.Service.ServiceIPv4
 	ip6 := member.Service.ServiceIPv6
 
-	// If IPv4 is present, do an SSL check on IPv4
 	if ip4 != "" {
 		dialAndCheckTLS(check, domain, service, member, ip4, false)
 	}
 
-	// If IPv6 is present, do an SSL check on IPv6
 	if ip6 != "" {
 		dialAndCheckTLS(check, domain, service, member, ip6, true)
 	}
 }
 
-// dialAndCheckTLS tries a connection to ip:443, verifies the TLS handshake, etc.
 func dialAndCheckTLS(
 	check cfg.Check,
 	domain string,
@@ -82,8 +76,8 @@ func dialAndCheckTLS(
 		"ExpiryTimestamp": cert.NotAfter.Unix(),
 		"DaysUntilExpiry": daysUntilExpiry,
 	}
+
 	if success {
-		// Mark success
 		UpdateDomainResultLocal(check, domain, service, member, true, "", dataMap, isIPv6)
 		log.Log(log.Debug, "SSL check completed for %s %s isIPv6=%v success=%v", member.Details.Name, domain, isIPv6, true)
 	} else {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 )
 
-// UsageRecord now includes all fields that we store in usage_daily / usage_daily_v6.
 type UsageRecord struct {
 	Date        string
 	Domain      string
@@ -17,11 +16,6 @@ type UsageRecord struct {
 	Hits        int
 }
 
-// ------------------------------------------------------------------------
-// IPv4 - usage_daily
-// ------------------------------------------------------------------------
-
-// UpsertUsageRecord inserts/updates a record in usage_daily.
 func UpsertUsageRecord(rec UsageRecord) error {
 	q := `
 INSERT INTO usage_daily
@@ -47,7 +41,6 @@ ON DUPLICATE KEY UPDATE
 	return nil
 }
 
-// GetUsageByDomain returns IPv4 usage records for a domain in [startDate, endDate].
 func GetUsageByDomain(domain, startDate, endDate string) ([]UsageRecord, error) {
 	q := `
 SELECT
@@ -92,7 +85,6 @@ ORDER BY usage_date
 	return results, nil
 }
 
-// GetUsageByMember returns IPv4 usage for a given domain+member in [startDate, endDate].
 func GetUsageByMember(domain, member, startDate, endDate string) ([]UsageRecord, error) {
 	q := `
 SELECT
@@ -138,7 +130,6 @@ ORDER BY usage_date
 	return results, nil
 }
 
-// GetUsageByCountry returns IPv4 usage in [startDate, endDate], grouped by date/domain/country/etc.
 func GetUsageByCountry(startDate, endDate string) ([]UsageRecord, error) {
 	q := `
 SELECT
@@ -182,11 +173,6 @@ ORDER BY usage_date
 	return results, nil
 }
 
-// ------------------------------------------------------------------------
-// IPv6 - usage_daily_v6
-// ------------------------------------------------------------------------
-
-// UpsertUsageRecordV6 inserts/updates a record in usage_daily_v6.
 func UpsertUsageRecordV6(rec UsageRecord) error {
 	q := `
 INSERT INTO usage_daily_v6
@@ -212,7 +198,6 @@ ON DUPLICATE KEY UPDATE
 	return nil
 }
 
-// GetUsageByDomainV6 returns IPv6 usage records for a domain in [startDate, endDate].
 func GetUsageByDomainV6(domain, startDate, endDate string) ([]UsageRecord, error) {
 	q := `
 SELECT
@@ -257,7 +242,6 @@ ORDER BY usage_date
 	return results, nil
 }
 
-// GetUsageByMemberV6 returns IPv6 usage for a given domain+member in [startDate, endDate].
 func GetUsageByMemberV6(domain, member, startDate, endDate string) ([]UsageRecord, error) {
 	q := `
 SELECT
@@ -303,7 +287,6 @@ ORDER BY usage_date
 	return results, nil
 }
 
-// GetUsageByCountryV6 returns IPv6 usage in [startDate, endDate], grouped by date/domain/etc.
 func GetUsageByCountryV6(startDate, endDate string) ([]UsageRecord, error) {
 	q := `
 SELECT
@@ -346,10 +329,6 @@ ORDER BY usage_date
 	}
 	return results, nil
 }
-
-// ------------------------------------------------------------------------
-// Helpers
-// ------------------------------------------------------------------------
 
 func safeNullStr(s sql.NullString) string {
 	if s.Valid {

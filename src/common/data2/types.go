@@ -5,10 +5,6 @@ import (
 	"time"
 )
 
-/* ──────────────────────────────────────────────────────────────────────
-   GLOBAL, IN‑MEMORY CLUSTER STATE
-   ────────────────────────────────────────────────────────────────────*/
-
 type NodeState struct {
 	NodeID          string
 	ThisNode        NodeInfo
@@ -35,23 +31,6 @@ type NodeInfo struct {
 	LastHeard     time.Time `json:"LastHeard"`
 }
 
-/* ──────────────────────────────────────────────────────────────────────
-   CONSENSUS / PROPOSAL TYPES
-   ────────────────────────────────────────────────────────────────────*/
-
-/*
-   NOTE – **breaking‑cycle & compatibility fix**
-
-   `ProposalID` is now a *type alias* (not a distinct type).  Any plain
-   string can therefore be assigned without an explicit cast, eliminating
-   several compile‑time complaints from legacy code.
-
-   A handful of older field names (`Domain`, `Member`, `CreatedAt`)
-   still appear in other packages.  To avoid churn those fields were
-   added back as *deprecated aliases* that simply shadow the canonical
-   ones (`DomainName`, `MemberName`, `Timestamp`).
-*/
-
 type ProposalID = string
 
 type Proposal struct {
@@ -68,10 +47,9 @@ type Proposal struct {
 	IsIPv6         bool                   `json:"IsIPv6"`
 	Timestamp      time.Time              `json:"Timestamp"`
 
-	/* ---- legacy aliases (keep old code compiling) -------------- */
-	Domain    string    `json:"Domain,omitempty"`    // = DomainName
-	Member    string    `json:"Member,omitempty"`    // = MemberName
-	CreatedAt time.Time `json:"CreatedAt,omitempty"` // = Timestamp
+	Domain    string    `json:"Domain,omitempty"`
+	Member    string    `json:"Member,omitempty"`
+	CreatedAt time.Time `json:"CreatedAt,omitempty"`
 }
 
 type ProposalTracking struct {
@@ -95,10 +73,6 @@ type FinalizeMessage struct {
 	Passed    bool      `json:"Passed"`
 	DecidedAt time.Time `json:"DecidedAt"`
 }
-
-/* ──────────────────────────────────────────────────────────────────────
-   USAGE / DNS‑STATISTICS
-   ────────────────────────────────────────────────────────────────────*/
 
 type UsageRecord struct {
 	Date        time.Time `json:"date"`
@@ -127,10 +101,6 @@ type UsageResponse struct {
 	Error        string        `json:"error,omitempty"`
 }
 
-/* ──────────────────────────────────────────────────────────────────────
-   DOWNTIME & AVAILABILITY
-   ────────────────────────────────────────────────────────────────────*/
-
 type DowntimeRequest struct {
 	StartTime  time.Time `json:"startTime"`
 	EndTime    time.Time `json:"endTime"`
@@ -157,12 +127,8 @@ type DowntimeResponse struct {
 	Error  string          `json:"error,omitempty"`
 }
 
-/* ──────────────────────────────────────────────────────────────────────
-   CLUSTER MEMBERSHIP
-   ────────────────────────────────────────────────────────────────────*/
-
 type ClusterMessage struct {
-	Type    string     `json:"type"` // "join" | "membership"
+	Type    string     `json:"type"`
 	Sender  NodeInfo   `json:"sender"`
 	Members []NodeInfo `json:"members"`
 }

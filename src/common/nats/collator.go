@@ -1,12 +1,5 @@
 package nats
 
-/*   Collator‑specific runtime logic
-     --------------------------------
-     ‑ keeps proposals / votes in memory
-     ‑ writes PASSed proposals to MySQL via data2
-     ‑ aggregates DNS‑usage periodically
-*/
-
 import (
 	"encoding/json"
 	"sync"
@@ -18,12 +11,6 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// ---------------------------------------------------------------------------
-//  PUBLIC ENTRY POINT
-// ---------------------------------------------------------------------------
-
-// StartCollatorServices is invoked once by the IBPCollator binary *after*
-// Connect() and EnableCollatorRole().
 func StartCollatorServices() error {
 	if _, err := Subscribe(State.SubjectVote, handleVote); err != nil {
 		return err
@@ -40,19 +27,10 @@ func StartCollatorServices() error {
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-//  PROPOSAL / VOTE / FINALISE HANDLERS
-// ---------------------------------------------------------------------------
-
 var (
-	voteMu sync.Mutex
-	// proposalID -> set[nodeID]bool(agree)
+	voteMu  sync.Mutex
 	voteMap = make(map[string]map[string]bool)
 )
-
-// ---------------------------------------------------------------------------
-//  DNS‑USAGE AGGREGATION
-// ---------------------------------------------------------------------------
 
 func handleUsageData(m *nats.Msg) {
 	var resp UsageResponse
@@ -64,7 +42,6 @@ func handleUsageData(m *nats.Msg) {
 		return
 	}
 
-	// Fan‑out to data2 (same logic the old collator had)
 	records := make([]data2.UsageRecord, 0, len(resp.UsageRecords))
 	for _, r := range resp.UsageRecords {
 		dt, err := time.Parse("2006-01-02", r.Date)
@@ -89,7 +66,6 @@ func handleUsageData(m *nats.Msg) {
 	}
 }
 
-// periodically query every DNS node for *today*’s usage slice
 func startUsageCollector() {
 	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
@@ -132,10 +108,6 @@ func startUsageCollector() {
 		log.Log(log.Info, "[collator] stored %d aggregated DNS‑usage record(s)", len(recs))
 	}
 }
-
-// ---------------------------------------------------------------------------
-//  MEMORY JANITOR (proposal expiry)
-// ---------------------------------------------------------------------------
 
 func startMemoryJanitor() {
 	ticker := time.NewTicker(30 * time.Second)

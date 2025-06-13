@@ -8,25 +8,12 @@ import (
 	max "ibp-geodns/src/common/maxmind"
 )
 
-/* -----------------------------------------------------------------------
-   Internal helpers
-   ---------------------------------------------------------------------*/
-
-// statsEnabled returns the current allowStats flag (protected by the
-// same mutex used in cache.go).  We keep it in a small helper to avoid
-// directly touching the package‑scope variables from multiple files.
 func statsEnabled() bool {
 	muCacheOptions.Lock()
 	defer muCacheOptions.Unlock()
 	return allowStats
 }
 
-/* -----------------------------------------------------------------------
-   In‑memory structures
-   ---------------------------------------------------------------------*/
-
-// dailyUsageKey is the unique combination that we store in memory
-// before flushing to DB.
 type dailyUsageKey struct {
 	Date        string
 	Domain      string
@@ -37,23 +24,15 @@ type dailyUsageKey struct {
 	CountryName string
 }
 
-// usageMemory holds a map of dailyUsageKey -> hits
 type usageMemory struct {
 	mu   sync.Mutex
 	data map[dailyUsageKey]int
 }
 
-// global in‑memory usage stats
 var usageMem = &usageMemory{
 	data: make(map[dailyUsageKey]int),
 }
 
-/* -----------------------------------------------------------------------
-   Recording
-   ---------------------------------------------------------------------*/
-
-// RecordDnsHit is called from the DNS query logic with client IP,
-// domain, and assigned member.
 func RecordDnsHit(isIPv6 bool, clientIP, domain, memberName string) {
 	if !statsEnabled() || domain == "" || clientIP == "" {
 		return
@@ -93,19 +72,6 @@ func RecordDnsHit(isIPv6 bool, clientIP, domain, memberName string) {
 		domain, memberName, clientIP, isIPv6)
 }
 
-/* -----------------------------------------------------------------------
-   Flushing
-   ---------------------------------------------------------------------*/
-
-// FlushUsageToDatabase writes *all* accumulated usage (for every date)
-// to MySQL and clears the in‑memory map.
-//
-// If usage tracking is disabled (`allowStats == false`) the function exits
-// immediately and does nothing.
-//
-// NOTE: Previously this function only flushed a single date, which left
-// stale keys in RAM indefinitely. The implementation now iterates over
-// **every** key ensuring the map cannot grow without bound.
 func FlushUsageToDatabase(triggerDate string) {
 	if !statsEnabled() {
 		return

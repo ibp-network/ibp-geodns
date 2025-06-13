@@ -6,11 +6,6 @@ import (
 	log "ibp-geodns/src/common/logging"
 )
 
-/* ──────────────────────────────────────────────────────────────────────
-   INSERT / UPSERT
-   ────────────────────────────────────────────────────────────────────*/
-
-// UpsertUsage writes or increments a row in ibpcollator_usage.
 func UpsertUsage(r UsageRecord) error {
 	q := `INSERT INTO ibpcollator_usage
 	       (date,node_id,domain_name,member_name,network_asn,network_name,
@@ -45,11 +40,6 @@ func nullOrEmpty(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: true}
 }
 
-/* ──────────────────────────────────────────────────────────────────────
-   BULK STORE
-   ────────────────────────────────────────────────────────────────────*/
-
-// StoreUsageRecords iterates over the slice and upserts every row.
 func StoreUsageRecords(recs []UsageRecord) error {
 	for _, r := range recs {
 		if err := UpsertUsage(r); err != nil {

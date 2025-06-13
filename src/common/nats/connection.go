@@ -1,11 +1,5 @@
 package nats
 
-/*
-   NATS connection wrapper with aggressive buffering to avoid
-   “slow consumer” disconnects when large cluster‑membership
-   frames are published.
-*/
-
 import (
 	"fmt"
 	"strings"
@@ -23,21 +17,11 @@ var (
 	connectionMu sync.Mutex
 )
 
-/* -------------------------------------------------------------------- *
- *  PUBLIC HELPERS                                                      *
- * -------------------------------------------------------------------- */
-
-// GetConnection exposes the live *nats.Conn so other packages (consensus
-// manager, etc.) can publish/subscribe without creating a second socket.
 func GetConnection() *nats.Conn {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
 	return nc
 }
-
-/*─────────────────────────────────────────────────────────────
-  Connect / Disconnect
-─────────────────────────────────────────────────────────────*/
 
 func Connect() error {
 	connectionMu.Lock()
@@ -98,10 +82,6 @@ func Disconnect() {
 	}
 }
 
-/*─────────────────────────────────────────────────────────────
-  Publish / Subscribe helpers
-─────────────────────────────────────────────────────────────*/
-
 func Publish(subject string, data []byte) error {
 	connectionMu.Lock()
 	defer connectionMu.Unlock()
@@ -136,8 +116,7 @@ func Subscribe(subject string, cb func(*nats.Msg)) (*nats.Subscription, error) {
 	if err != nil {
 		return nil, err
 	}
-	// enlarge pending limits for membership floods
-	sub.SetPendingLimits(1000000, 128000000) // 50 k msgs or 64 MiB
+	sub.SetPendingLimits(1000000, 128000000)
 	return sub, nil
 }
 

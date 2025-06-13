@@ -4,8 +4,6 @@ import (
 	log "ibp-geodns/src/common/logging"
 )
 
-// DumpDomainStatus prints ONLINE/OFFLINE per (domain,member) after each poll.
-// This is purely operational‑diagnostic and does not affect runtime logic.
 func DumpDomainStatus() {
 	ServiceRecords.mu.RLock()
 	defer ServiceRecords.mu.RUnlock()

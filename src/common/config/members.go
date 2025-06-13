@@ -1,6 +1,5 @@
 package config
 
-// Get retrieves a member by name.
 func GetMember(name string) (Member, bool) {
 	cfg.mu.RLock()
 	member, exists := cfg.data.Members[name]
@@ -8,21 +7,18 @@ func GetMember(name string) (Member, bool) {
 	return member, exists
 }
 
-// Set updates or inserts a member.
 func SetMember(name string, member Member) {
 	cfg.mu.Lock()
 	cfg.data.Members[name] = member
 	cfg.mu.Unlock()
 }
 
-// Delete removes a member by name.
 func DeleteMember(name string) {
 	cfg.mu.Lock()
 	delete(cfg.data.Members, name)
 	cfg.mu.Unlock()
 }
 
-// List returns a copy of all members.
 func ListMembers() map[string]Member {
 	cfg.mu.RLock()
 	copy := make(map[string]Member, len(cfg.data.Members))

@@ -27,10 +27,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	//-----------------------------------------------------------------------
-	// bootstrap subsystems
-	//-----------------------------------------------------------------------
-
 	cfg.Init(*cfgPath)
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
@@ -42,10 +38,6 @@ func main() {
 		log.Log(log.Fatal, "Failed to connect to NATS: %v", err)
 		os.Exit(1)
 	}
-
-	//-----------------------------------------------------------------------
-	// advertise ourselves (IBPMonitor role)
-	//-----------------------------------------------------------------------
 
 	natsCommon.State.NodeID = c.Local.Nats.NodeID
 	natsCommon.State.ThisNode = natsCommon.NodeInfo{
@@ -60,16 +52,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	//-----------------------------------------------------------------------
-	// start health‑checks & HTTP API
-	//-----------------------------------------------------------------------
-
 	monitor.Init()
 	api.Init()
-
-	//-----------------------------------------------------------------------
-	// run forever
-	//-----------------------------------------------------------------------
 
 	for {
 		time.Sleep(60 * time.Second)

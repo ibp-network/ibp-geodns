@@ -8,7 +8,6 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-// appendUniqueRecords merges newRecords into records, skipping duplicates
 func appendUniqueRecords(records []cfg.DNSRecord, newRecords []cfg.DNSRecord) []cfg.DNSRecord {
 	for _, newRecord := range newRecords {
 		if !containsRecord(records, newRecord) {
@@ -27,7 +26,6 @@ func containsRecord(records []cfg.DNSRecord, record cfg.DNSRecord) bool {
 	return false
 }
 
-// extractTopLevelDomain uses publicsuffix to get eTLD+1
 func extractTopLevelDomain(domain string) string {
 	domain = strings.TrimSpace(strings.ToLower(domain))
 	domain = strings.TrimPrefix(domain, "https://")

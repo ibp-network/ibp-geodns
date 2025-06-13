@@ -35,7 +35,6 @@ func main() {
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
 	log.Log(log.Info, "DNS API is running with log level: %s", c.Local.System.LogLevel)
 
-	// initialise subsystems
 	dat.Init(dat.InitOptions{UseLocalOfficialCaches: false, UseUsageStats: true})
 	max.Init()
 
@@ -44,10 +43,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Poll monitor API
 	go startServiceMonitorPoller(c.Local.DnsApi.RefreshIntervalSeconds)
 
-	// NATS role
 	natsCommon.State.NodeID = c.Local.Nats.NodeID
 	natsCommon.State.ThisNode = natsCommon.NodeInfo{
 		NodeID:        c.Local.Nats.NodeID,
@@ -60,18 +57,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Start HTTP interface
 	api.Init()
 
-	// keep running
 	for {
 		time.Sleep(60 * time.Second)
 	}
 }
 
-// -----------------------------------------------------------------------------
-// Monitor‑poller (consumes OFFLINE‑only snapshot)
-// -----------------------------------------------------------------------------
 func startServiceMonitorPoller(intervalSec int) {
 	updateDNSMonitorSnapshot()
 
@@ -108,7 +100,4 @@ func updateDNSMonitorSnapshot() {
 		return
 	}
 	api.SetOfficialSnapshot(snap)
-
-	// diagnostic dump
-	// api.DumpDomainStatus()
 }

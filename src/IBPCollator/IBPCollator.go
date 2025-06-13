@@ -1,10 +1,5 @@
 package main
 
-/*  IBP‑GeoDNS – Collator
-    ----------------------
-    Thin binary: initialises libs and hands control to common/nats.
-*/
-
 import (
 	"flag"
 	"os"
@@ -21,10 +16,6 @@ var version = cfg.GetVersion()
 func main() {
 	log.Log(log.Info, "IBPCollator v%s starting …", version)
 
-	/* --------------------------------------------------------------------- */
-	/*  CLI ‑> CONFIG & LOGGING                                              */
-	/* --------------------------------------------------------------------- */
-
 	cfgPath := flag.String("config", "ibpcollator.json", "Path to configuration file")
 	flag.Parse()
 
@@ -37,15 +28,7 @@ func main() {
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
 
-	/* --------------------------------------------------------------------- */
-	/*  DATA LAYER  (mysql.go already handles opening + pooling)             */
-	/* --------------------------------------------------------------------- */
-
 	go data2.Init()
-
-	/* --------------------------------------------------------------------- */
-	/*  NATS                                                                 */
-	/* --------------------------------------------------------------------- */
 
 	if err := nats.Connect(); err != nil {
 		log.Log(log.Fatal, "NATS connect: %v", err)
@@ -71,6 +54,6 @@ func main() {
 
 	log.Log(log.Info, "[collator] started – awaiting events")
 	for {
-		time.Sleep(1 * time.Hour) // callback‑driven runtime
+		time.Sleep(1 * time.Hour)
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// DeleteEvent deletes an event from the database by its ID.
 func DeleteEvent(eventID int64) error {
 	query := `
 		DELETE FROM member_events
@@ -19,7 +18,6 @@ func DeleteEvent(eventID int64) error {
 	return nil
 }
 
-// InsertEvent inserts a new offline or online event into the database, including is_ipv6.
 func InsertEvent(event EventRecord) (int64, error) {
 	query := `
 		INSERT INTO member_events
@@ -46,7 +44,6 @@ func InsertEvent(event EventRecord) (int64, error) {
 	return result.LastInsertId()
 }
 
-// UpdateEventEndTime sets the end time for an existing offline event.
 func UpdateEventEndTime(eventID int64, endTime time.Time) error {
 	query := `
 		UPDATE member_events
@@ -60,7 +57,6 @@ func UpdateEventEndTime(eventID int64, endTime time.Time) error {
 	return nil
 }
 
-// FindOpenOfflineEvent finds an existing open offline event for a given member, check type, check name, domainName, endpoint, and isIPv6.
 func FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint string, isIPv6 bool) (*EventRecord, error) {
 	var row *sql.Row
 
@@ -110,7 +106,6 @@ func FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint
 	return &event, nil
 }
 
-// GetEvents retrieves events for a member within the specified time range.
 func GetEvents(memberName string, start, end time.Time) ([]EventRecord, error) {
 	query := `
 		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data, is_ipv6
@@ -148,7 +143,6 @@ func GetEvents(memberName string, start, end time.Time) ([]EventRecord, error) {
 	return res, nil
 }
 
-// FetchEvents returns all events for the given member and optional domain within the specified time range.
 func FetchEvents(memberName, domainName string, start, end time.Time) ([]EventRecord, error) {
 	args := []interface{}{memberName, start, end}
 	query := `

@@ -1,4 +1,3 @@
-// ===== cmd_Stats.go =====
 package nats
 
 import (
@@ -13,7 +12,6 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// handleMonitorStatsRequest responds to downtime requests: "monitor.stats.getDowntime"
 func handleMonitorStatsRequest(m *nats.Msg) {
 	log.Log(log.Debug, "[NATS] handleMonitorStatsRequest: subject=%s reply=%s from=%s",
 		m.Subject, m.Reply, m.Header.Get("sender"))
@@ -21,7 +19,6 @@ func handleMonitorStatsRequest(m *nats.Msg) {
 	var req DowntimeRequest
 	if err := json.Unmarshal(m.Data, &req); err != nil {
 		log.Log(log.Error, "[NATS] handleMonitorStatsRequest: unmarshal error: %v", err)
-		// Send error response if we have a reply subject
 		if m.Reply != "" {
 			errResp := DowntimeResponse{
 				NodeID: State.NodeID,
@@ -38,7 +35,6 @@ func handleMonitorStatsRequest(m *nats.Msg) {
 	log.Log(log.Debug, "[NATS] handleMonitorStatsRequest: StartTime=%v EndTime=%v MemberName=%s",
 		req.StartTime, req.EndTime, req.MemberName)
 
-	// Validate request
 	if req.EndTime.Before(req.StartTime) {
 		log.Log(log.Error, "[NATS] handleMonitorStatsRequest: EndTime before StartTime")
 		if m.Reply != "" {
@@ -54,11 +50,10 @@ func handleMonitorStatsRequest(m *nats.Msg) {
 		return
 	}
 
-	// retrieve local downtime events
 	events, err := retrieveLocalDowntimeEvents(req.MemberName, req.StartTime, req.EndTime)
 	if err != nil {
 		log.Log(log.Error, "[NATS] handleMonitorStatsRequest: error retrieving local downtime: %v", err)
-		events = []DowntimeEvent{} // Send empty list on error
+		events = []DowntimeEvent{}
 	}
 
 	resp := DowntimeResponse{
@@ -92,7 +87,6 @@ func retrieveLocalDowntimeEvents(memberName string, start, end time.Time) ([]Dow
 
 	results := make([]DowntimeEvent, 0, len(rawEvents))
 	for _, e := range rawEvents {
-		// Only include offline events (status=false)
 		if !e.Status {
 			results = append(results, DowntimeEvent{
 				MemberName: e.MemberName,
@@ -117,7 +111,6 @@ func retrieveLocalDowntimeEvents(memberName string, start, end time.Time) ([]Dow
 	return results, nil
 }
 
-// RequestAllMonitorsDowntime sends a DowntimeRequest to "monitor.stats.getDowntime"
 func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]DowntimeEvent, error) {
 	monitorCount := countActiveMonitors()
 	if monitorCount == 0 {
@@ -131,14 +124,10 @@ func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]D
 		return nil, fmt.Errorf("downtime request marshal error: %w", err)
 	}
 
-	// Create unique inbox
 	inbox := fmt.Sprintf("_INBOX.%s.downtimeReply.%d", State.NodeID, time.Now().UnixNano())
-
-	// Use a map to track responses and avoid duplicates
 	responseMap := make(map[string][]DowntimeEvent)
 	var mu sync.Mutex
 
-	// Subscribe to inbox
 	sub, err := Subscribe(inbox, func(msg *nats.Msg) {
 		var resp DowntimeResponse
 		if err := json.Unmarshal(msg.Data, &resp); err != nil {
@@ -161,13 +150,11 @@ func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]D
 	}
 	defer sub.Unsubscribe()
 
-	// Publish request
 	err = PublishMsgWithReply("monitor.stats.getDowntime", inbox, data)
 	if err != nil {
 		return nil, fmt.Errorf("publish downtime request error: %w", err)
 	}
 
-	// Wait for responses or timeout
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
@@ -178,7 +165,6 @@ func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]D
 	for {
 		select {
 		case <-timer.C:
-			// Timeout reached
 			mu.Lock()
 			receivedCount := len(responseMap)
 			mu.Unlock()
@@ -188,7 +174,6 @@ func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]D
 			goto done
 
 		case <-ticker.C:
-			// Check if we have all responses
 			mu.Lock()
 			if len(responseMap) >= monitorCount {
 				mu.Unlock()
@@ -200,7 +185,6 @@ func RequestAllMonitorsDowntime(req DowntimeRequest, timeout time.Duration) ([]D
 	}
 
 done:
-	// Aggregate all events
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -218,7 +202,6 @@ done:
 	return aggregated, nil
 }
 
-// handleMonitorStatsData is invoked when we receive downtime data from "monitor.stats.downtimeData"
 func handleMonitorStatsData(m *nats.Msg) {
 	var resp DowntimeResponse
 	if err := json.Unmarshal(m.Data, &resp); err != nil {
@@ -227,5 +210,4 @@ func handleMonitorStatsData(m *nats.Msg) {
 	}
 	log.Log(log.Debug, "[NATS] handleMonitorStatsData: got %d downtime events from node=%s",
 		len(resp.Events), resp.NodeID)
-	// Collator would process these events here
 }

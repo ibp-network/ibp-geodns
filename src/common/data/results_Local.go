@@ -37,7 +37,6 @@ func GetLocalResults() (sites []SiteResult, domains []DomainResult, endpoints []
 	return Local.SiteResults, Local.DomainResults, Local.EndpointResults
 }
 
-// UpdateLocalSiteResult sets or updates a site result (with isIPv6)
 func UpdateLocalSiteResult(check cfg.Check, member cfg.Member, status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
 	Local.Mu.Lock()
 	defer Local.Mu.Unlock()
@@ -83,7 +82,6 @@ func UpdateLocalSiteResult(check cfg.Check, member cfg.Member, status bool, erro
 	}
 }
 
-// UpdateLocalDomainResult sets or updates a domain result (with isIPv6)
 func UpdateLocalDomainResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string,
 	status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
 
@@ -132,7 +130,6 @@ func UpdateLocalDomainResult(check cfg.Check, member cfg.Member, service cfg.Ser
 	}
 }
 
-// UpdateLocalEndpointResult sets or updates an endpoint result (with isIPv6)
 func UpdateLocalEndpointResult(check cfg.Check, member cfg.Member, service cfg.Service, domain string, endpoint string,
 	status bool, errorMsg string, dataMap map[string]interface{}, isIPv6 bool) {
 
@@ -182,7 +179,6 @@ func UpdateLocalEndpointResult(check cfg.Check, member cfg.Member, service cfg.S
 	}
 }
 
-// Helpers for site/domain/endpoint status with isIPv6
 func GetLocalSiteStatusIPv4v6(checkName, memberName string, isIPv6 bool) (bool, bool) {
 	Local.Mu.RLock()
 	defer Local.Mu.RUnlock()

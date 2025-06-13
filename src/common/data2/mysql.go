@@ -11,16 +11,8 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-/*
-   ──────────────────────────────────────────────────────────────────────────────
-   SHARED DB INITIALISER
-   ──────────────────────────────────────────────────────────────────────────────
-*/
-
-// DB is the collator‑specific handle (kept separate from data/mysql.DB)
 var DB *sql.DB
 
-// Init opens the connection and blocks until MySQL is reachable.
 func Init() {
 	c := cfg.GetConfig()
 

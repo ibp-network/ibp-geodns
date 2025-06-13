@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// DB is the global database connection handle.
 var DB *sql.DB
 
 type EventRecord struct {
@@ -20,5 +19,5 @@ type EventRecord struct {
 	EndTime        sql.NullTime
 	ErrorText      sql.NullString
 	AdditionalData sql.NullString
-	IsIPv6         bool // NEW: indicates IPv6 or IPv4 check
+	IsIPv6         bool
 }

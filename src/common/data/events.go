@@ -9,9 +9,7 @@ import (
 	log "ibp-geodns/src/common/logging"
 )
 
-// RecordEvent now includes a param isIPv6 to store in the DB.
 func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, status bool, errorText string, data map[string]interface{}, isIPv6 bool) {
-	// Prepare data for storage
 	var additionalData string
 	if data != nil {
 		dataBytes, _ := json.Marshal(data)
@@ -19,14 +17,12 @@ func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, 
 	}
 
 	if status {
-		// Online Event: close any existing offline event for (member, checkType, checkName, domainName, endpoint, isIPv6)
 		event, err := mysql.FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint, isIPv6)
 		if err != nil {
 			log.Log(log.Error, "Failed to check for existing offline event: %v", err)
 			return
 		}
 		if event != nil {
-			// Calculate how long it was offline
 			now := time.Now().UTC()
 			duration := now.Sub(event.StartTime)
 			if duration < 30*time.Second {
@@ -46,7 +42,6 @@ func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, 
 			log.Log(log.Info, "Closed offline event for %s %s %s isIPv6=%v", memberName, checkType, checkName, isIPv6)
 		}
 	} else {
-		// Offline Event: see if one is already open
 		event, err := mysql.FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint, isIPv6)
 		if err != nil {
 			log.Log(log.Error, "Failed to check for existing offline event: %v", err)
@@ -74,7 +69,6 @@ func RecordEvent(checkType, checkName, memberName, domainName, endpoint string, 
 	}
 }
 
-// GetMemberEvents retrieves events for a member+domain in [start,end].
 func GetMemberEvents(memberName, domain string, start, end time.Time) ([]EventRecord, error) {
 	rows, err := mysql.FetchEvents(memberName, domain, start, end)
 	if err != nil {

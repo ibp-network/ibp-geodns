@@ -26,38 +26,28 @@ func init() {
 	RegisterEndpointCheck("wss", WssCheck)
 }
 
-// WssCheck tries IPv4 if present, and IPv6 if present (similar to ping check).
 func WssCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member) {
 	ip4 := member.Service.ServiceIPv4
 	ip6 := member.Service.ServiceIPv6
 
-	// If no IP is configured, fail immediately.
 	if ip4 == "" && ip6 == "" {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, "No IPv4 or IPv6 configured", nil, false)
 		return
 	}
 
-	// Attempt WSS check over IPv4
 	if ip4 != "" {
 		runWssSingle(check, endpoint, service, member, ip4, false)
 	}
 
-	// Attempt WSS check over IPv6
 	if ip6 != "" {
 		runWssSingle(check, endpoint, service, member, ip6, true)
 	}
 }
 
-// runWssSingle tries a WSS dial to ip:443, then verifies it's a full archive node, correct network, etc.
-// Added isIPv6 parameter to track whether this is an IPv6 check
 func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member, ip string, isIPv6 bool) {
 	u := max.ParseUrl(endpoint)
-	// Reconstruct the wss://... but substituting the IP for the domain
-	// so we dial the correct IP. We'll keep the same path as the original parse.
 	reconstructedURL := fmt.Sprintf("%s%s%s", u.Protocol, u.Domain, u.Directory)
 
-	// We'll override the dial target with ip:443
-	// But the "ServerName" in TLS config is still the domain
 	dialer := websocket.Dialer{
 		TLSClientConfig: &tls.Config{
 			ServerName:         u.Domain,

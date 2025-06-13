@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// NetStatusRecord maps to ibpcollator_netStatus
 type NetStatusRecord struct {
 	CheckType int
 	CheckName string
@@ -18,7 +17,7 @@ type NetStatusRecord struct {
 	StartTime time.Time
 	EndTime   sql.NullTime
 	Error     string
-	VoteData  map[string]bool // NodeID -> agree
+	VoteData  map[string]bool
 	Extra     map[string]interface{}
 }
 
@@ -48,7 +47,6 @@ func InsertNetStatus(rec NetStatusRecord) error {
 	return err
 }
 
-// CloseOpenEvent sets end_time when a member comes back online.
 func CloseOpenEvent(rec NetStatusRecord) error {
 	q := `UPDATE ibpcollator_netStatus SET end_time = NOW(), status = 1
 		WHERE check_type=? AND check_name=? AND check_url=? AND domain_name=? AND member_name=? AND is_ipv6=? AND status=0 AND end_time IS NULL`

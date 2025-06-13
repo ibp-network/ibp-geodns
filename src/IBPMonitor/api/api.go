@@ -10,13 +10,6 @@ import (
 	log "ibp-geodns/src/common/logging"
 )
 
-/*
-   ---------------------------------------------------------------------------
-   OFFICIAL snapshot ➜ **latest‑status‑per‑member** ➜ keep only OFFLINE
-   ---------------------------------------------------------------------------
-*/
-
-// ---------- key helpers ------------------------------------------------------
 func keySite(chk string, v6 bool) string {
 	if v6 {
 		return chk + "|v6"
@@ -36,9 +29,8 @@ func keyEndpoint(chk, dom, rpc string, v6 bool) string {
 	return chk + "|" + dom + "|" + rpc + "|v4"
 }
 
-// ---------- reduce helpers ---------------------------------------------------
 func newestOnly(results []dat.Result) map[string]dat.Result {
-	out := make(map[string]dat.Result) // member‑name -> newest result
+	out := make(map[string]dat.Result)
 	for _, r := range results {
 		name := r.Member.Details.Name
 		if prev, ok := out[name]; !ok || r.Checktime.After(prev.Checktime) {
@@ -59,7 +51,6 @@ func sliceFromMap(m map[string]dat.Result, onlyOffline bool) []dat.Result {
 	return out
 }
 
-// ---------- OFFLINE site -----------------------------------------------------
 func buildOfflineSiteResults(input []dat.SiteResult) []dat.SiteResult {
 	res := make(map[string]*dat.SiteResult)
 
@@ -81,7 +72,6 @@ func buildOfflineSiteResults(input []dat.SiteResult) []dat.SiteResult {
 	return out
 }
 
-// ---------- OFFLINE domain ---------------------------------------------------
 func buildOfflineDomainResults(input []dat.DomainResult) []dat.DomainResult {
 	res := make(map[string]*dat.DomainResult)
 
@@ -103,7 +93,6 @@ func buildOfflineDomainResults(input []dat.DomainResult) []dat.DomainResult {
 	return out
 }
 
-// ---------- OFFLINE endpoint -------------------------------------------------
 func buildOfflineEndpointResults(input []dat.EndpointResult) []dat.EndpointResult {
 	res := make(map[string]*dat.EndpointResult)
 
@@ -125,12 +114,6 @@ func buildOfflineEndpointResults(input []dat.EndpointResult) []dat.EndpointResul
 	return out
 }
 
-/*
-   ---------------------------------------------------------------------------
-   API initialisation
-   ---------------------------------------------------------------------------
-*/
-
 func Init() {
 	c := cfg.GetConfig()
 
@@ -146,12 +129,6 @@ func Init() {
 		mux,
 	)
 }
-
-/*
-   ---------------------------------------------------------------------------
-   /results – returns OFFLINE results only
-   ---------------------------------------------------------------------------
-*/
 
 func handleResults(w http.ResponseWriter, r *http.Request) {
 	offSites, offDomains, offEndpoints := dat.GetOfficialResults()

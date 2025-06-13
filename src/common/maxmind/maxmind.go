@@ -19,7 +19,6 @@ func updateMaxmindDatabase() error {
 	c := cfg.GetConfig()
 	baseDir := filepath.Join(c.Local.Maxmind.MaxmindDBPath)
 
-	// The direct download method requires your account ID & license key
 	accountID := c.Local.Maxmind.AccountID
 	licenseKey := c.Local.Maxmind.LicenseKey
 	if accountID == "" || licenseKey == "" {
@@ -48,37 +47,31 @@ func updateMaxmindDatabase() error {
 	return nil
 }
 
-// checkAndDownloadOne does the HEAD request to see if remote is newer, and if so, downloads + extracts.
 func checkAndDownloadOne(
 	baseDir, accountID, licenseKey, dbName, editionID, mmdbFilename, markerFilename string,
 ) error {
-	localMmdbPath := filepath.Join(baseDir, mmdbFilename)     // e.g. .../CityLite.mmdb
-	localMarkerPath := filepath.Join(baseDir, markerFilename) // e.g. .../.CityLite
+	localMmdbPath := filepath.Join(baseDir, mmdbFilename)
+	localMarkerPath := filepath.Join(baseDir, markerFilename)
 
 	remoteURL := fmt.Sprintf(
 		"https://download.maxmind.com/geoip/databases/%s/download?edition_id=%s&suffix=tar.gz",
 		editionID, editionID,
 	)
 
-	// Step A) HEAD request for last-modified
 	remoteModTime, err := getRemoteLastModified(remoteURL, accountID, licenseKey)
 	if err != nil {
 		return fmt.Errorf("%s HEAD request error: %w", dbName, err)
 	}
 	if remoteModTime == "" {
-		// if no last-modified returned, let's do a direct skip or fallback
 		log.Log(log.Warn, "No Last-Modified header for %s from server. Will always download it.", dbName)
 		remoteModTime = "no-last-mod-header"
 	}
 
-	// Step B) read local marker
 	localMarker, _ := os.ReadFile(localMarkerPath)
 	localStamp := strings.TrimSpace(string(localMarker))
 
-	// Step C) decide if we must re-download
 	mmdbStat, statErr := os.Stat(localMmdbPath)
 	if statErr != nil || remoteModTime != localStamp {
-		// We do the download
 		log.Log(log.Info, "Downloading fresh MaxMind DB for %s ...", dbName)
 
 		tmpArchivePath := filepath.Join(baseDir, dbName+".tar.gz")
@@ -87,18 +80,15 @@ func checkAndDownloadOne(
 			return fmt.Errorf("download of %s failed: %w", dbName, err)
 		}
 
-		// Step D) Extract the tar.gz
 		if err := extractTarGz(tmpArchivePath, baseDir); err != nil {
 			return fmt.Errorf("extract error for %s: %w", dbName, err)
 		}
 
-		// Step E) find the .mmdb we extracted
 		extractedMmdb, findErr := findExtractedMmdb(baseDir, editionID)
 		if findErr != nil {
 			return fmt.Errorf("cannot find extracted mmdb for %s: %w", dbName, findErr)
 		}
 
-		// Step F) Move/rename that to e.g. CityLite.mmdb
 		if err := os.RemoveAll(localMmdbPath); err != nil {
 			log.Log(log.Error, "Could not remove old file %s: %v", localMmdbPath, err)
 		}
@@ -106,35 +96,30 @@ func checkAndDownloadOne(
 			return fmt.Errorf("rename to final mmdb %s failed: %w", localMmdbPath, renameErr)
 		}
 
-		// Step G) Clean up leftover archives + directories
 		if err := os.Remove(tmpArchivePath); err != nil {
 			log.Log(log.Error, "Could not remove archive file %s: %v", tmpArchivePath, err)
 		}
-		// Also remove leftover "GeoLite2-City_YYYYMMDD..." directories
+
 		cleanupExtractedDirs(baseDir, editionID)
 
-		// Step H) Save new marker
 		os.WriteFile(localMarkerPath, []byte(remoteModTime), 0644)
 	} else {
-		// no re-download needed
 		log.Log(log.Info, "Local %s is up-to-date, local stamp = %s, remote = %s, size: %d",
 			dbName, localStamp, remoteModTime, mmdbStat.Size())
 	}
 	return nil
 }
 
-// getRemoteLastModified sends HEAD to see if the Last-Modified is present
 func getRemoteLastModified(url, accountID, licenseKey string) (string, error) {
 	req, err := http.NewRequest("HEAD", url, nil)
 	if err != nil {
 		return "", err
 	}
-	// Basic auth for MaxMind
+
 	req.SetBasicAuth(accountID, licenseKey)
 
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// Ensure we follow redirect
 			return nil
 		},
 	}
@@ -152,7 +137,6 @@ func getRemoteLastModified(url, accountID, licenseKey string) (string, error) {
 	return resp.Header.Get("Last-Modified"), nil
 }
 
-// downloadDatabase sends GET with BasicAuth to get the .tar.gz
 func downloadDatabase(url, accountID, licenseKey, outPath string) error {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -162,7 +146,7 @@ func downloadDatabase(url, accountID, licenseKey, outPath string) error {
 
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return nil // allow 3xx follow
+			return nil
 		},
 	}
 
@@ -186,10 +170,7 @@ func downloadDatabase(url, accountID, licenseKey, outPath string) error {
 	return err
 }
 
-// findExtractedMmdb tries to locate the .mmdb file in the extracted folder
-// For instance, after extracting GeoLite2-City_YYYYMMDD/ we want the .mmdb
 func findExtractedMmdb(baseDir, editionID string) (string, error) {
-	// We'll guess the folder name starts with "GeoLite2-City_" or similar
 	pattern := fmt.Sprintf(`^%s_(\d{8})$`, editionID)
 	re := regexp.MustCompile(pattern)
 
@@ -199,7 +180,6 @@ func findExtractedMmdb(baseDir, editionID string) (string, error) {
 	}
 	for _, de := range dEntries {
 		if de.IsDir() && re.MatchString(de.Name()) {
-			// Inside that dir, find a .mmdb
 			subDirPath := filepath.Join(baseDir, de.Name())
 			foundMmdb, errWalk := walkForMmdb(subDirPath)
 			if errWalk != nil {
@@ -214,7 +194,6 @@ func findExtractedMmdb(baseDir, editionID string) (string, error) {
 	return "", fmt.Errorf("no extracted mmdb found for %s in %s", editionID, baseDir)
 }
 
-// walkForMmdb finds the first .mmdb file under a directory
 func walkForMmdb(path string) (string, error) {
 	var found string
 	err := filepath.Walk(path, func(fp string, info os.FileInfo, err error) error {
@@ -223,7 +202,7 @@ func walkForMmdb(path string) (string, error) {
 		}
 		if !info.IsDir() && strings.HasSuffix(info.Name(), ".mmdb") {
 			found = fp
-			return io.EOF // short-circuit
+			return io.EOF
 		}
 		return nil
 	})
@@ -233,8 +212,6 @@ func walkForMmdb(path string) (string, error) {
 	return found, err
 }
 
-// cleanupExtractedDirs removes leftover directories like "GeoLite2-City_YYYYMMDD"
-// so that baseDir remains tidy.
 func cleanupExtractedDirs(baseDir, editionID string) {
 	entries, _ := os.ReadDir(baseDir)
 	for _, e := range entries {
@@ -249,7 +226,6 @@ func cleanupExtractedDirs(baseDir, editionID string) {
 	}
 }
 
-// extractTarGz is your standard tar/gz extraction
 func extractTarGz(tarGzPath, destDir string) error {
 	f, err := os.Open(tarGzPath)
 	if err != nil {

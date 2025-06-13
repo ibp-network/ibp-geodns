@@ -1,6 +1,5 @@
 package api
 
-// dnsQuery_GetDomainKeys retrieves DNSKEY records for a given domain.
 func handle_GetDomainKeys(req Request) Response {
 	for _, domain := range TLDRecords.records {
 		if req.Parameters.QName == domain {

@@ -1,10 +1,5 @@
 package nats
 
-/*
-   Consensus engine — production version.
-   -- snip header comment unchanged --
-*/
-
 import (
 	"encoding/json"
 	"time"
@@ -18,22 +13,8 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-/*
-──────────────────────────────────────────────
+const minConsensusVotes = 2
 
-	CONSTANTS
-
-──────────────────────────────────────────────
-*/
-const minConsensusVotes = 2 // hard minimum even for small clusters
-
-/*
-──────────────────────────────────────────────
-
-	PUBLIC ENTRY — called by monitor helpers
-
-──────────────────────────────────────────────
-*/
 func ProposeCheckStatus(
 	checkType, checkName, memberName,
 	domainName, endpoint string,
@@ -42,7 +23,6 @@ func ProposeCheckStatus(
 	dataMap map[string]interface{},
 	isIPv6 bool,
 ) {
-	// skip if identical active proposal already exists from this node
 	State.Mu.RLock()
 	for _, pt := range State.Proposals {
 		if !pt.Finalized &&
@@ -63,13 +43,6 @@ func ProposeCheckStatus(
 		status, errorText, dataMap, isIPv6)
 }
 
-/*
-──────────────────────────────────────────────
-
-	CREATE + PUBLISH PROPOSAL
-
-──────────────────────────────────────────────
-*/
 func propose(
 	checkType, checkName, memberName, domainName, endpoint string,
 	status bool,
@@ -119,13 +92,6 @@ func propose(
 	go voteOnProposal(prop)
 }
 
-/*
-──────────────────────────────────────────────
-
-	PROPOSAL HANDLER
-
-──────────────────────────────────────────────
-*/
 func handleProposal(m *nats.Msg) {
 	var prop Proposal
 	if err := json.Unmarshal(m.Data, &prop); err != nil {
@@ -151,15 +117,8 @@ func handleProposal(m *nats.Msg) {
 	State.Mu.Unlock()
 }
 
-/*
-──────────────────────────────────────────────
-
-	VOTING
-
-──────────────────────────────────────────────
-*/
 func voteOnProposal(prop Proposal) {
-	time.Sleep(5 * time.Millisecond) // allow storage propagation
+	time.Sleep(5 * time.Millisecond)
 
 	found, localStatus := checkLocalStatus(
 		prop.CheckType, prop.CheckName, prop.MemberName,
@@ -242,13 +201,6 @@ func decideLocked(pt *ProposalTracking) {
 	}
 }
 
-/*
-──────────────────────────────────────────────
-
-	FINALISATION
-
-──────────────────────────────────────────────
-*/
 func forceFinalize(pid ProposalID) {
 	State.Mu.Lock()
 	pt, ok := State.Proposals[pid]
@@ -289,15 +241,9 @@ func handleFinalize(m *nats.Msg) {
 		"[CONSENSUS] ⇦ FINALIZE id=%s PASS=%v", fm.Proposal.ID, fm.Passed)
 	markNodeHeard(fm.Proposal.SenderNodeID)
 
-	/* -----------------------------------------------------------------
-	   Apply the decision only on the node types that need it:
-	   • IBPMonitor keeps the authoritative in‑memory snapshot.
-	   • IBPCollator persists the decision to MySQL via data2.
-	   ----------------------------------------------------------------- */
 	if fm.Passed && State.ThisNode.NodeRole == "IBPMonitor" {
 		applyOfficialChanges(fm.Proposal)
 	} else if fm.Passed && State.ThisNode.NodeRole == "IBPCollator" {
-		// Persist the accepted proposal for audit / billing.
 		if err := data2.StoreProposal(data2.Proposal{
 			ID:        string(fm.Proposal.ID),
 			IsIPv6:    fm.Proposal.IsIPv6,
@@ -312,13 +258,6 @@ func handleFinalize(m *nats.Msg) {
 	}
 }
 
-/*
-──────────────────────────────────────────────
-
-	APPLY TO OFFICIAL SNAPSHOT
-
-──────────────────────────────────────────────
-*/
 func applyOfficialChanges(prop Proposal) {
 	log.Log(log.Debug,
 		"[CONSENSUS] ↻ apply official change id=%s type=%s member=%s status=%v v6=%v",
@@ -353,10 +292,6 @@ func applyOfficialChanges(prop Proposal) {
 	}
 }
 
-/*─────────────────────────────────────────────────────────────
-  HELPER – LOCAL STATUS LOOK‑UP
-─────────────────────────────────────────────────────────────*/
-
 func checkLocalStatus(checkType, checkName, memberName, domainName, endpoint string, isIPv6 bool) (bool, bool) {
 	switch checkType {
 	case "site":
@@ -369,10 +304,6 @@ func checkLocalStatus(checkType, checkName, memberName, domainName, endpoint str
 		return false, false
 	}
 }
-
-/*─────────────────────────────────────────────────────────────
-  HELPER – LIVE MONITOR COUNT (LOCK HELD BY CALLER)
-─────────────────────────────────────────────────────────────*/
 
 func countActiveMonitorsLocked() int {
 	n := 0

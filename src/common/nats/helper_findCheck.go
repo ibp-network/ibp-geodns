@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// findCheckByName searches for a check by name and type.
 func findCheckByName(checkName, checkType string) (cfg.Check, bool) {
 	c := cfg.GetConfig()
 	for _, ch := range c.Local.Checks {
@@ -17,7 +16,6 @@ func findCheckByName(checkName, checkType string) (cfg.Check, bool) {
 	return cfg.Check{}, false
 }
 
-// findMemberByName searches for a member by name.
 func findMemberByName(memberName string) (cfg.Member, bool) {
 	c := cfg.GetConfig()
 	for _, m := range c.Members {
@@ -28,7 +26,6 @@ func findMemberByName(memberName string) (cfg.Member, bool) {
 	return cfg.Member{}, false
 }
 
-// findServiceForDomain finds a service that matches the given domainName.
 func findServiceForDomain(domainName string) (cfg.Service, bool) {
 	c := cfg.GetConfig()
 	for _, service := range c.Services {

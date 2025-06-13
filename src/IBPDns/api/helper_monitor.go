@@ -4,7 +4,6 @@ import (
 	"strings"
 )
 
-// ------------------------------------------------------------------ helpers --
 func offSite(sites []MonitorResultSite, member string, v6 *bool) bool {
 	for _, sr := range sites {
 		if v6 != nil && sr.IsIPv6 != *v6 {
@@ -53,7 +52,6 @@ func offEndpoint(eps []MonitorResultEndpoint, member, dom string, v6 *bool) bool
 	return false
 }
 
-// ----------------------------------------------------------- public helpers --
 func IsMemberOnlineForDomain(domain, member string) bool {
 	s := GetOfficialSnapshot()
 	if offSite(s.SiteResults, member, nil) ||

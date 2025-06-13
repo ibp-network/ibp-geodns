@@ -10,22 +10,17 @@ import (
 	log "ibp-geodns/src/common/logging"
 )
 
-// We track which caches the system actually wants to use.
 var (
-	allowLocalOfficial bool // if true, load/save official + local caches
-	allowStats         bool // if true, load/save stats cache
+	allowLocalOfficial bool
+	allowStats         bool
 	muCacheOptions     sync.Mutex
 )
 
-// Our cache file names
 const (
 	officialCacheFile = "official.cache.json"
 	localCacheFile    = "local.cache.json"
-	// statsCacheFile  = "stats.cache.json" -- Removed usage, no longer used
 )
 
-// SetCacheOptions is called from data.Init() to indicate whether
-// we want to handle local/official caches, stats caches, or both.
 func SetCacheOptions(localOfficial, stats bool) {
 	muCacheOptions.Lock()
 	defer muCacheOptions.Unlock()
@@ -36,7 +31,6 @@ func SetCacheOptions(localOfficial, stats bool) {
 		localOfficial, stats)
 }
 
-// LoadCache loads data from a cache file into the provided data structure.
 func LoadCache(filePath string, out interface{}) error {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -59,12 +53,9 @@ func LoadCache(filePath string, out interface{}) error {
 	return nil
 }
 
-// SaveCache saves the given data to a cache file.
 func SaveCache(filePath string, data interface{}) error {
-	// First, log at DEBUG so we see exactly which file we’re about to write.
 	log.Log(log.Debug, "[SaveCache] Attempting to create or overwrite cache file: %s", filePath)
 
-	// Ensure the directory exists before creating the file.
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		log.Log(log.Error, "Failed to create directory '%s': %v", dir, err)
@@ -88,8 +79,6 @@ func SaveCache(filePath string, data interface{}) error {
 	return nil
 }
 
-// LoadAllCaches selectively loads Official, Local caches depending on allowLocalOfficial.
-// Stats caching is removed, so we do not load stats data from disk.
 func LoadAllCaches() {
 	muCacheOptions.Lock()
 	useLocal := allowLocalOfficial
@@ -100,7 +89,6 @@ func LoadAllCaches() {
 
 	officialFile := filepath.Join(workDir, "tmp", officialCacheFile)
 	localFile := filepath.Join(workDir, "tmp", localCacheFile)
-	// statsFile := filepath.Join(workDir, "tmp", statsCacheFile)
 
 	if useLocal {
 		log.Log(log.Debug, "[LoadAllCaches] Loading official cache from %s", officialFile)
@@ -117,18 +105,13 @@ func LoadAllCaches() {
 		}
 		Local.Mu.Unlock()
 	}
-
-	// We no longer load or save stats from disk, so ignore the old logic here.
 }
 
-// SaveAllCaches saves the Official and Local caches if enabled.
-// We do not save usage stats to disk anymore.
 func SaveAllCaches() {
 	log.Log(log.Debug, "[SaveAllCaches] Entry: Attempting to save caches...")
 
 	muCacheOptions.Lock()
 	useLocal := allowLocalOfficial
-	// useStats := allowStats  (no effect now)
 	muCacheOptions.Unlock()
 
 	c := cfg.GetConfig()
@@ -136,7 +119,6 @@ func SaveAllCaches() {
 
 	officialFile := filepath.Join(workDir, "tmp", officialCacheFile)
 	localFile := filepath.Join(workDir, "tmp", localCacheFile)
-	// statsFile := filepath.Join(workDir, "tmp", statsCacheFile)
 
 	if useLocal {
 		Official.Mu.Lock()

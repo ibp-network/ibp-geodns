@@ -20,19 +20,18 @@ type LocalResults struct {
 	Mu              sync.RWMutex
 }
 
-// We add IsIPv6 to the Result struct
 type Result struct {
 	Member    cfg.Member
 	Status    bool
 	Checktime time.Time
 	ErrorText string
 	Data      map[string]interface{}
-	IsIPv6    bool // new
+	IsIPv6    bool
 }
 
 type SiteResult struct {
 	Check   cfg.Check
-	IsIPv6  bool // new
+	IsIPv6  bool
 	Results []Result
 }
 
@@ -56,7 +55,6 @@ type EndpointResult struct {
 	Results  []Result
 }
 
-// StatMap holds the mutex and the data map for statistics collection.
 type StatMap struct {
 	Mu   sync.Mutex
 	Data map[string]map[string]*DailyStats
@@ -95,7 +93,6 @@ type BCache struct {
 	FilePath string
 }
 
-// EventRecord represents a downtime/uptime event for a member.
 type EventRecord struct {
 	CheckType  string                 `json:"CheckType"`
 	CheckName  string                 `json:"CheckName"`

@@ -8,7 +8,6 @@ import (
 	mysql "ibp-geodns/src/common/data/mysql"
 )
 
-// UsageRecord now includes all fields that match usage_daily structure.
 type UsageRecord struct {
 	Date        string
 	Domain      string
@@ -20,7 +19,6 @@ type UsageRecord struct {
 	Hits        int
 }
 
-// UpsertUsageRecord stores a usage record into usage_daily.
 func UpsertUsageRecord(rec UsageRecord) error {
 	q := `
 INSERT INTO usage_daily
@@ -46,7 +44,6 @@ ON DUPLICATE KEY UPDATE
 	return nil
 }
 
-// GetUsageByDomain returns usage records for a domain in [startDate, endDate].
 func GetUsageByDomain(domain string, start, end time.Time) ([]UsageRecord, error) {
 	startDate := start.Format("2006-01-02")
 	endDate := end.Format("2006-01-02")
@@ -98,7 +95,6 @@ ORDER BY usage_date
 	return results, nil
 }
 
-// GetUsageByMember fetches usage records for a domain+member in [start, end].
 func GetUsageByMember(domain, member string, start, end time.Time) ([]UsageRecord, error) {
 	startDate := start.Format("2006-01-02")
 	endDate := end.Format("2006-01-02")
@@ -151,7 +147,6 @@ ORDER BY usage_date
 	return results, nil
 }
 
-// GetUsageByCountry fetches usage in [start, end], grouped by date/domain/member/country/etc.
 func GetUsageByCountry(start, end time.Time) ([]UsageRecord, error) {
 	startDate := start.Format("2006-01-02")
 	endDate := end.Format("2006-01-02")
@@ -202,7 +197,6 @@ ORDER BY usage_date
 	return results, nil
 }
 
-// nullOrString returns nil if the input is empty, otherwise returns the string.
 func nullOrString(s string) interface{} {
 	if s == "" {
 		return nil

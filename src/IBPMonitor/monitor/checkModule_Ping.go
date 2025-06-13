@@ -10,18 +10,15 @@ import (
 	"github.com/go-ping/ping"
 )
 
-// Modified to handle optional IPv6
 func init() {
 	RegisterSiteCheck("ping", PingCheck)
 }
 
-// PingCheck runs an IPv4 ping if ServiceIPv4 is present, and an IPv6 ping if ServiceIPv6 is present.
 func PingCheck(check cfg.Check, member cfg.Member) {
-	// IPv4
 	if member.Service.ServiceIPv4 != "" {
 		runPingSingle(check, member, false)
 	}
-	// IPv6
+
 	if member.Service.ServiceIPv6 != "" {
 		runPingSingle(check, member, true)
 	}

@@ -5,14 +5,12 @@ import (
 	"time"
 )
 
-// ConfigInit holds the main config pointer with a mutex
 type ConfigInit struct {
 	mu      sync.RWMutex
 	cfgFile string
 	data    Config
 }
 
-// Config holds all top-level configuration sections
 type Config struct {
 	Local           LocalConfig            `json:"System"`
 	StaticDNS       []DNSRecord            `json:"StaticDNS"`
@@ -22,7 +20,6 @@ type Config struct {
 	ServiceRequests ServiceRequests        `json:"ServiceRequests"`
 }
 
-// LocalConfig is loaded from disk (config.json)
 type LocalConfig struct {
 	System     SystemConfig  `json:"System"`
 	Maxmind    MaxmindConfig `json:"Maxmind"`
@@ -36,12 +33,10 @@ type LocalConfig struct {
 	Checks     []Check `json:"Checks"`
 }
 
-// DiscordConfig holds Discord bot credentials
 type DiscordConfig struct {
 	Token string `json:"Token"`
 }
 
-// SystemConfig for base paths and intervals
 type SystemConfig struct {
 	WorkDir            string        `json:"WorkDir"`
 	LogLevel           string        `json:"LogLevel"`
@@ -51,7 +46,6 @@ type SystemConfig struct {
 	ConfigUrls         ConfigUrls    `json:"ConfigUrls"`
 }
 
-// ConfigUrls for external JSON fetch
 type ConfigUrls struct {
 	StaticDNSConfig        string `json:"StaticDNSConfig"`
 	MembersConfig          string `json:"MembersConfig"`
@@ -60,7 +54,6 @@ type ConfigUrls struct {
 	ServicesRequestsConfig string `json:"ServicesRequestsConfig"`
 }
 
-// IaasPricing holds region-based pricing
 type IaasPricing struct {
 	Cores     float64 `json:"cores"`
 	Memory    float64 `json:"memory"`
@@ -68,17 +61,15 @@ type IaasPricing struct {
 	Bandwidth float64 `json:"bandwidth"`
 }
 
-// ApiConfig for HTTP servers
 type ApiConfig struct {
 	ListenAddress          string            `json:"ListenAddress"`
 	ListenPort             string            `json:"ListenPort"`
 	MonitorAddress         string            `json:"MonitorAddress"`
 	MonitorPort            string            `json:"MonitorPort"`
 	AuthKeys               map[string]string `json:"AuthKeys"`
-	RefreshIntervalSeconds int               `json:"RefreshIntervalSeconds"` // new
+	RefreshIntervalSeconds int               `json:"RefreshIntervalSeconds"`
 }
 
-// MatrixConfig for matrix bot
 type MatrixConfig struct {
 	HomeServerURL string `json:"HomeServerURL"`
 	Username      string `json:"Username"`
@@ -86,7 +77,6 @@ type MatrixConfig struct {
 	RoomID        string `json:"RoomID"`
 }
 
-// Check defines a monitor check
 type Check struct {
 	Name          string                 `json:"Name"`
 	Enabled       int                    `json:"Enabled"`
@@ -96,7 +86,6 @@ type Check struct {
 	ExtraOptions  map[string]interface{} `json:"ExtraOptions"`
 }
 
-// DNSRecord for static DNS config
 type DNSRecord struct {
 	QName    string `json:"qname"`
 	QType    string `json:"qtype"`
@@ -106,7 +95,6 @@ type DNSRecord struct {
 	DomainID int    `json:"domain_id"`
 }
 
-// Member structure
 type Member struct {
 	Details            MemberDetails `json:"Details"`
 	Membership         Membership    `json:"Membership"`
@@ -117,21 +105,18 @@ type Member struct {
 	Location           Location            `json:"Location"`
 }
 
-// MemberDetails for display info
 type MemberDetails struct {
 	Name    string `json:"Name"`
 	Website string `json:"Website"`
 	Logo    string `json:"Logo"`
 }
 
-// Membership level info
 type Membership struct {
 	Level      int `json:"MemberLevel"`
 	Joined     int `json:"Joined"`
 	LastRankup int `json:"LastRankup"`
 }
 
-// ServiceInfo for a member's main Service
 type ServiceInfo struct {
 	Active      int    `json:"Active"`
 	ServiceIPv4 string `json:"ServiceIPv4"`
@@ -139,26 +124,22 @@ type ServiceInfo struct {
 	MonitorUrl  string `json:"MonitorUrl"`
 }
 
-// Location represents lat/long for geo
 type Location struct {
 	Region    string  `json:"Region"`
 	Latitude  float64 `json:"Latitude"`
 	Longitude float64 `json:"Longitude"`
 }
 
-// Service definition
 type Service struct {
 	Configuration ServiceConfiguration       `json:"Configuration"`
 	Resources     Resources                  `json:"Resources"`
 	Providers     map[string]ServiceProvider `json:"Providers"`
 }
 
-// ServiceProvider data
 type ServiceProvider struct {
 	RpcUrls []string `json:"RpcUrls"`
 }
 
-// ServiceConfiguration data
 type ServiceConfiguration struct {
 	Name          string `json:"Name"`
 	ServiceType   string `json:"ServiceType"`
@@ -167,7 +148,6 @@ type ServiceConfiguration struct {
 	NetworkName   string `json:"NetworkName"`
 }
 
-// Resources define service usage
 type Resources struct {
 	Nodes     int     `json:"nodes"`
 	Cores     float64 `json:"cores"`
@@ -176,18 +156,15 @@ type Resources struct {
 	Bandwidth float64 `json:"bandwidth"`
 }
 
-// ServiceRequests for monthly usage
 type ServiceRequests struct {
 	Requests map[string]map[string]MonthlyData
 }
 
-// MonthlyData for DNS / WSS
 type MonthlyData struct {
 	DNS RequestStats `json:"dns"`
 	WSS RequestStats `json:"wss"`
 }
 
-// RequestStats track usage
 type RequestStats struct {
 	Requests        int `json:"requests"`
 	UniqueIPs       int `json:"uniqueIPs"`
@@ -195,7 +172,6 @@ type RequestStats struct {
 	UniqueCountries int `json:"uniqueCountries"`
 }
 
-// SignalConfig for NATS
 type NatsConfig struct {
 	NodeID string `json:"NodeID"`
 	User   string `json:"User"`
@@ -203,14 +179,12 @@ type NatsConfig struct {
 	Url    string `json:"Url"`
 }
 
-// MaxmindConfig keys
 type MaxmindConfig struct {
 	MaxmindDBPath string `json:"MaxmindDBPath"`
 	AccountID     string `json:"AccountID"`
 	LicenseKey    string `json:"LicenseKey"`
 }
 
-// MysqlConfig for DB
 type MysqlConfig struct {
 	Host string `json:"Host"`
 	Port string `json:"Port"`

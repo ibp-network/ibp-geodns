@@ -13,7 +13,6 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// handleDnsUsageRequest responds to "dns.usage.getUsage"
 func handleDnsUsageRequest(m *nats.Msg) {
 	log.Log(log.Debug,
 		"[NATS] handleDnsUsageRequest: subject=%s reply=%s",
@@ -22,7 +21,6 @@ func handleDnsUsageRequest(m *nats.Msg) {
 	var req UsageRequest
 	if err := json.Unmarshal(m.Data, &req); err != nil {
 		log.Log(log.Error, "[NATS] handleDnsUsageRequest: unmarshal error: %v", err)
-		// Send error response if we have a reply subject
 		if m.Reply != "" {
 			errResp := UsageResponse{
 				NodeID:       State.NodeID,
@@ -40,7 +38,6 @@ func handleDnsUsageRequest(m *nats.Msg) {
 		"[NATS] handleDnsUsageRequest: StartDate=%s EndDate=%s Domain=%s MemberName=%s Country=%s",
 		req.StartDate, req.EndDate, req.Domain, req.MemberName, req.Country)
 
-	// Validate dates
 	if req.StartDate > req.EndDate {
 		log.Log(log.Error, "[NATS] handleDnsUsageRequest: StartDate after EndDate")
 		if m.Reply != "" {
@@ -61,7 +58,7 @@ func handleDnsUsageRequest(m *nats.Msg) {
 		log.Log(log.Error,
 			"[NATS] handleDnsUsageRequest: retrieveLocalUsageRecords error: %v",
 			err)
-		records = []UsageRecord{} // Send empty list on error
+		records = []UsageRecord{}
 	}
 
 	resp := UsageResponse{
@@ -90,7 +87,6 @@ func retrieveLocalUsageRecords(
 		"[NATS] retrieveLocalUsageRecords: start=%s end=%s domain=%s member=%s country=%s",
 		startDate, endDate, domain, member, country)
 
-	// Validate date format
 	sd := strings.TrimSpace(startDate)
 	ed := strings.TrimSpace(endDate)
 	if len(sd) != 10 || len(ed) != 10 {
@@ -109,7 +105,6 @@ func retrieveLocalUsageRecords(
 	var results []UsageRecord
 
 	if domain != "" && member != "" {
-		// Specific domain and member
 		recs, err := dat.GetUsageByMember(domain, member, sTime, eTime)
 		if err != nil {
 			return nil, err
@@ -129,7 +124,6 @@ func retrieveLocalUsageRecords(
 			}
 		}
 	} else if domain != "" {
-		// Specific domain, all members
 		recs, err := dat.GetUsageByDomain(domain, sTime, eTime)
 		if err != nil {
 			return nil, err
@@ -149,13 +143,11 @@ func retrieveLocalUsageRecords(
 			}
 		}
 	} else {
-		// All domains
 		recs, err := dat.GetUsageByCountry(sTime, eTime)
 		if err != nil {
 			return nil, err
 		}
 		for _, r := range recs {
-			// Apply filters
 			if member != "" && r.MemberName != member {
 				continue
 			}
@@ -181,7 +173,6 @@ func retrieveLocalUsageRecords(
 	return results, nil
 }
 
-// RequestAllDnsUsage sends a usage request to "dns.usage.getUsage"
 func RequestAllDnsUsage(req UsageRequest, timeout time.Duration) ([]UsageRecord, error) {
 	dnsCount := countActiveDns()
 	if dnsCount == 0 {
@@ -195,14 +186,10 @@ func RequestAllDnsUsage(req UsageRequest, timeout time.Duration) ([]UsageRecord,
 		return nil, fmt.Errorf("usage request marshal error: %w", err)
 	}
 
-	// Create unique inbox
 	inbox := fmt.Sprintf("_INBOX.%s.usageReply.%d", State.NodeID, time.Now().UnixNano())
-
-	// Use a map to track responses and avoid duplicates
 	responseMap := make(map[string][]UsageRecord)
 	var mu sync.Mutex
 
-	// Subscribe to inbox
 	sub, err := Subscribe(inbox, func(msg *nats.Msg) {
 		var resp UsageResponse
 		if err := json.Unmarshal(msg.Data, &resp); err != nil {
@@ -225,13 +212,11 @@ func RequestAllDnsUsage(req UsageRequest, timeout time.Duration) ([]UsageRecord,
 	}
 	defer sub.Unsubscribe()
 
-	// Publish request
 	err = PublishMsgWithReply("dns.usage.getUsage", inbox, data)
 	if err != nil {
 		return nil, fmt.Errorf("publish usage request error: %w", err)
 	}
 
-	// Wait for responses or timeout
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
@@ -242,7 +227,6 @@ func RequestAllDnsUsage(req UsageRequest, timeout time.Duration) ([]UsageRecord,
 	for {
 		select {
 		case <-timer.C:
-			// Timeout reached
 			mu.Lock()
 			receivedCount := len(responseMap)
 			mu.Unlock()
@@ -252,7 +236,6 @@ func RequestAllDnsUsage(req UsageRequest, timeout time.Duration) ([]UsageRecord,
 			goto done
 
 		case <-ticker.C:
-			// Check if we have all responses
 			mu.Lock()
 			if len(responseMap) >= dnsCount {
 				mu.Unlock()
@@ -264,24 +247,20 @@ func RequestAllDnsUsage(req UsageRequest, timeout time.Duration) ([]UsageRecord,
 	}
 
 done:
-	// Aggregate all records
 	mu.Lock()
 	defer mu.Unlock()
 
-	// Use a map to aggregate by unique key to avoid duplicates across nodes
 	aggregateMap := make(map[string]UsageRecord)
 
 	for nodeID, records := range responseMap {
 		log.Log(log.Debug, "[NATS] RequestAllDnsUsage: aggregating %d records from %s",
 			len(records), nodeID)
 		for _, rec := range records {
-			// Create unique key for aggregation
 			key := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s",
 				rec.Date, rec.Domain, rec.MemberName, rec.CountryCode,
 				rec.Asn, rec.NetworkName, rec.CountryName)
 
 			if existing, found := aggregateMap[key]; found {
-				// Aggregate hits if we have the same record from multiple nodes
 				existing.Hits += rec.Hits
 				aggregateMap[key] = existing
 			} else {
@@ -290,7 +269,6 @@ done:
 		}
 	}
 
-	// Convert map to slice
 	aggregated := make([]UsageRecord, 0, len(aggregateMap))
 	for _, rec := range aggregateMap {
 		aggregated = append(aggregated, rec)
@@ -303,7 +281,6 @@ done:
 	return aggregated, nil
 }
 
-// handleDnsUsageData is invoked when we receive usage data from a node on "dns.usage.usageData"
 func handleDnsUsageData(m *nats.Msg) {
 	var resp UsageResponse
 	if err := json.Unmarshal(m.Data, &resp); err != nil {
@@ -314,5 +291,4 @@ func handleDnsUsageData(m *nats.Msg) {
 
 	log.Log(log.Debug, "[NATS] handleDnsUsageData: got %d usage records from node=%s",
 		len(resp.UsageRecords), resp.NodeID)
-	// Collator would process these records here
 }

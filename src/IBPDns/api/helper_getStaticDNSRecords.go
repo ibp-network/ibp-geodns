@@ -11,7 +11,6 @@ import (
 	log "ibp-geodns/src/common/logging"
 )
 
-// StaticDNSEntries loads the c.StaticDNS into our StaticRecords global
 func StaticDNSEntries() {
 	c := cfg.GetConfig()
 	StaticRecords.mu.Lock()
@@ -19,7 +18,6 @@ func StaticDNSEntries() {
 	StaticRecords.records = c.StaticDNS
 }
 
-// ProcessSOA handles an SOA request
 func ProcessSOA(params Parameters, id int, domain string) []cfg.DNSRecord {
 	var records []cfg.DNSRecord
 	tld := extractTopLevelDomain(domain)
@@ -49,7 +47,6 @@ func ProcessSOA(params Parameters, id int, domain string) []cfg.DNSRecord {
 	return records
 }
 
-// ProcessACME handles potential ACME challenge
 func ProcessACME(param Parameters, id int, domain string) []cfg.DNSRecord {
 	var records []cfg.DNSRecord
 	StaticRecords.mu.RLock()
@@ -75,7 +72,6 @@ func ProcessACME(param Parameters, id int, domain string) []cfg.DNSRecord {
 	return records
 }
 
-// ProcessNS handles NS queries
 func ProcessNS(params Parameters, id int, domain string) []cfg.DNSRecord {
 	var records []cfg.DNSRecord
 	if params.QType == "NS" {
@@ -90,7 +86,6 @@ func ProcessNS(params Parameters, id int, domain string) []cfg.DNSRecord {
 	return records
 }
 
-// ProcessANY handles ANY queries
 func ProcessANY(params Parameters, id int, domain string) []cfg.DNSRecord {
 	var records []cfg.DNSRecord
 	StaticRecords.mu.RLock()
@@ -98,7 +93,6 @@ func ProcessANY(params Parameters, id int, domain string) []cfg.DNSRecord {
 
 	for _, entry := range StaticRecords.records {
 		if entry.QName == domain {
-			// For ANY, we return all matching records except ACME
 			if (entry.QType == params.QType || params.QType == "ANY") &&
 				(!strings.HasPrefix(domain, "_acme-challenge.")) {
 				records = append(records, entry)
@@ -108,7 +102,6 @@ func ProcessANY(params Parameters, id int, domain string) []cfg.DNSRecord {
 	return records
 }
 
-// fetchACMEChallenge retrieves ACME challenge content from a URL, with up to 3 short retries.
 func fetchACMEChallenge(url string) string {
 	var finalBody string
 
@@ -118,7 +111,6 @@ func fetchACMEChallenge(url string) string {
 			finalBody = body
 			break
 		}
-		// If we have not succeeded, wait briefly before retrying
 		time.Sleep(1 * time.Second)
 		log.Log(log.Warn, "fetchACMEChallenge attempt %d failed for %s: %v", attempt, url, err)
 	}
@@ -126,10 +118,9 @@ func fetchACMEChallenge(url string) string {
 	return finalBody
 }
 
-// tryFetchACMEOnce does a single GET request to the ACME challenge URL with a short timeout.
 func tryFetchACMEOnce(url string) (string, error) {
 	client := &http.Client{
-		Timeout: 5 * time.Second, // short timeout for ACME retrieval
+		Timeout: 5 * time.Second,
 	}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -142,14 +133,12 @@ func tryFetchACMEOnce(url string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	// Limit the amount of data we read to avoid huge memory usage.
-	limitReader := io.LimitReader(resp.Body, 2048) // 2KB limit
+	limitReader := io.LimitReader(resp.Body, 2048)
 	body, err := io.ReadAll(limitReader)
 	if err != nil {
 		return "", err
 	}
 
-	// Enforce a maximum length for the ACME content (e.g., 512 bytes).
 	if len(body) > 512 {
 		return "", fmt.Errorf("ACME challenge data too large (length=%d)", len(body))
 	}

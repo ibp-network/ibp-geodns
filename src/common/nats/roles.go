@@ -1,13 +1,5 @@
 package nats
 
-/*
-   Node‑role & cluster‑membership orchestration
-
-   • JOIN broadcast ≠ membership flood – every frame now ≤ a few KB.
-   • Every outbound frame is validated; blank NodeID can never be sent.
-   • Heartbeat refreshes LastHeard and re‑sends JOIN (no huge payloads).
-*/
-
 import (
 	"encoding/json"
 	"regexp"
@@ -20,32 +12,22 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-/*──────────────────────────── constants ──────────────────────────────*/
-
 const (
 	activeNodeWindow        = 10 * time.Minute
 	broadcastJoinRetryCount = 3
 	broadcastJoinDelay      = 500 * time.Millisecond
 )
 
-/*────────────────────────── regex helpers ────────────────────────────*/
-
 var (
 	reMonitor = regexp.MustCompile(`(?i)monitor`)
 	reDns     = regexp.MustCompile(`(?i)dns`)
 )
 
-/*──────────────────────────── atomics ────────────────────────────────*/
-
 var lastJoin int64 // unix‑nano timestamp of our last JOIN
-
-/*──────────────────────── public role APIs ───────────────────────────*/
 
 func EnableMonitorRole() error  { return enableRoleInternal("IBPMonitor") }
 func EnableDnsRole() error      { return enableRoleInternal("IBPDns") }
 func EnableCollatorRole() error { return enableRoleInternal("IBPCollator") }
-
-/*──────────────────────── shared initialiser ─────────────────────────*/
 
 func enableRoleInternal(role string) error {
 	State.SubjectPropose = "consensus.propose"
@@ -80,7 +62,6 @@ func enableRoleInternal(role string) error {
 
 	log.Log(log.Info, "[NATS] %s role enabled for node=%s", role, State.NodeID)
 
-	// initial burst of JOINs for fast convergence
 	go func() {
 		for i := 0; i < broadcastJoinRetryCount; i++ {
 			broadcastClusterJoin()
@@ -91,11 +72,9 @@ func enableRoleInternal(role string) error {
 	return nil
 }
 
-/*──────────────────────── heartbeat / JOIN ───────────────────────────*/
-
 func startHeartbeat() {
 	go func() {
-		time.Sleep(2 * time.Second) // allow subscriptions to settle
+		time.Sleep(2 * time.Second)
 		t := time.NewTicker(90 * time.Second)
 		defer t.Stop()
 		for range t.C {
@@ -113,7 +92,7 @@ func startHeartbeat() {
 func broadcastClusterJoin() {
 	now := time.Now().UnixNano()
 	if last := atomic.LoadInt64(&lastJoin); last != 0 && now-last < 5*int64(time.Second) {
-		return // throttle to max 1 every 5 s
+		return
 	}
 	atomic.StoreInt64(&lastJoin, now)
 
@@ -130,8 +109,6 @@ func broadcastClusterJoin() {
 		log.Log(log.Error, "[NATS] Failed to publish JOIN: %v", err)
 	}
 }
-
-/*──────────────────────── wildcard dispatcher ────────────────────────*/
 
 func handleAllMessages(m *nats.Msg) {
 	go func() {
@@ -178,8 +155,6 @@ func handleAllMessages(m *nats.Msg) {
 	}()
 }
 
-/*──────────────────────── cluster JOIN handler ───────────────────────*/
-
 func handleClusterMessage(m *nats.Msg) {
 	var msg ClusterMessage
 	if err := json.Unmarshal(m.Data, &msg); err != nil {
@@ -187,7 +162,6 @@ func handleClusterMessage(m *nats.Msg) {
 		return
 	}
 	if msg.Sender.NodeID == "" {
-		// silently drop legacy or malformed frames
 		return
 	}
 
@@ -197,8 +171,6 @@ func handleClusterMessage(m *nats.Msg) {
 		addNode(msg.Sender)
 	}
 }
-
-/*──────────────────────── node bookkeeping ───────────────────────────*/
 
 func addNode(n NodeInfo) {
 	State.Mu.Lock()
@@ -242,8 +214,6 @@ func guessRoleFromID(id string) string {
 	}
 }
 
-/*──────────────────────── liveness helpers ───────────────────────────*/
-
 func IsNodeActive(n NodeInfo) bool {
 	return n.NodeID != "" && !n.LastHeard.IsZero() && time.Since(n.LastHeard) < activeNodeWindow
 }
@@ -271,8 +241,6 @@ func CountActiveDns() int {
 	}
 	return n
 }
-
-/*──────────────────────── garbage collection ─────────────────────────*/
 
 func StartGarbageCollection() {
 	go func() {
@@ -314,8 +282,6 @@ func cleanStaleNodes() {
 		}
 	}
 }
-
-/*──────────────────────── internal exports ───────────────────────────*/
 
 var (
 	countActiveMonitors = CountActiveMonitors

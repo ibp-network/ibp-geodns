@@ -15,7 +15,6 @@ var (
 	cfg *ConfigInit
 )
 
-// NewConfig creates a new Config instance and starts the update ticker
 func Init(cfgFile string) {
 	log.Log(log.Debug, "Config Package initializing...")
 	cfg = &ConfigInit{
@@ -26,15 +25,12 @@ func Init(cfgFile string) {
 	go configUpdater(cfgFile)
 }
 
-// loadConfig loads all configuration files
 func loadConfig(cfgFile string, initialLoad bool) {
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
 
-	// Load system config from disk
 	loadSystemConfig(cfgFile, initialLoad)
 
-	// Load other configs from URLs
 	loadStaticDNSConfig(cfg.data.Local.System.ConfigUrls.StaticDNSConfig, initialLoad)
 	loadMembersConfig(cfg.data.Local.System.ConfigUrls.MembersConfig, initialLoad)
 	loadServicesConfig(cfg.data.Local.System.ConfigUrls.ServicesConfig, initialLoad)
@@ -42,7 +38,6 @@ func loadConfig(cfgFile string, initialLoad bool) {
 	loadServiceRequestsConfig(cfg.data.Local.System.ConfigUrls.ServicesRequestsConfig, initialLoad)
 }
 
-// loadSystemConfig loads the system config from disk
 func loadSystemConfig(configPath string, initialLoad bool) {
 	file, err := os.Open(configPath)
 	if err != nil {
@@ -70,7 +65,6 @@ func loadSystemConfig(configPath string, initialLoad bool) {
 	log.Log(log.Debug, "System configuration loaded from %s", configPath)
 }
 
-// loadStaticDNSConfig loads the static DNS config from a URL
 func loadStaticDNSConfig(url string, initialLoad bool) {
 	data := downloadConfig(url, initialLoad)
 	if data == nil {
@@ -91,7 +85,6 @@ func loadStaticDNSConfig(url string, initialLoad bool) {
 	log.Log(log.Debug, "StaticDNS configuration loaded from %s", url)
 }
 
-// loadMembersConfig loads the members config from a URL
 func loadMembersConfig(url string, initialLoad bool) {
 	data := downloadConfig(url, initialLoad)
 	if data == nil {
@@ -108,7 +101,6 @@ func loadMembersConfig(url string, initialLoad bool) {
 		return
 	}
 
-	// Retain Override and OverrideTime for existing members
 	for name, existingMember := range cfg.data.Members {
 		if existingMember.Override {
 			if newMember, exists := newMembers[name]; exists {
@@ -119,12 +111,10 @@ func loadMembersConfig(url string, initialLoad bool) {
 		}
 	}
 
-	// Overwrite existing members with the new configuration
 	cfg.data.Members = newMembers
 	log.Log(log.Debug, "Members configuration loaded from %s", url)
 }
 
-// loadServicesConfig loads the services config from a URL
 func loadServicesConfig(url string, initialLoad bool) {
 	data := downloadConfig(url, initialLoad)
 	if data == nil {
@@ -144,7 +134,6 @@ func loadServicesConfig(url string, initialLoad bool) {
 	log.Log(log.Debug, "Services configuration loaded from %s", url)
 }
 
-// loadIaasPricing loads the IaaS Pricing data from a URL
 func loadIaasPricing(url string, initialLoad bool) {
 	data := downloadConfig(url, initialLoad)
 	if data == nil {
@@ -165,7 +154,6 @@ func loadIaasPricing(url string, initialLoad bool) {
 	log.Log(log.Debug, "IaaS pricing configuration loaded from %s", url)
 }
 
-// loadSaasPricing loads the SASS Pricing data from a URL
 func loadServiceRequestsConfig(url string, initialLoad bool) {
 	data := downloadConfig(url, initialLoad)
 	if data == nil {
@@ -186,10 +174,9 @@ func loadServiceRequestsConfig(url string, initialLoad bool) {
 	log.Log(log.Debug, "Services configuration loaded from %s", url)
 }
 
-// downloadConfig downloads a config file from a URL, now with a custom client that has a timeout.
 func downloadConfig(url string, initialLoad bool) []byte {
 	client := &http.Client{
-		Timeout: 15 * time.Second, // <-- Added timeout
+		Timeout: 15 * time.Second,
 	}
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -239,7 +226,6 @@ func downloadConfig(url string, initialLoad bool) []byte {
 	return data
 }
 
-// startTicker starts a ticker to periodically update the configs
 func configUpdater(cfgFile string) {
 	c := GetConfig()
 
@@ -251,12 +237,10 @@ func configUpdater(cfgFile string) {
 	}
 }
 
-// GetConfig returns a deep copy of the current configuration data
 func GetConfig() Config {
 	cfg.mu.RLock()
 	defer cfg.mu.RUnlock()
 
-	// Deep copy using JSON marshal and unmarshal
 	var dataCopy Config
 	dataBytes, err := json.Marshal(cfg.data)
 	if err != nil {

@@ -1,8 +1,7 @@
 package monitor
 
-// For completeness – wrappers reused elsewhere
 func getIntOption(extraOptions map[string]interface{}, key string, defaultValue int) int {
-	if val, ok := extraOptions[key].(float64); ok { // JSON numbers are float64
+	if val, ok := extraOptions[key].(float64); ok {
 		return int(val)
 	}
 	return defaultValue

@@ -1,22 +1,5 @@
 package monitor
 
-/*
-   check orchestration + *per‑result* consensus publishing
-
-   • Every time we store a fresh local result we compare it to the **current
-     official** status for that (check, member, v4/v6, etc.).
-     – If the status differs, we broadcast a single lightweight proposal via
-       nats.ProposeCheckStatus().
-     – If it is identical we do nothing – no floods.
-
-   • The old snapshot‑based code and SetConsensusManager() are gone; we do not
-     import or reference IBPMonitor/consensus anywhere any more.
-
-   • Quorum logic lives in src/common/nats/cmd_Consensus.go and now sees the
-     *real* monitor count because every node broadcasts JOIN frames that carry
-     a non‑empty NodeID (see roles.go).
-*/
-
 import (
 	"net/url"
 	"strings"
@@ -28,10 +11,6 @@ import (
 	natsCommon "ibp-geodns/src/common/nats"
 )
 
-// ---------------------------------------------------------------------------
-// Registry of checks
-// ---------------------------------------------------------------------------
-
 var CheckRegistry = struct {
 	Site     map[string]CheckSiteFunc
 	Domain   map[string]CheckDomainFunc
@@ -42,16 +21,11 @@ var CheckRegistry = struct {
 	Endpoint: make(map[string]CheckEndpointFunc),
 }
 
-// Function signatures.
 type (
 	CheckSiteFunc     func(check cfg.Check, member cfg.Member)
 	CheckDomainFunc   func(check cfg.Check, domain string, service cfg.Service, member cfg.Member)
 	CheckEndpointFunc func(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member)
 )
-
-// ---------------------------------------------------------------------------
-// registration helpers
-// ---------------------------------------------------------------------------
 
 func RegisterSiteCheck(name string, fn CheckSiteFunc) {
 	CheckRegistry.Site[name] = fn
@@ -65,19 +39,11 @@ func RegisterEndpointCheck(name string, fn CheckEndpointFunc) {
 	CheckRegistry.Endpoint[name] = fn
 }
 
-// ---------------------------------------------------------------------------
-// start all periodic timers (called once from monitor.Init())
-// ---------------------------------------------------------------------------
-
 func startChecks() {
 	go initSiteCheck()
 	go initDomainCheck()
 	go initEndpointCheck()
 }
-
-// ---------------------------------------------------------------------------
-// SITE checks
-// ---------------------------------------------------------------------------
 
 func getSiteCheck(name string) (CheckSiteFunc, bool) {
 	fn, ok := CheckRegistry.Site[name]
@@ -124,7 +90,6 @@ func runSiteCheck(ch cfg.Check, fn CheckSiteFunc) {
 	}
 }
 
-// UpdateSiteResultLocal is called by the concrete site‑check modules.
 func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, errText string,
 	data map[string]interface{}, ipv6 bool) {
 
@@ -132,10 +97,6 @@ func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, errT
 	proposeIfStatusChanged("site", check.Name, member.Details.Name, "", "",
 		status, errText, data, ipv6)
 }
-
-// ---------------------------------------------------------------------------
-// DOMAIN checks
-// ---------------------------------------------------------------------------
 
 func getDomainCheck(name string) (CheckDomainFunc, bool) {
 	fn, ok := CheckRegistry.Domain[name]
@@ -198,10 +159,6 @@ func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service
 	proposeIfStatusChanged("domain", check.Name, member.Details.Name, domain, "",
 		status, errText, data, ipv6)
 }
-
-// ---------------------------------------------------------------------------
-// ENDPOINT checks
-// ---------------------------------------------------------------------------
 
 func getEndpointCheck(name string) (CheckEndpointFunc, bool) {
 	fn, ok := CheckRegistry.Endpoint[name]
@@ -267,12 +224,6 @@ func UpdateEndpointResultLocal(check cfg.Check, member cfg.Member, service cfg.S
 		status, errText, data, ipv6)
 }
 
-// ---------------------------------------------------------------------------
-// consensus helper
-// ---------------------------------------------------------------------------
-
-// proposeIfStatusChanged compares the *new local* status with the official
-// cluster status.  If they differ we broadcast a proposal.
 func proposeIfStatusChanged(checkType, checkName, memberName, domainName, endpoint string,
 	status bool, errText string, data map[string]interface{}, ipv6 bool) {
 
@@ -305,10 +256,6 @@ func proposeIfStatusChanged(checkType, checkName, memberName, domainName, endpoi
 	}
 }
 
-// ---------------------------------------------------------------------------
-// miscellany helpers
-// ---------------------------------------------------------------------------
-
 func assignedToService(svcName string, m cfg.Member) bool {
 	for _, list := range m.ServiceAssignments {
 		for _, v := range list {
@@ -332,7 +279,6 @@ func extractDomains(s cfg.Service) map[string]struct{} {
 	return out
 }
 
-// parseUrlForDomain normalises any RPC/WSS URL into host‑only (lower‑case) string.
 func parseUrlForDomain(raw string) string {
 	if raw == "" {
 		return ""

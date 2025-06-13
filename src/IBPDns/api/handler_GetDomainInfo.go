@@ -17,7 +17,6 @@ func handle_GetDomainInfo(req Request) Response {
 
 	for key, domain := range TLDRecords.records {
 		if extractTopLevelDomain(params.QName) == domain {
-			// Build list of masters or name servers if you want
 			var Masters []string
 			dnsPrefixes := []string{"dns-01", "dns-02", "dns-03"}
 
