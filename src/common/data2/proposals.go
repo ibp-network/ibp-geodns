@@ -1,64 +1,57 @@
 package data2
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
-/*─────────────────────────────────────────────────────────────
-  HELPER – LIVE MONITOR COUNT (LOCK HELD BY CALLER)
-─────────────────────────────────────────────────────────────*/
+/* ------------------------------------------------------------------------- */
+/*  IN‑MEMORY PROPOSAL CACHE – NO DATABASE DEPENDENCY                         */
+/* ------------------------------------------------------------------------- */
 
-func countActiveMonitorsLocked() int {
-	n := 0
-	for _, node := range State.ClusterNodes {
-		if node.NodeRole == "IBPMonitor" && isNodeActive(node.NodeID) {
-			n++
+var (
+	memMu      sync.RWMutex
+	memStore   = make(map[string]Proposal)
+	expiryTime = 10 * time.Minute
+)
+
+// CacheProposal keeps a proposal until it is finalised or times out.
+func CacheProposal(p Proposal) { // <- used by cmd_Consensus
+	memMu.Lock()
+	memStore[p.ID] = p
+	memMu.Unlock()
+}
+
+// PopProposal fetches & removes an entry once it is finalised.
+func PopProposal(id string) (Proposal, bool) { // <- used by cmd_Consensus
+	memMu.Lock()
+	defer memMu.Unlock()
+	p, ok := memStore[id]
+	if ok {
+		delete(memStore, id)
+	}
+	return p, ok
+}
+
+// ExpireStaleProposals is called by a janitor goroutine in nats/collator_services.go.
+func ExpireStaleProposals() {
+	cut := time.Now().UTC().Add(-expiryTime)
+	memMu.Lock()
+	for id, p := range memStore {
+		if p.CreatedAt.Before(cut) {
+			delete(memStore, id)
 		}
 	}
-	return n
+	memMu.Unlock()
 }
 
-/*
-   ──────────────────────────────────────────────────────────────────────────────
-   PERSISTENCE
-   ──────────────────────────────────────────────────────────────────────────────
-*/
+/* ------------------------------------------------------------------------- */
+/*  BACKWARD‑COMPATIBILITY SHIMS ( NO‑OP FOR MYSQL )                          */
+/* ------------------------------------------------------------------------- */
 
-// StoreProposal upserts a proposal row so that applyOfficialChanges() can pick it
-// up later without spurious “check … not found” warnings.
-func StoreProposal(p Proposal) error {
-	_, err := DB.Exec(`
-		INSERT INTO proposals
-		    (id, ipv6, domain, member, check_name, check_type, created_at)
-		VALUES (?,?,?,?,?,?,?)
-		ON DUPLICATE KEY UPDATE
-		    ipv6       = VALUES(ipv6),
-		    domain     = VALUES(domain),
-		    member     = VALUES(member),
-		    check_name = VALUES(check_name),
-		    check_type = VALUES(check_type)
-	`, p.ID, p.IsIPv6, p.Domain, p.Member, p.CheckName, p.CheckType, p.CreatedAt.UTC())
-	return err
-}
+// Legacy functions still referenced in cmd_Consensus.go; they now just
+// forward to the RAM cache so existing code compiles unchanged.
 
-// MarkProposalFinal records the final vote result for auditing purposes.
-func MarkProposalFinal(id string, yes, total int) error {
-	_, err := DB.Exec(`
-		UPDATE proposals
-		   SET yes_votes   = ?,
-		       total_votes = ?,
-		       finalized   = 1,
-		       finalized_at = NOW(6)
-		 WHERE id = ?
-	`, yes, total, id)
-	return err
-}
+func StoreProposal(p Proposal) error { CacheProposal(p); return nil }
 
-func isNodeActive(nodeID string) bool {
-	State.Mu.RLock()
-	defer State.Mu.RUnlock()
-
-	n, ok := State.ClusterNodes[nodeID]
-	if !ok {
-		return false
-	}
-	return time.Since(n.LastHeard) < 2*time.Minute
-}
+func MarkProposalFinal(id string, yes, total int) error { _, _ = PopProposal(id); return nil }
