@@ -6,7 +6,7 @@ import (
 
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
-	"ibp-geodns/src/common/data2"
+	data2 "ibp-geodns/src/common/data2"
 	log "ibp-geodns/src/common/logging"
 
 	"github.com/google/uuid"
@@ -192,7 +192,7 @@ func decideLocked(pt *ProposalTracking) {
 
 	if pt.Finalized {
 		log.Log(log.Info,
-			"[CONSENSUS] ⇒ finalize id=%s PASS=%v yes=%d no=%d (%d active monitors)",
+			"[CONSENSUS] ⇢ finalize id=%s PASS=%v yes=%d no=%d (%d active monitors)",
 			pt.Proposal.ID, pt.Passed, yes, no, total)
 
 		if pt.Timer != nil {
@@ -246,21 +246,32 @@ func handleFinalize(m *nats.Msg) {
 		applyOfficialChanges(fm.Proposal)
 
 	} else if fm.Passed && State.ThisNode.NodeRole == "IBPCollator" {
+		ct := checkTypeToInt(fm.Proposal.CheckType)
+		url := deriveCheckURL(fm.Proposal)
+
 		rec := data2.NetStatusRecord{
-			CheckType: checkTypeToInt(fm.Proposal.CheckType),
+			CheckType: ct,
 			CheckName: fm.Proposal.CheckName,
-			CheckURL:  deriveCheckURL(fm.Proposal),
+			CheckURL:  url,
 			Domain:    fm.Proposal.DomainName,
 			Member:    fm.Proposal.MemberName,
-			Status:    fm.Proposal.ProposedStatus,
 			IsIPv6:    fm.Proposal.IsIPv6,
-			StartTime: fm.DecidedAt.UTC(),
-			Error:     fm.Proposal.ErrorText,
-			VoteData:  nil, // reserved for future use
-			Extra:     fm.Proposal.Data,
 		}
-		if err := data2.InsertNetStatus(rec); err != nil {
-			log.Log(log.Error, "[NATS] handleFinalize: InsertNetStatus: %v", err)
+
+		if !fm.Proposal.ProposedStatus {
+			rec.Status = false
+			rec.StartTime = fm.DecidedAt.UTC()
+			rec.Error = fm.Proposal.ErrorText
+			rec.VoteData = nil
+			rec.Extra = fm.Proposal.Data
+
+			if err := data2.InsertNetStatus(rec); err != nil {
+				log.Log(log.Error, "[NATS] handleFinalize: InsertNetStatus: %v", err)
+			}
+		} else {
+			if err := data2.CloseOpenEvent(rec); err != nil {
+				log.Log(log.Error, "[NATS] handleFinalize: CloseOpenEvent: %v", err)
+			}
 		}
 	}
 }
@@ -341,7 +352,7 @@ func deriveCheckURL(p Proposal) string {
 		return p.Endpoint
 	case "domain":
 		return p.DomainName
-	default: // "site"
+	default:
 		return ""
 	}
 }

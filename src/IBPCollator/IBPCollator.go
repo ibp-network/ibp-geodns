@@ -47,10 +47,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := nats.StartCollatorServices(); err != nil {
-		log.Log(log.Fatal, "collator services: %v", err)
-		os.Exit(1)
-	}
+	go nats.StartUsageCollector()
+	go nats.StartMemoryJanitor()
 
 	log.Log(log.Info, "[collator] started – awaiting events")
 	for {
