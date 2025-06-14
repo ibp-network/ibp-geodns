@@ -1,6 +1,7 @@
 package data
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +13,13 @@ func statsEnabled() bool {
 	muCacheOptions.Lock()
 	defer muCacheOptions.Unlock()
 	return allowStats
+}
+
+func normaliseCountryCode(code string) string {
+	if len(code) != 2 {
+		return "??"
+	}
+	return strings.ToUpper(code)
 }
 
 type dailyUsageKey struct {
@@ -38,20 +46,22 @@ func RecordDnsHit(isIPv6 bool, clientIP, domain, memberName string) {
 		return
 	}
 
-	// Geo lookups
-	countryCode := max.GetCountryCode(clientIP)
-	if countryCode == "" {
-		countryCode = "Unknown"
-	}
+	countryCodeRaw := max.GetCountryCode(clientIP)
+	countryCode := normaliseCountryCode(countryCodeRaw)
+
 	countryName := max.GetCountryName(clientIP)
+	if countryCode == "??" {
+		countryName = "Unknown"
+	}
+
 	asn, netName := max.GetAsnAndNetwork(clientIP)
+
 	if memberName == "" {
 		memberName = "(none)"
 	}
 
-	// build key
 	now := time.Now().UTC()
-	dateStr := now.Format("2006-01-02") // e.g. "2025-05-28"
+	dateStr := now.Format("2006-01-02")
 
 	key := dailyUsageKey{
 		Date:        dateStr,
@@ -68,8 +78,8 @@ func RecordDnsHit(isIPv6 bool, clientIP, domain, memberName string) {
 	usageMem.mu.Unlock()
 
 	log.Log(log.Debug,
-		"[RecordDnsHit] domain=%s, member=%s, ip=%s, isIPv6=%v => increment usageMem",
-		domain, memberName, clientIP, isIPv6)
+		"[RecordDnsHit] domain=%s, member=%s, ip=%s, isIPv6=%v, cc=%s => increment usageMem",
+		domain, memberName, clientIP, isIPv6, countryCode)
 }
 
 func FlushUsageToDatabase(triggerDate string) {
