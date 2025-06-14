@@ -16,7 +16,7 @@ var DB *sql.DB
 func Init() {
 	c := cfg.GetConfig()
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4,utf8",
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4",
 		c.Local.Mysql.User,
 		c.Local.Mysql.Pass,
 		c.Local.Mysql.Host,
