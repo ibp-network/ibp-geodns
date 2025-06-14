@@ -1,3 +1,5 @@
+USE ibpdns;
+
 CREATE TABLE `ibpdns_usage` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `date` date NOT NULL,

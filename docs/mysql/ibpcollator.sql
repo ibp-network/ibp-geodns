@@ -1,3 +1,5 @@
+USE ibpcollator;
+
 DROP TABLE `ibpcollator_members`;
 CREATE TABLE `ibpcollator_members` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,

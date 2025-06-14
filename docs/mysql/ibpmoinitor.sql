@@ -1,3 +1,5 @@
+USE ibpmonitor;
+
 CREATE TABLE `ibpmonitor_netStatus` (
   `check_type` TINYINT NOT NULL,
   `check_name` VARCHAR(32) NOT NULL,
