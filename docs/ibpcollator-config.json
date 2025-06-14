@@ -21,8 +21,8 @@
     "Mysql": {
         "Host": "localhosts",
         "Port": "3306",
-        "User": "ibpgeodns",
+        "User": "ibpcollator",
         "Pass": "password123",
-        "DB": "powerdns"
+        "DB": "ibpcollator"
     }
 }

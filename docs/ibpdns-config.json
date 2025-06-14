@@ -25,9 +25,9 @@
     "Mysql": {
         "Host": "localhosts",
         "Port": "3306",
-        "User": "ibpgeodns",
+        "User": "ibpdns",
         "Pass": "password123",
-        "DB": "powerdns"
+        "DB": "ibpdns"
     },
     "MonitorApi": {
         "ListenAddress": "0.0.0.0",
