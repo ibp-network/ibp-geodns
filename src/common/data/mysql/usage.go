@@ -18,7 +18,7 @@ type UsageRecord struct {
 
 func UpsertUsageRecord(rec UsageRecord) error {
 	q := `
-INSERT INTO usage_daily
+INSERT INTO ibpdns_usage
   (usage_date, domain, member_name, country_code, asn, network_name, country_name, hits)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
@@ -52,7 +52,7 @@ SELECT
   IFNULL(network_name,'') AS network_name,
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
-FROM usage_daily
+FROM ibpdns_usage
 WHERE domain = ?
   AND usage_date BETWEEN ? AND ?
 GROUP BY usage_date, domain, member_name, country_code, asn, network_name, country_name
@@ -96,7 +96,7 @@ SELECT
   IFNULL(network_name,'') AS network_name,
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
-FROM usage_daily
+FROM ibpdns_usage
 WHERE domain = ?
   AND member_name = ?
   AND usage_date BETWEEN ? AND ?
@@ -141,7 +141,7 @@ SELECT
   IFNULL(network_name,'') AS network_name,
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
-FROM usage_daily
+FROM ibpdns_usage
 WHERE usage_date BETWEEN ? AND ?
 GROUP BY usage_date, domain, member_name, country_code, asn, network_name, country_name
 ORDER BY usage_date
@@ -175,9 +175,9 @@ ORDER BY usage_date
 
 func UpsertUsageRecordV6(rec UsageRecord) error {
 	q := `
-INSERT INTO usage_daily_v6
-  (usage_date, domain, member_name, country_code, asn, network_name, country_name, hits)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO ibpdns_usage
+  (usage_date, domain, member_name, country_code, asn, network_name, country_name, is_ipv6, hits)
+VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?)
 ON DUPLICATE KEY UPDATE
   hits = hits + VALUES(hits)
 `
@@ -209,8 +209,9 @@ SELECT
   IFNULL(network_name,'') AS network_name,
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
-FROM usage_daily_v6
+FROM ibpdns_usage
 WHERE domain = ?
+  AND is_ipv6 = '1' 
   AND usage_date BETWEEN ? AND ?
 GROUP BY usage_date, domain, member_name, country_code, asn, network_name, country_name
 ORDER BY usage_date
@@ -253,9 +254,10 @@ SELECT
   IFNULL(network_name,'') AS network_name,
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
-FROM usage_daily_v6
+FROM ibpdns_usage
 WHERE domain = ?
   AND member_name = ?
+  AND is_ipv6 = '1'
   AND usage_date BETWEEN ? AND ?
 GROUP BY usage_date, domain, member_name, country_code, asn, network_name, country_name
 ORDER BY usage_date
@@ -298,8 +300,9 @@ SELECT
   IFNULL(network_name,'') AS network_name,
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
-FROM usage_daily_v6
-WHERE usage_date BETWEEN ? AND ?
+FROM ibpdns_usage
+WHERE is_ipv6 = '1' 
+  AND usage_date BETWEEN ? AND ?
 GROUP BY usage_date, domain, member_name, country_code, asn, network_name, country_name
 ORDER BY usage_date
 `

@@ -8,7 +8,7 @@ import (
 
 func DeleteEvent(eventID int64) error {
 	query := `
-		DELETE FROM member_events
+		DELETE FROM ibpmonitor_netStatus
 		WHERE id = ?
 	`
 	_, err := DB.Exec(query, eventID)
@@ -20,7 +20,7 @@ func DeleteEvent(eventID int64) error {
 
 func InsertEvent(event EventRecord) (int64, error) {
 	query := `
-		INSERT INTO member_events
+		INSERT INTO ibpmonitor_netStatus
 			(member_name, check_type, check_name, domain_name, endpoint, status, start_time, error_text, additional_data, is_ipv6)
 		VALUES
 			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -46,7 +46,7 @@ func InsertEvent(event EventRecord) (int64, error) {
 
 func UpdateEventEndTime(eventID int64, endTime time.Time) error {
 	query := `
-		UPDATE member_events
+		UPDATE ibpmonitor_netStatus
 		SET end_time = ?
 		WHERE id = ?
 	`
@@ -63,21 +63,21 @@ func FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint
 	if checkType == "endpoint" {
 		query := `
 		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data, is_ipv6
-		FROM member_events
+		FROM ibpmonitor_netStatus
 		WHERE member_name = ? AND check_type = 'endpoint' AND check_name = ? AND domain_name = ? AND endpoint = ? AND status = FALSE AND end_time IS NULL AND is_ipv6 = ?
 		`
 		row = DB.QueryRow(query, memberName, checkName, domainName, endpoint, isIPv6)
 	} else if checkType == "domain" {
 		query := `
 		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data, is_ipv6
-		FROM member_events
+		FROM ibpmonitor_netStatus
 		WHERE member_name = ? AND check_type = 'domain' AND check_name = ? AND domain_name = ? AND status = FALSE AND end_time IS NULL AND is_ipv6 = ?
 		`
 		row = DB.QueryRow(query, memberName, checkName, domainName, isIPv6)
 	} else if checkType == "site" {
 		query := `
 		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data, is_ipv6
-		FROM member_events
+		FROM ibpmonitor_netStatus
 		WHERE member_name = ? AND check_type = 'site' AND check_name = ? AND status = FALSE AND end_time IS NULL AND is_ipv6 = ?
 		`
 		row = DB.QueryRow(query, memberName, checkName, isIPv6)
@@ -109,7 +109,7 @@ func FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint
 func GetEvents(memberName string, start, end time.Time) ([]EventRecord, error) {
 	query := `
 		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data, is_ipv6
-		FROM member_events
+		FROM ibpmonitor_netStatus
 		WHERE member_name = ? AND start_time >= ? AND start_time <= ?
 	`
 	rows, err := DB.Query(query, memberName, start, end)
@@ -147,7 +147,7 @@ func FetchEvents(memberName, domainName string, start, end time.Time) ([]EventRe
 	args := []interface{}{memberName, start, end}
 	query := `
 		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data, is_ipv6
-		FROM member_events
+		FROM ibpmonitor_netStatus
 		WHERE member_name = ? AND start_time >= ? AND start_time <= ?
 	`
 
