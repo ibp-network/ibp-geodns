@@ -21,8 +21,8 @@ type UsageRecord struct {
 
 func UpsertUsageRecord(rec UsageRecord) error {
 	q := `
-INSERT INTO usage_daily
-(usage_date, domain, member_name, country_code, asn, network_name, country_name, hits)
+INSERT INTO usage
+(date, domain, member_name, country_code, asn, network_name, country_name, hits)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
   hits = hits + VALUES(hits)
@@ -50,7 +50,7 @@ func GetUsageByDomain(domain string, start, end time.Time) ([]UsageRecord, error
 
 	q := `
 SELECT
-  usage_date,
+  date,
   domain,
   IFNULL(member_name,'') AS member_name,
   IFNULL(country_code,'') AS country_code,
@@ -60,9 +60,9 @@ SELECT
   SUM(hits) AS hits
 FROM usage_daily
 WHERE domain = ?
-  AND usage_date BETWEEN ? AND ?
-GROUP BY usage_date, domain, member_name, country_code, asn, network_name, country_name
-ORDER BY usage_date
+  AND date BETWEEN ? AND ?
+GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
+ORDER BY date
 `
 	rows, err := mysql.DB.Query(q, domain, startDate, endDate)
 	if err != nil {
@@ -101,7 +101,7 @@ func GetUsageByMember(domain, member string, start, end time.Time) ([]UsageRecor
 
 	q := `
 SELECT
-  usage_date,
+  date,
   domain,
   IFNULL(member_name,'') AS member_name,
   IFNULL(country_code,'') as country_code,
@@ -112,9 +112,9 @@ SELECT
 FROM usage_daily
 WHERE domain = ?
   AND member_name = ?
-  AND usage_date BETWEEN ? AND ?
-GROUP BY usage_date, domain, member_name, country_code, asn, network_name, country_name
-ORDER BY usage_date
+  AND date BETWEEN ? AND ?
+GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
+ORDER BY date
 `
 	rows, err := mysql.DB.Query(q, domain, member, startDate, endDate)
 	if err != nil {
@@ -153,7 +153,7 @@ func GetUsageByCountry(start, end time.Time) ([]UsageRecord, error) {
 
 	q := `
 SELECT
-  usage_date,
+  date,
   domain,
   IFNULL(member_name,'') AS member_name,
   IFNULL(country_code,'') as country_code,
@@ -161,10 +161,10 @@ SELECT
   IFNULL(network_name,'') as network_name,
   IFNULL(country_name,'') as country_name,
   SUM(hits) AS hits
-FROM usage_daily
-WHERE usage_date BETWEEN ? AND ?
-GROUP BY usage_date, domain, member_name, country_code, asn, network_name, country_name
-ORDER BY usage_date
+FROM usage
+WHERE date BETWEEN ? AND ?
+GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
+ORDER BY date
 `
 	rows, err := mysql.DB.Query(q, startDate, endDate)
 	if err != nil {
