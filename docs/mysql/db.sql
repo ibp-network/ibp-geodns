@@ -77,7 +77,7 @@ CREATE TABLE `member_events` (
   `id`              INT UNSIGNED  NOT NULL AUTO_INCREMENT,
   `check_type`      TINYINT       NOT NULL,
   `check_name`      VARCHAR(32)   NOT NULL,
-  `check_url`       VARCHAR(128)  NOT NULL,
+  `endpoint`       VARCHAR(128)  NOT NULL,
   `member_name`     VARCHAR(48)   NOT NULL,
   `domain_name`     VARCHAR(96)   NOT NULL,
   `status`          TINYINT       NOT NULL,
@@ -89,7 +89,7 @@ CREATE TABLE `member_events` (
   `additional_data` JSON          DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_member_event` (
-        `check_type`,`check_name`,`check_url`,
+        `check_type`,`check_name`,`endpoint`,
         `member_name`,`domain_name`,`is_ipv6`
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -97,16 +97,16 @@ CREATE TABLE `member_events` (
 DROP TABLE IF EXISTS `requests`;
 CREATE TABLE `requests` (
   `id`            INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-  `date`          DATE          NULL,
-  `node_id`       VARCHAR(32)   NOT NULL,
-  `domain_name`   VARCHAR(128)  NOT NULL,
+  `date`          DATE          DEFAULT NULL,
+  `node_id`       VARCHAR(32)   DEFAULT NULL,
+  `domain_name`   VARCHAR(128)  DEFAULT NULL,
   `member_name`   VARCHAR(64)   DEFAULT NULL,
   `network_asn`   VARCHAR(32)   DEFAULT NULL,
   `network_name`  VARCHAR(96)   DEFAULT NULL,
   `country_code`  VARCHAR(2)    DEFAULT NULL,
   `country_name`  VARCHAR(64)   DEFAULT NULL,
-  `is_ipv6`       TINYINT       NOT NULL,
-  `hits`          INT UNSIGNED  NOT NULL,
+  `is_ipv6`       TINYINT       DEFAULT NULL,
+  `hits`          INT UNSIGNED  DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_traffic_dedupe` (
         `date`,`domain_name`,`member_name`,
