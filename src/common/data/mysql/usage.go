@@ -19,7 +19,7 @@ type UsageRecord struct {
 func UpsertUsageRecord(rec UsageRecord) error {
 	q := `
 INSERT INTO requests
-  (date, domain_name, member_name, country_code, asn, network_name, country_name, is_ipv6, hits)
+  (date, domain_name, member_name, country_code, network_asn, network_name, country_name, is_ipv6, hits)
 VALUES (?, ?, ?, ?, ?, ?, ?, '0', ?)
 ON DUPLICATE KEY UPDATE
   hits = hits + VALUES(hits)
@@ -48,14 +48,14 @@ SELECT
   domain_name,
   IFNULL(member_name,'') AS member_name,
   country_code,
-  IFNULL(asn,'') AS asn,
+  IFNULL(network_asn,'') AS network_asn,
   IFNULL(network_name,'') AS network_name,
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
 FROM requests
 WHERE domain_name = ?
   AND date BETWEEN ? AND ?
-GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, network_asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := DB.Query(q, domain, startDate, endDate)
@@ -92,7 +92,7 @@ SELECT
   domain_name,
   IFNULL(member_name,'') AS member_name,
   country_code,
-  IFNULL(asn,'') AS asn,
+  IFNULL(network_asn,'') AS network_asn,
   IFNULL(network_name,'') AS network_name,
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
@@ -100,7 +100,7 @@ FROM requests
 WHERE domain_name = ?
   AND member_name = ?
   AND date BETWEEN ? AND ?
-GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, network_asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := DB.Query(q, domain, member, startDate, endDate)
@@ -137,13 +137,13 @@ SELECT
   domain_name,
   IFNULL(member_name,'') AS member_name,
   country_code,
-  IFNULL(asn,'') AS asn,
+  IFNULL(network_asn,'') AS network_asn,
   IFNULL(network_name,'') AS network_name,
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
 FROM requests
 WHERE date BETWEEN ? AND ?
-GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, network_asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := DB.Query(q, startDate, endDate)
@@ -176,7 +176,7 @@ ORDER BY date
 func UpsertUsageRecordV6(rec UsageRecord) error {
 	q := `
 INSERT INTO requests
-  (date, domain_name, member_name, country_code, asn, network_name, country_name, is_ipv6, hits)
+  (date, domain_name, member_name, country_code, network_asn, network_name, country_name, is_ipv6, hits)
 VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?)
 ON DUPLICATE KEY UPDATE
   hits = hits + VALUES(hits)
@@ -205,7 +205,7 @@ SELECT
   domain_name,
   IFNULL(member_name,'') AS member_name,
   country_code,
-  IFNULL(asn,'') AS asn,
+  IFNULL(network_asn,'') AS network_asn,
   IFNULL(network_name,'') AS network_name,
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
@@ -213,7 +213,7 @@ FROM requests
 WHERE domain_name = ?
   AND is_ipv6 = '1' 
   AND date BETWEEN ? AND ?
-GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, network_asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := DB.Query(q, domain, startDate, endDate)
@@ -250,7 +250,7 @@ SELECT
   domain_name,
   IFNULL(member_name,'') AS member_name,
   country_code,
-  IFNULL(asn,'') AS asn,
+  IFNULL(network_asn,'') AS network_asn,
   IFNULL(network_name,'') AS network_name,
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
@@ -259,7 +259,7 @@ WHERE domain_name = ?
   AND member_name = ?
   AND is_ipv6 = '1'
   AND date BETWEEN ? AND ?
-GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, network_asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := DB.Query(q, domain, member, startDate, endDate)
@@ -296,14 +296,14 @@ SELECT
   domain_name,
   IFNULL(member_name,'') AS member_name,
   country_code,
-  IFNULL(asn,'') AS asn,
+  IFNULL(network_asn,'') AS network_asn,
   IFNULL(network_name,'') AS network_name,
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
 FROM requests
 WHERE is_ipv6 = '1' 
   AND date BETWEEN ? AND ?
-GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, network_asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := DB.Query(q, startDate, endDate)
