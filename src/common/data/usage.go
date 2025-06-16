@@ -21,7 +21,7 @@ type UsageRecord struct {
 
 func UpsertUsageRecord(rec UsageRecord) error {
 	q := `
-INSERT INTO usage
+INSERT INTO requests
 (date, domain, member_name, country_code, asn, network_name, country_name, hits)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
@@ -58,7 +58,7 @@ SELECT
   IFNULL(network_name,'') as network_name,
   IFNULL(country_name,'') as country_name,
   SUM(hits) AS hits
-FROM usage_daily
+FROM requests
 WHERE domain = ?
   AND date BETWEEN ? AND ?
 GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
@@ -109,7 +109,7 @@ SELECT
   IFNULL(network_name,'') as network_name,
   IFNULL(country_name,'') as country_name,
   SUM(hits) AS hits
-FROM usage_daily
+FROM requests
 WHERE domain = ?
   AND member_name = ?
   AND date BETWEEN ? AND ?
@@ -161,7 +161,7 @@ SELECT
   IFNULL(network_name,'') as network_name,
   IFNULL(country_name,'') as country_name,
   SUM(hits) AS hits
-FROM usage
+FROM requests
 WHERE date BETWEEN ? AND ?
 GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
 ORDER BY date
