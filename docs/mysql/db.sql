@@ -21,6 +21,28 @@ CREATE TABLE `members` (
   UNIQUE KEY `uniq_member_idx_name` (`member_index`, `member_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+DROP TABLE IF EXISTS `member_events`;
+CREATE TABLE `member_events` (
+  `id`              INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  `check_type`      TINYINT       NOT NULL,
+  `check_name`      VARCHAR(32)   NOT NULL,
+  `endpoint`       VARCHAR(128)  NOT NULL,
+  `member_name`     VARCHAR(48)   NOT NULL,
+  `domain_name`     VARCHAR(96)   NOT NULL,
+  `status`          TINYINT       NOT NULL,
+  `is_ipv6`         TINYINT       NOT NULL,
+  `start_time`      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `end_time`        DATETIME      DEFAULT NULL,
+  `error`           TEXT,
+  `vote_data`       JSON          NOT NULL,
+  `additional_data` JSON          DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_member_event` (
+        `check_type`,`check_name`,`endpoint`,
+        `member_name`,`domain_name`,`is_ipv6`
+  )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 DROP TABLE IF EXISTS `services`;
 CREATE TABLE `services` (
   `id`                           INT UNSIGNED  NOT NULL AUTO_INCREMENT,
@@ -70,28 +92,6 @@ CREATE TABLE `service_assignment` (
   CONSTRAINT `fk_assignment_member`
     FOREIGN KEY (`member_id`)  REFERENCES `members` (`id`)
       ON UPDATE CASCADE ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-DROP TABLE IF EXISTS `member_events`;
-CREATE TABLE `member_events` (
-  `id`              INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-  `check_type`      TINYINT       NOT NULL,
-  `check_name`      VARCHAR(32)   NOT NULL,
-  `endpoint`       VARCHAR(128)  NOT NULL,
-  `member_name`     VARCHAR(48)   NOT NULL,
-  `domain_name`     VARCHAR(96)   NOT NULL,
-  `status`          TINYINT       NOT NULL,
-  `is_ipv6`         TINYINT       NOT NULL,
-  `start_time`      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `end_time`        DATETIME      DEFAULT NULL,
-  `error`           TEXT,
-  `vote_data`       JSON          NOT NULL,
-  `additional_data` JSON          DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_member_event` (
-        `check_type`,`check_name`,`endpoint`,
-        `member_name`,`domain_name`,`is_ipv6`
-  )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 DROP TABLE IF EXISTS `requests`;

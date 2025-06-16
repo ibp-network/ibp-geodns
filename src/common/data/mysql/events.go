@@ -21,7 +21,7 @@ func DeleteEvent(eventID int64) error {
 func InsertEvent(event EventRecord) (int64, error) {
 	query := `
 		INSERT INTO member_events
-			(member_name, check_type, check_name, domain_name, endpoint, status, start_time, error_text, additional_data, is_ipv6)
+			(member_name, check_type, check_name, domain_name, endpoint, status, start_time, error, additional_data, is_ipv6)
 		VALUES
 			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
@@ -62,21 +62,21 @@ func FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint
 
 	if checkType == "endpoint" {
 		query := `
-		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data, is_ipv6
+		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error, additional_data, is_ipv6
 		FROM member_events
 		WHERE member_name = ? AND check_type = 'endpoint' AND check_name = ? AND domain_name = ? AND endpoint = ? AND status = FALSE AND end_time IS NULL AND is_ipv6 = ?
 		`
 		row = DB.QueryRow(query, memberName, checkName, domainName, endpoint, isIPv6)
 	} else if checkType == "domain" {
 		query := `
-		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data, is_ipv6
+		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error, additional_data, is_ipv6
 		FROM member_events
 		WHERE member_name = ? AND check_type = 'domain' AND check_name = ? AND domain_name = ? AND status = FALSE AND end_time IS NULL AND is_ipv6 = ?
 		`
 		row = DB.QueryRow(query, memberName, checkName, domainName, isIPv6)
 	} else if checkType == "site" {
 		query := `
-		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data, is_ipv6
+		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error, additional_data, is_ipv6
 		FROM member_events
 		WHERE member_name = ? AND check_type = 'site' AND check_name = ? AND status = FALSE AND end_time IS NULL AND is_ipv6 = ?
 		`
@@ -108,7 +108,7 @@ func FindOpenOfflineEvent(memberName, checkType, checkName, domainName, endpoint
 
 func GetEvents(memberName string, start, end time.Time) ([]EventRecord, error) {
 	query := `
-		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data, is_ipv6
+		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error, additional_data, is_ipv6
 		FROM member_events
 		WHERE member_name = ? AND start_time >= ? AND start_time <= ?
 	`
@@ -146,7 +146,7 @@ func GetEvents(memberName string, start, end time.Time) ([]EventRecord, error) {
 func FetchEvents(memberName, domainName string, start, end time.Time) ([]EventRecord, error) {
 	args := []interface{}{memberName, start, end}
 	query := `
-		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error_text, additional_data, is_ipv6
+		SELECT id, member_name, check_type, check_name, domain_name, endpoint, status, start_time, end_time, error, additional_data, is_ipv6
 		FROM member_events
 		WHERE member_name = ? AND start_time >= ? AND start_time <= ?
 	`
