@@ -9,7 +9,7 @@ import (
 )
 
 func UpsertUsage(r UsageRecord) error {
-	q := `INSERT INTO usage
+	q := `INSERT INTO requests
 	       (date,node_id,domain_name,member_name,network_asn,network_name,
 	        country_code,country_name,is_ipv6,hits)
 	       VALUES (?,?,?,?,?,?,?,?,?,?)
