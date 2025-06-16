@@ -22,8 +22,8 @@ type UsageRecord struct {
 func UpsertUsageRecord(rec UsageRecord) error {
 	q := `
 INSERT INTO requests
-(date, domain, member_name, country_code, asn, network_name, country_name, hits)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+(date, domain_name, member_name, country_code, asn, network_name, country_name, is_ipv6, hits)
+VALUES (?, ?, ?, ?, ?, ?, ?, '0', ?)
 ON DUPLICATE KEY UPDATE
   hits = hits + VALUES(hits)
 `
@@ -51,7 +51,7 @@ func GetUsageByDomain(domain string, start, end time.Time) ([]UsageRecord, error
 	q := `
 SELECT
   date,
-  domain,
+  domain_name,
   IFNULL(member_name,'') AS member_name,
   IFNULL(country_code,'') AS country_code,
   IFNULL(asn,'') as asn,
@@ -59,9 +59,9 @@ SELECT
   IFNULL(country_name,'') as country_name,
   SUM(hits) AS hits
 FROM requests
-WHERE domain = ?
+WHERE domain_name = ?
   AND date BETWEEN ? AND ?
-GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := mysql.DB.Query(q, domain, startDate, endDate)
@@ -102,7 +102,7 @@ func GetUsageByMember(domain, member string, start, end time.Time) ([]UsageRecor
 	q := `
 SELECT
   date,
-  domain,
+  domain_name,
   IFNULL(member_name,'') AS member_name,
   IFNULL(country_code,'') as country_code,
   IFNULL(asn,'') as asn,
@@ -110,10 +110,10 @@ SELECT
   IFNULL(country_name,'') as country_name,
   SUM(hits) AS hits
 FROM requests
-WHERE domain = ?
+WHERE domain_name = ?
   AND member_name = ?
   AND date BETWEEN ? AND ?
-GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := mysql.DB.Query(q, domain, member, startDate, endDate)
@@ -154,7 +154,7 @@ func GetUsageByCountry(start, end time.Time) ([]UsageRecord, error) {
 	q := `
 SELECT
   date,
-  domain,
+  domain_name,
   IFNULL(member_name,'') AS member_name,
   IFNULL(country_code,'') as country_code,
   IFNULL(asn,'') as asn,
@@ -163,7 +163,7 @@ SELECT
   SUM(hits) AS hits
 FROM requests
 WHERE date BETWEEN ? AND ?
-GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := mysql.DB.Query(q, startDate, endDate)

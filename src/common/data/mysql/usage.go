@@ -19,8 +19,8 @@ type UsageRecord struct {
 func UpsertUsageRecord(rec UsageRecord) error {
 	q := `
 INSERT INTO requests
-  (date, domain, member_name, country_code, asn, network_name, country_name, hits)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  (date, domain_name, member_name, country_code, asn, network_name, country_name, is_ipv6, hits)
+VALUES (?, ?, ?, ?, ?, ?, ?, '0', ?)
 ON DUPLICATE KEY UPDATE
   hits = hits + VALUES(hits)
 `
@@ -45,7 +45,7 @@ func GetUsageByDomain(domain, startDate, endDate string) ([]UsageRecord, error) 
 	q := `
 SELECT
   date,
-  domain,
+  domain_name,
   IFNULL(member_name,'') AS member_name,
   country_code,
   IFNULL(asn,'') AS asn,
@@ -53,9 +53,9 @@ SELECT
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
 FROM requests
-WHERE domain = ?
+WHERE domain_name = ?
   AND date BETWEEN ? AND ?
-GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := DB.Query(q, domain, startDate, endDate)
@@ -89,7 +89,7 @@ func GetUsageByMember(domain, member, startDate, endDate string) ([]UsageRecord,
 	q := `
 SELECT
   date,
-  domain,
+  domain_name,
   IFNULL(member_name,'') AS member_name,
   country_code,
   IFNULL(asn,'') AS asn,
@@ -97,10 +97,10 @@ SELECT
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
 FROM requests
-WHERE domain = ?
+WHERE domain_name = ?
   AND member_name = ?
   AND date BETWEEN ? AND ?
-GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := DB.Query(q, domain, member, startDate, endDate)
@@ -134,7 +134,7 @@ func GetUsageByCountry(startDate, endDate string) ([]UsageRecord, error) {
 	q := `
 SELECT
   date,
-  domain,
+  domain_name,
   IFNULL(member_name,'') AS member_name,
   country_code,
   IFNULL(asn,'') AS asn,
@@ -143,7 +143,7 @@ SELECT
   SUM(hits) AS hits
 FROM requests
 WHERE date BETWEEN ? AND ?
-GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := DB.Query(q, startDate, endDate)
@@ -176,7 +176,7 @@ ORDER BY date
 func UpsertUsageRecordV6(rec UsageRecord) error {
 	q := `
 INSERT INTO requests
-  (date, domain, member_name, country_code, asn, network_name, country_name, is_ipv6, hits)
+  (date, domain_name, member_name, country_code, asn, network_name, country_name, is_ipv6, hits)
 VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?)
 ON DUPLICATE KEY UPDATE
   hits = hits + VALUES(hits)
@@ -202,7 +202,7 @@ func GetUsageByDomainV6(domain, startDate, endDate string) ([]UsageRecord, error
 	q := `
 SELECT
   date,
-  domain,
+  domain_name,
   IFNULL(member_name,'') AS member_name,
   country_code,
   IFNULL(asn,'') AS asn,
@@ -210,10 +210,10 @@ SELECT
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
 FROM requests
-WHERE domain = ?
+WHERE domain_name = ?
   AND is_ipv6 = '1' 
   AND date BETWEEN ? AND ?
-GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := DB.Query(q, domain, startDate, endDate)
@@ -247,7 +247,7 @@ func GetUsageByMemberV6(domain, member, startDate, endDate string) ([]UsageRecor
 	q := `
 SELECT
   date,
-  domain,
+  domain_name,
   IFNULL(member_name,'') AS member_name,
   country_code,
   IFNULL(asn,'') AS asn,
@@ -255,11 +255,11 @@ SELECT
   IFNULL(country_name,'') AS country_name,
   SUM(hits) AS hits
 FROM requests
-WHERE domain = ?
+WHERE domain_name = ?
   AND member_name = ?
   AND is_ipv6 = '1'
   AND date BETWEEN ? AND ?
-GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := DB.Query(q, domain, member, startDate, endDate)
@@ -293,7 +293,7 @@ func GetUsageByCountryV6(startDate, endDate string) ([]UsageRecord, error) {
 	q := `
 SELECT
   date,
-  domain,
+  domain_name,
   IFNULL(member_name,'') AS member_name,
   country_code,
   IFNULL(asn,'') AS asn,
@@ -303,7 +303,7 @@ SELECT
 FROM requests
 WHERE is_ipv6 = '1' 
   AND date BETWEEN ? AND ?
-GROUP BY date, domain, member_name, country_code, asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, asn, network_name, country_name
 ORDER BY date
 `
 	rows, err := DB.Query(q, startDate, endDate)
