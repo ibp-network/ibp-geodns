@@ -1,7 +1,5 @@
-USE ibpcollator;
-
-DROP TABLE `ibpcollator_members`;
-CREATE TABLE `ibpcollator_members` (
+DROP TABLE `members`;
+CREATE TABLE `members` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `member_index` VARCHAR(48) NOT NULL,
   `member_name` VARCHAR(48) NOT NULL,
@@ -21,8 +19,8 @@ CREATE TABLE `ibpcollator_members` (
   UNIQUE KEY (`member_index`, `member_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-DROP TABLE `ibpcollator_services`;
-CREATE TABLE `ibpcollator_services` (
+DROP TABLE `services`;
+CREATE TABLE `services` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `service_index` VARCHAR(48) NOT NULL,
   `configuration_name` VARCHAR(48) NOT NULL,
@@ -40,8 +38,8 @@ CREATE TABLE `ibpcollator_services` (
   UNIQUE KEY (`service_index`, `configuration_name`, `configuration_networkname`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-DROP TABLE `ibpcollator_service_assignment`;
-CREATE TABLE `ibpcollator_service_assignment` (
+DROP TABLE `service_assignment`;
+CREATE TABLE `service_assignment` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `service_id` BIGINT NOT NULL,
   `member_id` BIGINT NOT NULL,
@@ -49,8 +47,8 @@ CREATE TABLE `ibpcollator_service_assignment` (
   UNIQUE KEY (`service_id`, `member_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-DROP TABLE `ibpcollator_service_provider`;
-CREATE TABLE `ibpcollator_service_provider` (
+DROP TABLE `service_provider`;
+CREATE TABLE `service_provider` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `service_id` INT UNSIGNED NOT NULL,
   `provider_index` VARCHAR(48) DEFAULT NULL,
@@ -61,8 +59,8 @@ CREATE TABLE `ibpcollator_service_provider` (
   UNIQUE KEY (`service_id`, `provider_index`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-DROP TABLE `ibpcollator_usage`;
-CREATE TABLE `ibpcollator_usage` (
+DROP TABLE `usage`;
+CREATE TABLE `usage` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `date` DATE NOT NULL,
   `node_id` VARCHAR(32) NOT NULL,
@@ -78,8 +76,8 @@ CREATE TABLE `ibpcollator_usage` (
   UNIQUE KEY (`date`,`domain_name`,`member_name`,`network_asn`,`network_name`,`country_code`,`country_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-DROP TABLE `ibpcollator_netStatus`;
-CREATE TABLE `ibpcollator_netStatus` (
+DROP TABLE `member_events`;
+CREATE TABLE `netStatus` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `check_type` TINYINT NOT NULL,
   `check_name` VARCHAR(32) NOT NULL,
