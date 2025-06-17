@@ -19,10 +19,10 @@ import (
 // -----------------------------------------------------------------------------
 var (
 	client     *mautrix.Client // logged‑in Matrix client
-	userID     id.UserID       // the local user (after login)
-	roomID     id.RoomID       // destination room
+	userID     id.UserID       // local Matrix user (after login)
+	roomID     id.RoomID       // destination room to post to
 	once       sync.Once       // protect Init()
-	offlineMap sync.Map        // key → id.EventID (for edit‑in‑place)
+	offlineMap sync.Map        // outage‑key → id.EventID   (for edits & deduplication)
 )
 
 // -----------------------------------------------------------------------------
@@ -81,7 +81,7 @@ func makeKey(member, checkType, checkName, domain, endpoint string, ipv6 bool) s
 		member, checkType, checkName, domain, endpoint, ipv6)
 }
 
-// sendText posts a plain‑text message and returns the event ID.
+// sendText posts a plain‑text message and returns the resulting event ID.
 func sendText(ctx context.Context, body string) (id.EventID, error) {
 	resp, err := client.SendText(ctx, roomID, body)
 	if err != nil {
@@ -90,7 +90,7 @@ func sendText(ctx context.Context, body string) (id.EventID, error) {
 	return resp.EventID, nil
 }
 
-// editText attempts to *replace* (MSC‑2674) an existing event.
+// editText performs an *in‑place* edit (MSC‑2674) of an existing event.
 func editText(ctx context.Context, target id.EventID, body string) error {
 	content := map[string]interface{}{
 		"msgtype": "m.text",
@@ -112,6 +112,9 @@ func editText(ctx context.Context, target id.EventID, body string) error {
 // -----------------------------------------------------------------------------
 // PUBLIC NOTIFICATION API
 // -----------------------------------------------------------------------------
+
+// NotifyMemberOffline posts a single alert for a given outage, regardless of
+// how many times the caller tries to report it.
 func NotifyMemberOffline(
 	member, checkType, checkName, domain, endpoint string,
 	ipv6 bool, errText string,
@@ -119,6 +122,25 @@ func NotifyMemberOffline(
 	if !isReady() {
 		return
 	}
+
+	key := makeKey(member, checkType, checkName, domain, endpoint, ipv6)
+
+	// ---------------------------------------------------------------------
+	// DEDUPLICATION LOGIC
+	// ---------------------------------------------------------------------
+	sentinel := id.EventID("")
+	if prev, loaded := offlineMap.LoadOrStore(key, sentinel); loaded {
+		if prev.(id.EventID) != "" {
+			// Already announced.
+			return
+		}
+		// Another goroutine is announcing – skip duplicate.
+		return
+	}
+
+	//----------------------------------------------------------------------
+	// We are the "announcer" for this outage.
+	//----------------------------------------------------------------------
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -134,13 +156,18 @@ func NotifyMemberOffline(
 
 	evID, err := sendText(ctx, body)
 	if err != nil {
+		// Clean‑up sentinel so future attempts can retry.
+		offlineMap.Delete(key)
 		log.Log(log.Error, "[matrix] failed to send offline alert: %v", err)
 		return
 	}
 
-	offlineMap.Store(makeKey(member, checkType, checkName, domain, endpoint, ipv6), evID)
+	offlineMap.Store(key, evID)
 }
 
+// NotifyMemberOnline edits the existing alert back to *ONLINE* status.  If the
+// original alert is missing or the edit fails, it falls back to sending a new
+// message.
 func NotifyMemberOnline(
 	member, checkType, checkName, domain, endpoint string,
 	ipv6 bool,
@@ -148,7 +175,9 @@ func NotifyMemberOnline(
 	if !isReady() {
 		return
 	}
+
 	key := makeKey(member, checkType, checkName, domain, endpoint, ipv6)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -162,16 +191,18 @@ func NotifyMemberOnline(
 		member, checkType, checkName, domain, endpoint, ipv6)
 
 	if raw, ok := offlineMap.Load(key); ok {
-		if evID, ok2 := raw.(id.EventID); ok2 {
-			if editErr := editText(ctx, evID, body); editErr == nil {
+		if evID, ok2 := raw.(id.EventID); ok2 && evID != "" {
+			// Attempt edit‑in‑place.
+			editErr := editText(ctx, evID, body)
+			if editErr == nil {
 				offlineMap.Delete(key)
 				return
-			} else {
-				log.Log(log.Warn, "[matrix] edit failed – falling back to new msg: %v", editErr)
 			}
+			log.Log(log.Warn, "[matrix] edit failed – falling back to new msg: %v", editErr)
 		}
 	}
 
-	// Either we had no eventID cached or the edit failed – send a fresh message.
+	// Either we had no cached event or the edit did not work – send a fresh one.
 	_, _ = sendText(ctx, body)
+	offlineMap.Delete(key) // ensure future OFFLINE alerts are allowed again
 }
