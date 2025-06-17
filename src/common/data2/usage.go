@@ -8,12 +8,24 @@ import (
 	log "ibp-geodns/src/common/logging"
 )
 
+/*
+ * UpsertUsage persists **per‑node** usage totals coming from IBPDns
+ * or from the collator’s own hourly aggregation.
+ *
+ *  • Primary key = date, node_id, domain_name, member_name,
+ *                  network_asn, network_name, country_code, country_name, is_ipv6
+ *
+ *  • The row’s `hits` column is **replaced** with the latest total, NOT
+ *    incremented.  This guarantees that importing the *same* period
+ *    more than once is idempotent and does **not** compound data.
+ */
 func UpsertUsage(r UsageRecord) error {
 	q := `INSERT INTO requests
-	       (date,node_id,domain_name,member_name,network_asn,network_name,
-	        country_code,country_name,is_ipv6,hits)
+	       (date, node_id, domain_name, member_name, network_asn, network_name,
+	        country_code, country_name, is_ipv6, hits)
 	       VALUES (?,?,?,?,?,?,?,?,?,?)
-	       ON DUPLICATE KEY UPDATE hits = hits + VALUES(hits)`
+	       ON DUPLICATE KEY UPDATE
+	         hits = VALUES(hits)`
 
 	ipFlag := 0
 	if r.IsIPv6 {

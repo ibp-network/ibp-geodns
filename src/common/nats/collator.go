@@ -12,6 +12,16 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+/*
+ * collator.go – services that run only on IBPCollator nodes
+ *
+ * Key change:
+ *   • StartUsageCollector now runs **hourly** (top of every UTC hour).
+ *   • After we receive fresh totals we simply *overwrite* the previous
+ *     value in MySQL (UpsertUsage has been made idempotent), so there
+ *     is no risk of compounding counts.
+ */
+
 func parseDateFlexible(s string) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -49,7 +59,7 @@ func handleUsageData(m *nats.Msg) {
 		}
 		records = append(records, data2.UsageRecord{
 			Date:        dt,
-			NodeID:      resp.NodeID,
+			NodeID:      resp.NodeID, // keep origin node
 			Domain:      r.Domain,
 			MemberName:  r.MemberName,
 			Asn:         r.Asn,
@@ -71,60 +81,74 @@ func handleUsageData(m *nats.Msg) {
 	}
 }
 
+/* ----------------------------- HOURLY PULLER ------------------------------ */
+
 func StartUsageCollector() {
-	ticker := time.NewTicker(30 * time.Minute)
+	// Wait until the next top‑of‑hour, then run every hour.
+	now := time.Now().UTC()
+	next := now.Truncate(time.Hour).Add(time.Hour)
+	time.Sleep(time.Until(next))
+
+	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		today := time.Now().UTC().Format("2006-01-02")
-		req := data2.UsageRequest{
-			StartDate: today,
-			EndDate:   today,
-		}
-
-		raw, err := RequestAllDnsUsage(req, 20*time.Second)
-		if err != nil {
-			log.Log(log.Error, "[collator] RequestAllDnsUsage: %v", err)
-			continue
-		}
-		if len(raw) == 0 {
-			log.Log(log.Info, "[collator] no usage data returned from DNS nodes")
-			continue
-		}
-
-		var recs []data2.UsageRecord
-		for _, r := range raw {
-			dt, err := parseDateFlexible(r.Date)
-			if err != nil {
-				log.Log(log.Warn, "[collator] skipping aggregated record with invalid date %q: %v", r.Date, err)
-				continue
-			}
-			recs = append(recs, data2.UsageRecord{
-				Date:        dt,
-				NodeID:      State.NodeID,
-				Domain:      r.Domain,
-				MemberName:  r.MemberName,
-				Asn:         r.Asn,
-				NetworkName: r.NetworkName,
-				CountryCode: r.CountryCode,
-				CountryName: r.CountryName,
-				IsIPv6:      false,
-				Hits:        r.Hits,
-			})
-		}
-
-		if len(recs) == 0 {
-			log.Log(log.Warn, "[collator] all aggregated usage records were skipped due to bad dates")
-			continue
-		}
-
-		if err := data2.StoreUsageRecords(recs); err != nil {
-			log.Log(log.Error, "[collator] StoreUsageRecords (aggregated): %v", err)
-			continue
-		}
-		log.Log(log.Info, "[collator] stored %d aggregated DNS‑usage record(s)", len(recs))
+	for {
+		collectOnce()
+		<-ticker.C
 	}
 }
+
+func collectOnce() {
+	period := time.Now().UTC().Format("2006-01-02")
+	req := data2.UsageRequest{
+		StartDate: period,
+		EndDate:   period,
+	}
+
+	raw, err := RequestAllDnsUsage(req, 20*time.Second)
+	if err != nil {
+		log.Log(log.Error, "[collator] RequestAllDnsUsage: %v", err)
+		return
+	}
+	if len(raw) == 0 {
+		log.Log(log.Info, "[collator] no usage data returned from DNS nodes")
+		return
+	}
+
+	records := make([]data2.UsageRecord, 0, len(raw))
+	for _, r := range raw {
+		dt, err := parseDateFlexible(r.Date)
+		if err != nil {
+			log.Log(log.Warn, "[collator] skipping aggregated record with invalid date %q: %v", r.Date, err)
+			continue
+		}
+		records = append(records, data2.UsageRecord{
+			Date:        dt,
+			NodeID:      r.NodeID, // preserve DNS node‑id to keep rows unique
+			Domain:      r.Domain,
+			MemberName:  r.MemberName,
+			Asn:         r.Asn,
+			NetworkName: r.NetworkName,
+			CountryCode: r.CountryCode,
+			CountryName: r.CountryName,
+			IsIPv6:      false,
+			Hits:        r.Hits,
+		})
+	}
+
+	if len(records) == 0 {
+		log.Log(log.Warn, "[collator] all usage records were skipped due to bad dates")
+		return
+	}
+
+	if err := data2.StoreUsageRecords(records); err != nil {
+		log.Log(log.Error, "[collator] StoreUsageRecords: %v", err)
+		return
+	}
+	log.Log(log.Info, "[collator] stored %d DNS‑usage record(s) for %s", len(records), period)
+}
+
+/* -------------------------- JANITOR REMAINS SAME -------------------------- */
 
 func StartMemoryJanitor() {
 	ticker := time.NewTicker(30 * time.Second)

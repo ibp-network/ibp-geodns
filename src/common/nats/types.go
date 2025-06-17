@@ -74,6 +74,7 @@ type FinalizeMessage struct {
 }
 
 type UsageRecord struct {
+	NodeID      string `json:"nodeid"`
 	Date        string `json:"date"`
 	Domain      string `json:"domain"`
 	MemberName  string `json:"memberName"`
