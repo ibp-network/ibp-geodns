@@ -25,7 +25,7 @@ func InsertNetStatus(rec NetStatusRecord) error {
 	jVotes, _ := json.Marshal(rec.VoteData)
 	jExtra, _ := json.Marshal(rec.Extra)
 
-	q := `INSERT INTO ibpcollator_netStatus
+	q := `INSERT INTO member_events
 		(check_type,check_name,check_url,domain_name,member_name,status,is_ipv6,start_time,error,vote_data,additional_data)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?)
 		ON DUPLICATE KEY UPDATE status = VALUES(status), vote_data = VALUES(vote_data),
@@ -48,7 +48,7 @@ func InsertNetStatus(rec NetStatusRecord) error {
 }
 
 func CloseOpenEvent(rec NetStatusRecord) error {
-	q := `UPDATE ibpcollator_netStatus SET end_time = NOW(), status = 1
+	q := `UPDATE member_events SET end_time = NOW(), status = 1
 		WHERE check_type=? AND check_name=? AND check_url=? AND domain_name=? AND member_name=? AND is_ipv6=? AND status=0 AND end_time IS NULL`
 	_, err := DB.Exec(q,
 		rec.CheckType,
