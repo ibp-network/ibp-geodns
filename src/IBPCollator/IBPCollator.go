@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	billing "ibp-geodns/src/IBPCollator/billing"
 	cfg "ibp-geodns/src/common/config"
 	data2 "ibp-geodns/src/common/data2"
 	log "ibp-geodns/src/common/logging"
@@ -15,7 +16,7 @@ import (
 var version = cfg.GetVersion()
 
 func main() {
-	log.Log(log.Info, "IBPCollator v%s starting ▌", version)
+	log.Log(log.Info, "IBPCollator v%s starting …", version)
 
 	cfgPath := flag.String("config", "ibpcollator.json", "Path to configuration file")
 	flag.Parse()
@@ -25,20 +26,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ── load configuration ────────────────────────────────────────────────
 	cfg.Init(*cfgPath)
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
 
-	// Initialise subsystems --------------------------------------------------
-	matrix.Init() // <—— Matrix notifications
-	go data2.Init()
+	// ── subsystems ────────────────────────────────────────────────────────
+	matrix.Init()   // outbound Matrix alerts
+	go data2.Init() // collator local DB layer
+	billing.Init()  // ← new hourly‑billing subsystem
 
 	if err := nats.Connect(); err != nil {
 		log.Log(log.Fatal, "NATS connect: %v", err)
 		os.Exit(1)
 	}
 
-	// ------------------------------------------------------------------------
+	// ── register with the NATS cluster ────────────────────────────────────
 	nats.State.NodeID = c.Local.Nats.NodeID
 	nats.State.ThisNode = nats.NodeInfo{
 		NodeID:        c.Local.Nats.NodeID,
@@ -51,10 +54,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// kick‑off background collectors
 	go nats.StartUsageCollector()
 	go nats.StartMemoryJanitor()
 
-	log.Log(log.Info, "[collator] started — awaiting events")
+	log.Log(log.Info, "[collator] started – awaiting events")
 	for {
 		time.Sleep(1 * time.Hour)
 	}
