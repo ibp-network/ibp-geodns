@@ -8,13 +8,14 @@ import (
 	cfg "ibp-geodns/src/common/config"
 	data2 "ibp-geodns/src/common/data2"
 	log "ibp-geodns/src/common/logging"
+	"ibp-geodns/src/common/matrix"
 	nats "ibp-geodns/src/common/nats"
 )
 
 var version = cfg.GetVersion()
 
 func main() {
-	log.Log(log.Info, "IBPCollator v%s starting …", version)
+	log.Log(log.Info, "IBPCollator v%s starting ▌", version)
 
 	cfgPath := flag.String("config", "ibpcollator.json", "Path to configuration file")
 	flag.Parse()
@@ -28,6 +29,8 @@ func main() {
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
 
+	// Initialise subsystems --------------------------------------------------
+	matrix.Init() // <—— Matrix notifications
 	go data2.Init()
 
 	if err := nats.Connect(); err != nil {
@@ -35,6 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ------------------------------------------------------------------------
 	nats.State.NodeID = c.Local.Nats.NodeID
 	nats.State.ThisNode = nats.NodeInfo{
 		NodeID:        c.Local.Nats.NodeID,
@@ -50,7 +54,7 @@ func main() {
 	go nats.StartUsageCollector()
 	go nats.StartMemoryJanitor()
 
-	log.Log(log.Info, "[collator] started – awaiting events")
+	log.Log(log.Info, "[collator] started — awaiting events")
 	for {
 		time.Sleep(1 * time.Hour)
 	}
