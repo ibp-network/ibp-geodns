@@ -3,26 +3,11 @@ package billing
 // ──────────────────────────────────────────────────────────────────────────────
 //  Stake Plus Inc. – IBP GeoDNS / IBPCollator – Billing subsystem
 // ──────────────────────────────────────────────────────────────────────────────
-//
-//  This package calculates the infrastructure reimbursement owed to each
-//  member (validator / RPC‑provider) and, conversely, the total cost of running
-//  each distinct service configuration.
-//
-//  •  Per‑member view   → what each member earns for the services it hosts
-//  •  Per‑service view  → aggregate cost of all members that host that service
-//
-//  Calculation model
-//  ─────────────────
-//  1.  Member ➜ Region ➜ IaaS pricing table
-//  2.  Service ➜ Resources (nodes, cores, memory, disk, bandwidth)
-//  3.  Every member runs one *instance* of every service it has been assigned.
-//  4.  Cost for a single node = Σ(componentQty × componentUnitPrice)
-//     Cost for the service    = costPerNode × nodes
-//
-//  Results are stored in memory (thread‑safe) and refreshed once per hour UTC.
-// ──────────────────────────────────────────────────────────────────────────────
 
 import (
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -35,143 +20,141 @@ import (
 //  Public structures and accessors
 // ──────────────────────────────────────────────────────────────────────────────
 
-// MemberCost houses the breakdown of costs that *one* member incurs by hosting
-// services.
+// MemberCost houses the breakdown of costs that *one* member incurs.
 type MemberCost struct {
 	MemberName   string
-	ServiceCosts map[string]float64 // serviceName ➜ dollar cost
+	ServiceCosts map[string]float64 // serviceName ➜ $ cost
 	Total        float64
 }
 
 // ServiceCost houses the breakdown of costs *per service* across all members.
 type ServiceCost struct {
 	ServiceName string
-	MemberCosts map[string]float64 // memberName ➜ dollar cost
+	MemberCosts map[string]float64 // memberName ➜ $ cost
 	Total       float64
 }
 
-// Summary keeps both perspectives together.
+// Summary keeps both perspectives together (no mutex – read‑only snapshot).
 type Summary struct {
 	Members  map[string]MemberCost
 	Services map[string]ServiceCost
 	Refresh  time.Time
-	mu       sync.RWMutex
 }
 
-// singleton instance
-var billingSummary Summary
+// internal store guarded by a mutex
+var billingStore struct {
+	sync.RWMutex
+	Summary
+}
 
 // GetSummary returns a deep‑copy of the current billing snapshot.
 func GetSummary() Summary {
-	billingSummary.mu.RLock()
-	defer billingSummary.mu.RUnlock()
+	billingStore.RLock()
+	defer billingStore.RUnlock()
 
-	// deep‑copy maps to avoid data races
-	mCopy := make(map[string]MemberCost, len(billingSummary.Members))
-	for k, v := range billingSummary.Members {
+	// deep copy to ensure immutability
+	mCopy := make(map[string]MemberCost, len(billingStore.Members))
+	for k, v := range billingStore.Members {
 		svcCopy := make(map[string]float64, len(v.ServiceCosts))
 		for sk, sv := range v.ServiceCosts {
 			svcCopy[sk] = sv
 		}
-		mCopy[k] = MemberCost{
-			MemberName:   v.MemberName,
-			ServiceCosts: svcCopy,
-			Total:        v.Total,
-		}
+		mCopy[k] = MemberCost{MemberName: v.MemberName, ServiceCosts: svcCopy, Total: v.Total}
 	}
-
-	sCopy := make(map[string]ServiceCost, len(billingSummary.Services))
-	for k, v := range billingSummary.Services {
+	sCopy := make(map[string]ServiceCost, len(billingStore.Services))
+	for k, v := range billingStore.Services {
 		memCopy := make(map[string]float64, len(v.MemberCosts))
 		for mk, mv := range v.MemberCosts {
 			memCopy[mk] = mv
 		}
-		sCopy[k] = ServiceCost{
-			ServiceName: v.ServiceName,
-			MemberCosts: memCopy,
-			Total:       v.Total,
-		}
+		sCopy[k] = ServiceCost{ServiceName: v.ServiceName, MemberCosts: memCopy, Total: v.Total}
 	}
 
-	return Summary{
-		Members:  mCopy,
-		Services: sCopy,
-		Refresh:  billingSummary.Refresh,
-	}
+	return Summary{Members: mCopy, Services: sCopy, Refresh: billingStore.Refresh}
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Initialisation
 // ──────────────────────────────────────────────────────────────────────────────
 
-// Init must be called once from main(); it kicks off an hourly refresh job.
+// Init kicks off periodic billing refreshes and daily PDF exports.
 func Init() {
-	// first run immediately
-	refreshOnce()
+	// synchronous first refresh with verbose output
+	refresh(true)
 
-	// schedule hourly on the top of the hour (UTC)
+	// hourly refresh (top of the hour, UTC)
 	go func() {
 		for {
-			now := time.Now().UTC()
-			next := now.Truncate(time.Hour).Add(time.Hour)
+			next := time.Now().UTC().Truncate(time.Hour).Add(time.Hour)
 			time.Sleep(time.Until(next))
-			refreshOnce()
+			refresh(false)
 		}
 	}()
+
+	// daily PDF generation at 00:05 UTC
+	go func() {
+		for {
+			next := time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour).Add(5 * time.Minute)
+			time.Sleep(time.Until(next))
+			runPDFExports()
+		}
+	}()
+
+	// first set of PDFs right after start‑up
+	runPDFExports()
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-//  Internal helpers
+//  Refresh logic
 // ──────────────────────────────────────────────────────────────────────────────
 
-// refreshOnce recalculates the entire billing table atomically.
-func refreshOnce() {
+func refresh(verbose bool) {
 	start := time.Now()
 	c := cfg.GetConfig()
 
 	newMemberCosts := make(map[string]MemberCost)
 	newServiceCosts := make(map[string]ServiceCost)
 
-	// pre‑index services for quick lookup
+	// indices (case‑insensitive)
 	svcByName := make(map[string]cfg.Service)
-	for name, svc := range c.Services {
-		svcByName[name] = svc
+	for n, s := range c.Services {
+		svcByName[strings.ToLower(strings.TrimSpace(n))] = s
+	}
+	priceByRegion := make(map[string]cfg.IaasPricing)
+	for r, p := range c.Pricing {
+		priceByRegion[strings.ToLower(strings.TrimSpace(r))] = p
 	}
 
 	for memName, mem := range c.Members {
-		region := strings.ToLower(strings.TrimSpace(mem.Location.Region))
-		price, ok := c.Pricing[region]
+		regionKey := strings.ToLower(strings.TrimSpace(mem.Location.Region))
+		price, ok := priceByRegion[regionKey]
 		if !ok {
-			log.Log(log.Warn, "[billing] region %q has no pricing entry – member %s skipped", region, memName)
+			log.Log(log.Warn, "[billing] region %q has no pricing entry – member %s skipped", mem.Location.Region, memName)
 			continue
 		}
 
 		memCost := MemberCost{
 			MemberName:   memName,
-			ServiceCosts: make(map[string]float64),
+			ServiceCosts: map[string]float64{},
 		}
 
-		// ServiceAssignments is map[string][]string; we don't care about the key,
-		// only the service names inside the slices.
 		for _, svcList := range mem.ServiceAssignments {
 			for _, svcName := range svcList {
-				svc, svcOK := svcByName[svcName]
-				if !svcOK {
+				svc, exists := svcByName[strings.ToLower(strings.TrimSpace(svcName))]
+				if !exists {
 					log.Log(log.Warn, "[billing] unknown service %q referenced by member %s – skipped", svcName, memName)
 					continue
 				}
 
 				cost := costForServiceInstance(svc.Resources, price)
 
-				// update per‑member view
 				memCost.ServiceCosts[svcName] += cost
 				memCost.Total += cost
 
-				// update per‑service view
 				sc := newServiceCosts[svcName]
 				if sc.ServiceName == "" {
 					sc.ServiceName = svcName
-					sc.MemberCosts = make(map[string]float64)
+					sc.MemberCosts = map[string]float64{}
 				}
 				sc.MemberCosts[memName] += cost
 				sc.Total += cost
@@ -184,28 +167,119 @@ func refreshOnce() {
 		}
 	}
 
-	billingSummary.mu.Lock()
-	billingSummary.Members = newMemberCosts
-	billingSummary.Services = newServiceCosts
-	billingSummary.Refresh = time.Now().UTC()
-	billingSummary.mu.Unlock()
+	// publish atomically
+	billingStore.Lock()
+	billingStore.Members = newMemberCosts
+	billingStore.Services = newServiceCosts
+	billingStore.Refresh = time.Now().UTC()
+	billingStore.Unlock()
 
-	duration := time.Since(start)
+	duration := time.Since(start).Round(time.Millisecond)
 	log.Log(log.Info, "[billing] refresh complete – %d members, %d services, in %s",
-		len(newMemberCosts), len(newServiceCosts), duration.Round(time.Millisecond))
+		len(newMemberCosts), len(newServiceCosts), duration)
+
+	if verbose {
+		logDetails(newMemberCosts, newServiceCosts)
+	}
 }
 
-// costForServiceInstance returns the total USD cost of *one instance* of a
-// service, given the resources and regional IaaS pricing.
+// ──────────────────────────────────────────────────────────────────────────────
+//  Helpers
+// ──────────────────────────────────────────────────────────────────────────────
+
 func costForServiceInstance(res cfg.Resources, price cfg.IaasPricing) float64 {
 	if res.Nodes == 0 {
 		return 0
 	}
-
 	perNode := (float64(res.Cores) * price.Cores) +
 		(float64(res.Memory) * price.Memory) +
 		(float64(res.Disk) * price.Disk) +
 		(float64(res.Bandwidth) * price.Bandwidth)
-
 	return perNode * float64(res.Nodes)
+}
+
+func logDetails(memCosts map[string]MemberCost, svcCosts map[string]ServiceCost) {
+	log.Log(log.Info, "[billing] ---------------------- per member cost breakdown ----------------------")
+	memberNames := make([]string, 0, len(memCosts))
+	for n := range memCosts {
+		memberNames = append(memberNames, n)
+	}
+	sort.Strings(memberNames)
+	for _, m := range memberNames {
+		mc := memCosts[m]
+		log.Log(log.Info, "[billing] %s – $%.2f", mc.MemberName, mc.Total)
+		svcNames := make([]string, 0, len(mc.ServiceCosts))
+		for s := range mc.ServiceCosts {
+			svcNames = append(svcNames, s)
+		}
+		sort.Strings(svcNames)
+		for _, s := range svcNames {
+			log.Log(log.Info, "[billing]   • %s – $%.2f", s, mc.ServiceCosts[s])
+		}
+	}
+
+	log.Log(log.Info, "[billing] ---------------------- per service cost breakdown --------------------")
+	serviceNames := make([]string, 0, len(svcCosts))
+	for s := range svcCosts {
+		serviceNames = append(serviceNames, s)
+	}
+	sort.Strings(serviceNames)
+	for _, s := range serviceNames {
+		sc := svcCosts[s]
+		log.Log(log.Info, "[billing] %s – $%.2f", sc.ServiceName, sc.Total)
+		memNames := make([]string, 0, len(sc.MemberCosts))
+		for m := range sc.MemberCosts {
+			memNames = append(memNames, m)
+		}
+		sort.Strings(memNames)
+		for _, m := range memNames {
+			log.Log(log.Info, "[billing]   • %s – $%.2f", m, sc.MemberCosts[m])
+		}
+	}
+}
+
+func runPDFExports() {
+	conf := cfg.GetConfig()
+	tmpDir := resolveTempDir(conf)
+	if tmpDir == "" {
+		log.Log(log.Warn, "[billing] tmp directory not configured – PDF exports skipped")
+		return
+	}
+
+	snap := GetSummary()
+
+	if err := writeServiceCostPDF(&snap, tmpDir); err != nil {
+		log.Log(log.Error, "[billing] failed to write service‑cost PDF: %v", err)
+	}
+
+	month := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	sla, err := CalculateSLAAdjustments(month, &snap)
+	if err != nil {
+		log.Log(log.Error, "[billing] failed SLA calculation: %v", err)
+		return
+	}
+	if err := writeMemberBillingPDF(&snap, sla, tmpDir, month); err != nil {
+		log.Log(log.Error, "[billing] failed to write member‑billing PDF: %v", err)
+	}
+}
+
+func resolveTempDir(conf interface{}) string {
+	c := cfg.GetConfig()
+	return filepath.Join(c.Local.System.WorkDir, "tmp")
+}
+
+// ensureDir verifies that path exists (creates it) and returns canonical version.
+func ensureDir(p string) string {
+	if p == "" {
+		return ""
+	}
+	if err := os.MkdirAll(p, 0o755); err != nil {
+		log.Log(log.Warn, "[billing] unable to create tmp dir %s: %v", p, err)
+		return ""
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return p
+	}
+	return abs
 }

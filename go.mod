@@ -9,6 +9,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/nats-io/nats.go v1.43.0
 	github.com/oschwald/maxminddb-golang v1.13.1
+	github.com/phpdave11/gofpdf v1.4.3
 	golang.org/x/net v0.41.0
 	maunium.net/go/mautrix v0.24.1
 )
