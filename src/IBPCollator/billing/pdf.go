@@ -1,17 +1,18 @@
 package billing
 
 // ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-// ┃  Stake Plus Inc. – IBPCollator Billing PDF helpers  (v0.4.7)       ┃
+// ┃  Stake Plus Inc. – IBPCollator Billing PDF helpers  (v0.4.8)       ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 //
-// Changes in this revision
-// ------------------------
-// • Watermark logo now scales to 62.5 % of page width (was 50 %).
-// • Watermark transparency reduced → α = 0.25 (was 0.18) for higher opacity.
-// • Report titles remain exclusively in page headers – never inside data boxes.
-// • Retains build‑fix for gofpdf.GetMargins() (four return values).
+// Change log (excerpt)
+// --------------------
+// • v0.4.8 – Ensure report headers have breathing‑room: every page now
+//   starts ordinary content at Y = 32 mm, preventing the previously observed
+//   “title sitting on top of boxes” issue.
+// • v0.4.7 – Watermark logo scale 62.5 %, alpha 0.25; titles only in header.
+// • v0.4.6 – GoFPDF 4‑value GetMargins() compatibility.
+// • Earlier – initial implementation.
 //
-// NOTE: No public API or data‑contract changes – safe drop‑in upgrade.
 
 import (
 	"fmt"
@@ -40,28 +41,32 @@ func findLogo(baseDir string) string {
 	return ""
 }
 
-// addPageWithWatermark draws one blank page, then renders the company logo
-// centred, 62 ½ % page‑width, with 25 % transparency, and finally restores α.
+// addPageWithWatermark creates a new page, draws the centred logo (62.5 %
+// width, 25 % transparency) and **moves Y to 32 mm** so subsequent content
+// never collides with the header/title.
 func addPageWithWatermark(pdf *gofpdf.Fpdf, logo string) {
 	pdf.AddPage()
-	if logo == "" {
-		return
+
+	if logo != "" {
+		pageW, pageH := pdf.GetPageSize()
+		imgW := pageW * 0.625 // 62.5 %
+
+		info := pdf.RegisterImageOptions(logo,
+			gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: true})
+		nativeW, nativeH := info.Extent()
+		scale := imgW / nativeW
+		imgH := nativeH * scale
+		imgX := (pageW - imgW) / 2
+		imgY := (pageH - imgH) / 2
+
+		pdf.SetAlpha(0.25, "Normal")
+		pdf.ImageOptions(logo, imgX, imgY, imgW, 0,
+			false, gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: true}, 0, "")
+		pdf.SetAlpha(1, "Normal")
 	}
-	pageW, pageH := pdf.GetPageSize()
-	imgW := pageW * 0.625 // 62.5 % of page width (50 % + 25 %)
 
-	info := pdf.RegisterImageOptions(logo,
-		gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: true})
-	nativeW, nativeH := info.Extent()
-	scale := imgW / nativeW
-	imgH := nativeH * scale
-	imgX := (pageW - imgW) / 2
-	imgY := (pageH - imgH) / 2
-
-	pdf.SetAlpha(0.25, "Normal") // 25 % transparency (more opaque)
-	pdf.ImageOptions(logo, imgX, imgY, imgW, 0,
-		false, gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: true}, 0, "")
-	pdf.SetAlpha(1, "Normal")
+	// Reserve vertical space so data never overlaps the header
+	pdf.SetY(32.0)
 }
 
 /* ---------------------------------------------------------------------
@@ -117,14 +122,13 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 	pdf.SetTitle(title, false)
 	pdf.SetAuthor("IBPCollator "+Version(), false)
 
-	// Global header – appears on every page, outside any service box
+	// Global header
 	pdf.SetHeaderFuncMode(func() {
 		pdf.SetFont("Helvetica", "B", 15)
 		pdf.CellFormat(0, 10, title, "", 1, "C", false, 0, "")
 		pdf.SetFont("Helvetica", "", 10)
 		pdf.CellFormat(0, 6, time.Now().UTC().Format("02 Jan 2006 15:04 UTC"),
 			"", 0, "C", false, 0, "")
-		pdf.Ln(6)
 	}, true)
 
 	pdf.SetFooterFunc(func() {
@@ -156,7 +160,7 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 	boxWidth := colSvcW + colCostW
 	leftMargin := (pageW - boxWidth) / 2
 
-	origLeft, _, _, _ := pdf.GetMargins() // four‑value signature
+	origLeft, _, _, _ := pdf.GetMargins()
 
 	for _, svc := range serviceNames {
 		startY := pdf.GetY()
@@ -281,14 +285,13 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 	pdf.SetTitle(title, false)
 	pdf.SetAuthor("IBPCollator "+Version(), false)
 
-	// Global header – appears on every page, outside any member box
+	// Global header
 	pdf.SetHeaderFuncMode(func() {
 		pdf.SetFont("Helvetica", "B", 15)
 		pdf.CellFormat(0, 10, title, "", 1, "C", false, 0, "")
 		pdf.SetFont("Helvetica", "", 10)
 		pdf.CellFormat(0, 6, time.Now().UTC().Format("02 Jan 2006 15:04 UTC"),
 			"", 0, "C", false, 0, "")
-		pdf.Ln(6)
 	}, true)
 
 	pdf.SetFooterFunc(func() {
@@ -335,7 +338,7 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 		pdf.SetLeftMargin(leftMargin)
 		pdf.SetX(leftMargin)
 
-		// Member title (now always just the member name)
+		// Member title
 		pdf.SetFont("Helvetica", "B", 12)
 		pdf.CellFormat(boxWidth, rowH+3, mem, "", 1, "L", false, 0, "")
 
@@ -466,4 +469,4 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 
 /* --------------------------------------------------------------------- */
 
-func Version() string { return "v0.4.7" }
+func Version() string { return "v0.4.8" }
