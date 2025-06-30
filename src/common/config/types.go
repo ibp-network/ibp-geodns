@@ -18,6 +18,7 @@ type Config struct {
 	Services        map[string]Service     `json:"Services"`
 	Pricing         map[string]IaasPricing `json:"IaasPricing"`
 	ServiceRequests ServiceRequests        `json:"ServiceRequests"`
+	Alerts          AlertsConfig           `json:"Alerts"`
 }
 
 type LocalConfig struct {
@@ -52,6 +53,15 @@ type ConfigUrls struct {
 	ServicesConfig         string `json:"ServicesConfig"`
 	IaasPricingConfig      string `json:"IaasPricingConfig"`
 	ServicesRequestsConfig string `json:"ServicesRequestsConfig"`
+	AlertsConfig           string `json:"AlertsConfig"`
+}
+
+type AlertsConfig struct {
+	Matrix struct {
+		Room         string              `json:"room"`
+		InternalRoom string              `json:"internal_room"`
+		Members      map[string][]string `json:"members"`
+	} `json:"matrix"`
 }
 
 type IaasPricing struct {

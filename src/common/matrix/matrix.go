@@ -3,6 +3,7 @@ package matrix
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -81,9 +82,36 @@ func makeKey(member, checkType, checkName, domain, endpoint string, ipv6 bool) s
 		member, checkType, checkName, domain, endpoint, ipv6)
 }
 
+func getMemberMentions(memberName string) []string {
+	c := cfg.GetConfig()
+
+	memberKey := strings.ToLower(memberName)
+	if users, ok := c.Alerts.Matrix.Members[memberKey]; ok {
+		return users
+	}
+
+	return nil
+}
+
 // sendText posts a plain‑text message and returns the resulting event ID.
 func sendText(ctx context.Context, body string) (id.EventID, error) {
 	resp, err := client.SendText(ctx, roomID, body)
+	if err != nil {
+		return "", err
+	}
+	return resp.EventID, nil
+}
+
+// sendFormattedText posts an HTML formatted message.
+func sendFormattedText(ctx context.Context, body, formattedBody string) (id.EventID, error) {
+	content := map[string]interface{}{
+		"msgtype":        "m.text",
+		"body":           body,
+		"format":         "org.matrix.custom.html",
+		"formatted_body": formattedBody,
+	}
+
+	resp, err := client.SendMessageEvent(ctx, roomID, event.EventMessage, content)
 	if err != nil {
 		return "", err
 	}
@@ -98,6 +126,29 @@ func editText(ctx context.Context, target id.EventID, body string) error {
 		"m.new_content": map[string]interface{}{
 			"msgtype": "m.text",
 			"body":    body,
+		},
+		"m.relates_to": map[string]interface{}{
+			"rel_type": "m.replace",
+			"event_id": target,
+		},
+	}
+
+	_, err := client.SendMessageEvent(ctx, roomID, event.EventMessage, content)
+	return err
+}
+
+// editFormattedText performs an *in‑place* edit with HTML content.
+func editFormattedText(ctx context.Context, target id.EventID, body, formattedBody string) error {
+	content := map[string]interface{}{
+		"msgtype":        "m.text",
+		"body":           body,
+		"format":         "org.matrix.custom.html",
+		"formatted_body": formattedBody,
+		"m.new_content": map[string]interface{}{
+			"msgtype":        "m.text",
+			"body":           body,
+			"format":         "org.matrix.custom.html",
+			"formatted_body": formattedBody,
 		},
 		"m.relates_to": map[string]interface{}{
 			"rel_type": "m.replace",
@@ -144,7 +195,14 @@ func NotifyMemberOffline(
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	body := fmt.Sprintf(
+	// Get member mentions
+	mentions := getMemberMentions(member)
+	mentionText := ""
+	if len(mentions) > 0 {
+		mentionText = strings.Join(mentions, " ") + "\n"
+	}
+
+	body := mentionText + fmt.Sprintf(
 		"⚠️  *OFFLINE*\n"+
 			"• Member: **%s**\n"+
 			"• Check:  %s / %s\n"+
@@ -154,7 +212,21 @@ func NotifyMemberOffline(
 			"• Error:  %s",
 		member, checkType, checkName, domain, endpoint, ipv6, errText)
 
-	evID, err := sendText(ctx, body)
+	formattedBody := ""
+	if mentionText != "" {
+		formattedBody = strings.Join(mentions, " ") + "<br/>"
+	}
+	formattedBody += fmt.Sprintf(
+		"⚠️  <strong>OFFLINE</strong><br/>"+
+			"• Member: <strong>%s</strong><br/>"+
+			"• Check:  %s / %s<br/>"+
+			"• Domain: %s<br/>"+
+			"• Endpoint: %s<br/>"+
+			"• IPv6:   %v<br/>"+
+			"• Error:  %s",
+		member, checkType, checkName, domain, endpoint, ipv6, errText)
+
+	evID, err := sendFormattedText(ctx, body, formattedBody)
 	if err != nil {
 		// Clean‑up sentinel so future attempts can retry.
 		offlineMap.Delete(key)
@@ -190,10 +262,19 @@ func NotifyMemberOnline(
 			"• IPv6:   %v",
 		member, checkType, checkName, domain, endpoint, ipv6)
 
+	formattedBody := fmt.Sprintf(
+		"✅  <strong>ONLINE</strong><br/>"+
+			"• Member: <strong>%s</strong><br/>"+
+			"• Check:  %s / %s<br/>"+
+			"• Domain: %s<br/>"+
+			"• Endpoint: %s<br/>"+
+			"• IPv6:   %v",
+		member, checkType, checkName, domain, endpoint, ipv6)
+
 	if raw, ok := offlineMap.Load(key); ok {
 		if evID, ok2 := raw.(id.EventID); ok2 && evID != "" {
 			// Attempt edit‑in‑place.
-			editErr := editText(ctx, evID, body)
+			editErr := editFormattedText(ctx, evID, body, formattedBody)
 			if editErr == nil {
 				offlineMap.Delete(key)
 				return
@@ -203,6 +284,6 @@ func NotifyMemberOnline(
 	}
 
 	// Either we had no cached event or the edit did not work – send a fresh one.
-	_, _ = sendText(ctx, body)
+	_, _ = sendFormattedText(ctx, body, formattedBody)
 	offlineMap.Delete(key) // ensure future OFFLINE alerts are allowed again
 }
