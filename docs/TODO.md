@@ -7,4 +7,4 @@
 3. **IBPCollator**
    - Implement billing generation
    - Expose usage stats for parachain requests
-
+   - Matrix client to notify members of downtime. 
