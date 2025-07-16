@@ -6,7 +6,7 @@ import (
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
-	mysql "ibp-geodns/src/common/data/mysql"
+	data2 "ibp-geodns/src/common/data2"
 	log "ibp-geodns/src/common/logging"
 )
 
@@ -32,7 +32,7 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 	out := make(SLASummary)
 
 	// Check if database is initialized
-	if mysql.DB == nil {
+	if data2.DB == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
 
@@ -60,7 +60,7 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 		ORDER BY member_name, domain_name, start_time
 	`
 
-	rows, err := mysql.DB.Query(query, endTime, endTime, startTime)
+	rows, err := data2.DB.Query(query, endTime, endTime, startTime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query downtime events: %w", err)
 	}
