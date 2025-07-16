@@ -483,7 +483,7 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	}
 
 	// Total row
-	pdf.SetFont("Helvetica", "B", 10)
+	pdf.SetFont("Helvetica", "B", 11)
 	pdf.SetFillColor(230, 230, 230)
 	totalColWidth := colMemberW + colLevelW + colRequestsW + colPercentW + colServicesW + colDowntimeW + colUptimeW
 	pdf.SetXY(tableX, y)
@@ -539,7 +539,7 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY, tab
 		return
 	}
 
-	// Column widths - adjusted for centered table with 15% increase
+	// Column widths - adjusted for better proportions with 15% increase
 	const (
 		colRankW     = 17.0
 		colCountryW  = 85.0
@@ -551,9 +551,9 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY, tab
 		rowH         = 10.0
 	)
 
-	// Center the table - total width is now 252
-	totalTableWidth := colRankW + colCountryW + colRequestsW + colShareW + colChange1W + colChange3W + colChange6W
-	x := (297.0 - totalTableWidth) / 2 // Center on A4 landscape page
+	// Calculate total width and center the table
+	totalWidth := colRankW + colCountryW + colRequestsW + colShareW + colChange1W + colChange3W + colChange6W
+	x := (297.0 - totalWidth) / 2
 	y := startY
 
 	// Table header with modern style
@@ -586,7 +586,7 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY, tab
 			// Reprint header with consistent styling
 			pdf.SetFillColor(50, 50, 50)
 			pdf.SetTextColor(255, 255, 255)
-			pdf.SetFont("Helvetica", "B", 10)
+			pdf.SetFont("Helvetica", "B", 11)
 			pdf.SetXY(x, y)
 			pdf.CellFormat(colRankW, rowH, "#", "1", 0, "C", true, 0, "")
 			pdf.CellFormat(colCountryW, rowH, "Country", "1", 0, "L", true, 0, "")
@@ -665,15 +665,15 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tab
 		rowH         = 10.0
 	)
 
-	// Center the table - total width is now 252
-	totalTableWidth := colRankW + colServiceW + colRequestsW + colShareW + colChange1W + colChange3W + colChange6W
-	x := (297.0 - totalTableWidth) / 2 // Center on A4 landscape page
+	// Calculate total width and center the table
+	totalWidth := colRankW + colServiceW + colRequestsW + colShareW + colChange1W + colChange3W + colChange6W
+	x := (297.0 - totalWidth) / 2
 	y := startY
 
 	// Table header
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
-	pdf.SetFont("Helvetica", "B", 11)
+	pdf.SetFont("Helvetica", "B", 10)
 	x = tableX
 	y = startY
 
