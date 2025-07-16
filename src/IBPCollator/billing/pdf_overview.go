@@ -162,6 +162,7 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 			}
 			totalUptime += breakdown.Uptime
 			uptimeCount++
+
 			billed := baseCost * (breakdown.Uptime / 100.0)
 			row.billedCost += billed
 		}
@@ -328,14 +329,14 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	pdf.CellFormat(30, 6, fmt.Sprintf("%.2f%%", DefaultSLAPercentage), "", 0, "L", false, 0, "")
 
 	// Add downtime calendar
-	y += 40
+	y += 35 // Reduced from 40
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(20, y)
 	pdf.CellFormat(257, 8, "Downtime Calendar", "", 1, "L", false, 0, "")
-	y += 10
+	y += 8 // Reduced from 10
 
-	// Draw calendar
-	drawDowntimeCalendar(pdf, 20, y, 257, month)
+	// Draw calendar with adjusted dimensions
+	drawDowntimeCalendar(pdf, 30, y, 237, month) // Reduced width from 257 to 237 (about 8% reduction), moved x from 20 to 30
 
 	// ===== PAGE 3: MEMBER BILLINGS TABLE =====
 	pdf.AddPage()
@@ -355,6 +356,7 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	// Estimate table height: header + (rows * rowH) + total row
 	estimatedHeight := 8.0 + float64(len(memberData))*8.0 + 8.0
 	availableHeight := 190.0 - startY // From startY to before footer
+
 	if estimatedHeight < availableHeight {
 		startY += (availableHeight - estimatedHeight) / 2
 	}
@@ -391,6 +393,7 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	pdf.CellFormat(colBaseCostW, rowH, "Base Cost", "1", 0, "R", true, 0, "")
 	pdf.CellFormat(colBilledW, rowH, "Billed", "1", 0, "R", true, 0, "")
 	pdf.CellFormat(colStatusW, rowH, "SLA", "1", 1, "C", true, 0, "")
+
 	pdf.SetTextColor(0, 0, 0)
 	pdf.SetFont("Helvetica", "", 9)
 	y += rowH
@@ -401,12 +404,11 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 		if y > 180 {
 			pdf.AddPage()
 			y = 40
-
 			// Reprint header
 			pdf.SetFillColor(50, 50, 50)
 			pdf.SetTextColor(255, 255, 255)
 			pdf.SetFont("Helvetica", "B", 9)
-			pdf.SetXY(10, y)
+			pdf.SetXY(tableX, y)
 			pdf.CellFormat(colMemberW, rowH, "Member", "1", 0, "L", true, 0, "")
 			pdf.CellFormat(colLevelW, rowH, "Lvl", "1", 0, "C", true, 0, "")
 			pdf.CellFormat(colRequestsW, rowH, "Requests", "1", 0, "R", true, 0, "")
@@ -429,7 +431,7 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 			pdf.SetFillColor(255, 255, 255)
 		}
 
-		pdf.SetXY(10, y)
+		pdf.SetXY(tableX, y)
 
 		// Member name
 		pdf.CellFormat(colMemberW, rowH, row.name, "1", 0, "L", true, 0, "")
@@ -483,7 +485,7 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.SetFillColor(230, 230, 230)
 	totalColWidth := colMemberW + colLevelW + colRequestsW + colPercentW + colServicesW + colDowntimeW + colUptimeW
-	pdf.SetXY(10, y)
+	pdf.SetXY(tableX, y)
 	pdf.CellFormat(totalColWidth, rowH, "TOTALS", "1", 0, "R", true, 0, "")
 	pdf.CellFormat(colBaseCostW, rowH, fmt.Sprintf("$%.2f", grandTotalBase), "1", 0, "R", true, 0, "")
 	pdf.CellFormat(colBilledW, rowH, fmt.Sprintf("$%.2f", grandTotalBilled), "1", 0, "R", true, 0, "")
@@ -491,7 +493,6 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 
 	// ===== PAGE 4: GEOGRAPHIC DISTRIBUTION =====
 	pdf.AddPage()
-
 	pdf.SetFont("Helvetica", "B", 16)
 	pdf.SetXY(10, 40)
 	pdf.CellFormat(277, 10, "Geographic Distribution - Top 15", "", 1, "C", false, 0, "")
@@ -500,7 +501,7 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	countryStats := getCountryStatistics(month)
 
 	// Center the table
-	const geoTableWidth = 220.0
+	const geoTableWidth = 240.0
 	geoTableX := (297.0 - geoTableWidth) / 2
 
 	// Draw unified country table
@@ -508,7 +509,6 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 
 	// ===== PAGE 5: SERVICE/CHAIN DISTRIBUTION =====
 	pdf.AddPage()
-
 	pdf.SetFont("Helvetica", "B", 16)
 	pdf.SetXY(10, 40)
 	pdf.CellFormat(277, 10, "Service/Chain Distribution - Top 15", "", 1, "C", false, 0, "")
@@ -531,7 +531,7 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	return nil
 }
 
-// drawUnifiedCountryTable draws a single table with all 20 countries
+// drawUnifiedCountryTable draws a single table with all 15 countries
 func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY, tableX, tableWidth float64) {
 	if len(stats) == 0 {
 		pdf.SetFont("Helvetica", "", 10)
@@ -540,24 +540,23 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY, tab
 		return
 	}
 
-	// Column widths - matching member table style
+	// Column widths - adjusted for centered table
 	const (
 		colRankW     = 15.0
-		colCountryW  = 70.0
-		colRequestsW = 35.0
-		colShareW    = 25.0
+		colCountryW  = 80.0
+		colRequestsW = 40.0
+		colShareW    = 30.0
 		colChange1W  = 25.0
 		colChange3W  = 25.0
 		colChange6W  = 25.0
-		rowH         = 8.0
+		rowH         = 9.0
 	)
 
-	// Table header with modern style (same as member table)
+	// Table header with modern style
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
-	pdf.SetFont("Helvetica", "B", 9)
-
-	x := 10.0
+	pdf.SetFont("Helvetica", "B", 10)
+	x := tableX
 	y := startY
 
 	pdf.SetXY(x, y)
@@ -568,22 +567,22 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY, tab
 	pdf.CellFormat(colChange1W, rowH, "1M Ago", "1", 0, "R", true, 0, "")
 	pdf.CellFormat(colChange3W, rowH, "3M Ago", "1", 0, "R", true, 0, "")
 	pdf.CellFormat(colChange6W, rowH, "6M Ago", "1", 1, "R", true, 0, "")
+
 	pdf.SetTextColor(0, 0, 0)
 	y += rowH
 
-	// Data rows with alternating colors (same style as member table)
-	pdf.SetFont("Helvetica", "", 9)
+	// Data rows with alternating colors
+	pdf.SetFont("Helvetica", "", 10)
 	fillToggle := false
 
 	for i := 0; i < 15 && i < len(stats); i++ {
 		if y > 180 {
 			pdf.AddPage()
 			y = 40
-
 			// Reprint header with consistent styling
 			pdf.SetFillColor(50, 50, 50)
 			pdf.SetTextColor(255, 255, 255)
-			pdf.SetFont("Helvetica", "B", 9)
+			pdf.SetFont("Helvetica", "B", 10)
 			pdf.SetXY(x, y)
 			pdf.CellFormat(colRankW, rowH, "#", "1", 0, "C", true, 0, "")
 			pdf.CellFormat(colCountryW, rowH, "Country", "1", 0, "L", true, 0, "")
@@ -593,7 +592,7 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY, tab
 			pdf.CellFormat(colChange3W, rowH, "3M Ago", "1", 0, "R", true, 0, "")
 			pdf.CellFormat(colChange6W, rowH, "6M Ago", "1", 1, "R", true, 0, "")
 			pdf.SetTextColor(0, 0, 0)
-			pdf.SetFont("Helvetica", "", 9)
+			pdf.SetFont("Helvetica", "", 10)
 			y += rowH
 		}
 
@@ -642,7 +641,7 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY, tab
 	}
 }
 
-// drawUnifiedServiceTable draws a single table with all 20 services
+// drawUnifiedServiceTable draws a single table with all 15 services
 func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tableX, tableWidth float64) {
 	if len(stats) == 0 {
 		pdf.SetFont("Helvetica", "", 10)
@@ -654,20 +653,19 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tab
 	const (
 		colRankW     = 15.0
 		colServiceW  = 80.0
-		colRequestsW = 35.0
-		colShareW    = 25.0
+		colRequestsW = 40.0
+		colShareW    = 30.0
 		colChange1W  = 25.0
 		colChange3W  = 25.0
 		colChange6W  = 25.0
-		rowH         = 8.0
+		rowH         = 9.0
 	)
 
 	// Table header
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
-	pdf.SetFont("Helvetica", "B", 9)
-
-	x := 10.0
+	pdf.SetFont("Helvetica", "B", 10)
+	x := tableX
 	y := startY
 
 	pdf.SetXY(x, y)
@@ -678,32 +676,23 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tab
 	pdf.CellFormat(colChange1W, rowH, "1M Ago", "1", 0, "R", true, 0, "")
 	pdf.CellFormat(colChange3W, rowH, "3M Ago", "1", 0, "R", true, 0, "")
 	pdf.CellFormat(colChange6W, rowH, "6M Ago", "1", 1, "R", true, 0, "")
+
 	pdf.SetTextColor(0, 0, 0)
 	y += rowH
 
 	// Data rows
-	pdf.SetFont("Helvetica", "", 8)
+	pdf.SetFont("Helvetica", "", 10)
 	fillToggle := false
 
 	for i := 0; i < 15 && i < len(stats); i++ {
 		if y > 180 {
 			pdf.AddPage()
 			y = 40
-
 			// Reprint header
 			pdf.SetFillColor(50, 50, 50)
 			pdf.SetTextColor(255, 255, 255)
-			pdf.SetFont("Helvetica", "B", 9)
-
-			// Convert domain to service name
-			serviceName := domainToServiceName(stats[i].Service)
-			if len(serviceName) > 40 {
-				serviceName = serviceName[:37] + "..."
-			}
-
+			pdf.SetFont("Helvetica", "B", 10)
 			pdf.SetXY(x, y)
-			pdf.CellFormat(colRankW, rowH, fmt.Sprintf("%d", i+1), "1", 0, "C", fillToggle, 0, "")
-			pdf.CellFormat(colServiceW, rowH, serviceName, "1", 0, "L", fillToggle, 0, "")
 			pdf.CellFormat(colRankW, rowH, "#", "1", 0, "C", true, 0, "")
 			pdf.CellFormat(colServiceW, rowH, "Service/Chain", "1", 0, "L", true, 0, "")
 			pdf.CellFormat(colRequestsW, rowH, "Requests", "1", 0, "R", true, 0, "")
@@ -712,7 +701,7 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tab
 			pdf.CellFormat(colChange3W, rowH, "3M Ago", "1", 0, "R", true, 0, "")
 			pdf.CellFormat(colChange6W, rowH, "6M Ago", "1", 1, "R", true, 0, "")
 			pdf.SetTextColor(0, 0, 0)
-			pdf.SetFont("Helvetica", "", 8)
+			pdf.SetFont("Helvetica", "", 10)
 			y += rowH
 		}
 
@@ -723,17 +712,17 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tab
 			pdf.SetFillColor(255, 255, 255)
 		}
 
-		// Truncate service name if too long
-		serviceName := stats[i].Service
+		// Convert domain to service name
+		serviceName := domainToServiceName(stats[i].Service)
 		if len(serviceName) > 35 {
 			serviceName = serviceName[:32] + "..."
 		}
 
 		pdf.SetXY(x, y)
-		pdf.CellFormat(colRankW, 5, fmt.Sprintf("%d", i+1), "1", 0, "C", fillToggle, 0, "")
-		pdf.CellFormat(colServiceW, 5, serviceName, "1", 0, "L", fillToggle, 0, "")
-		pdf.CellFormat(colRequestsW, 5, formatNumber(stats[i].Requests), "1", 0, "R", fillToggle, 0, "")
-		pdf.CellFormat(colShareW, 5, fmt.Sprintf("%.1f%%", stats[i].Percentage), "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colRankW, rowH, fmt.Sprintf("%d", i+1), "1", 0, "C", fillToggle, 0, "")
+		pdf.CellFormat(colServiceW, rowH, serviceName, "1", 0, "L", fillToggle, 0, "")
+		pdf.CellFormat(colRequestsW, rowH, formatNumber(stats[i].Requests), "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colShareW, rowH, fmt.Sprintf("%.1f%%", stats[i].Percentage), "1", 0, "R", fillToggle, 0, "")
 
 		// 1M change
 		changeStr1 := formatChange(stats[i].Change1Month)
@@ -742,7 +731,7 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tab
 		} else if stats[i].Change1Month < 0 {
 			pdf.SetTextColor(255, 0, 0)
 		}
-		pdf.CellFormat(colChange1W, 5, changeStr1, "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colChange1W, rowH, changeStr1, "1", 0, "R", fillToggle, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 
 		// 3M change
@@ -752,7 +741,7 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tab
 		} else if stats[i].Change3Months < 0 {
 			pdf.SetTextColor(255, 0, 0)
 		}
-		pdf.CellFormat(colChange3W, 5, changeStr3, "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colChange3W, rowH, changeStr3, "1", 0, "R", fillToggle, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 
 		// 6M change
@@ -762,10 +751,10 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tab
 		} else if stats[i].Change6Months < 0 {
 			pdf.SetTextColor(255, 0, 0)
 		}
-		pdf.CellFormat(colChange6W, 5, changeStr6, "1", 1, "R", fillToggle, 0, "")
+		pdf.CellFormat(colChange6W, rowH, changeStr6, "1", 1, "R", fillToggle, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 
-		y += 5
+		y += rowH
 	}
 }
 
@@ -1027,28 +1016,28 @@ func drawDowntimeCalendar(pdf *gofpdf.Fpdf, x, y, width float64, month time.Time
 	firstDay := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC)
 	startWeekday := int(firstDay.Weekday())
 
-	// Further reduced dimensions (50% of original)
+	// Adjusted dimensions - slightly increased height
 	cellWidth := width / 7
-	cellHeight := 13.5  // Reduced from 18.0
-	headerHeight := 5.0 // Reduced from 6.0
+	cellHeight := 15.0  // Increased from 13.5
+	headerHeight := 6.0 // Increased from 5.0
 
 	// Draw day headers
 	days := []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
-	pdf.SetFont("Helvetica", "B", 7) // Reduced from 8
+	pdf.SetFont("Helvetica", "B", 8) // Increased from 7
 
 	for i, day := range days {
 		pdf.SetXY(x+float64(i)*cellWidth, y)
 		pdf.CellFormat(cellWidth, headerHeight, day, "1", 0, "C", true, 0, "")
 	}
+
 	pdf.SetTextColor(0, 0, 0)
 	y += headerHeight
 
 	// Draw calendar days
-	pdf.SetFont("Helvetica", "", 7) // Reduced from 8
+	pdf.SetFont("Helvetica", "", 8) // Increased from 7
 	week := 0
-
 	for day := 1; day <= daysInMonth; day++ {
 		col := (startWeekday + day - 1) % 7
 		if day > 1 && col == 0 {
@@ -1077,50 +1066,50 @@ func drawDowntimeCalendar(pdf *gofpdf.Fpdf, x, y, width float64, month time.Time
 
 		// Add day number
 		pdf.SetXY(cellX, cellY+1)
-		pdf.CellFormat(cellWidth, 4, fmt.Sprintf("%d", day), "", 0, "C", false, 0, "")
+		pdf.CellFormat(cellWidth, 5, fmt.Sprintf("%d", day), "", 0, "C", false, 0, "")
 
 		// Add downtime count if any
 		if downtime > 0 {
-			pdf.SetFont("Helvetica", "", 5) // Reduced from 6
+			pdf.SetFont("Helvetica", "", 6) // Increased from 5
 			pdf.SetTextColor(100, 100, 100)
-			pdf.SetXY(cellX, cellY+6) // Adjusted from 8
-			pdf.CellFormat(cellWidth, 3, fmt.Sprintf("%d", downtime), "", 0, "C", false, 0, "")
+			pdf.SetXY(cellX, cellY+7) // Adjusted from 6
+			pdf.CellFormat(cellWidth, 4, fmt.Sprintf("%d", downtime), "", 0, "C", false, 0, "")
 			pdf.SetTextColor(0, 0, 0)
-			pdf.SetFont("Helvetica", "", 7)
+			pdf.SetFont("Helvetica", "", 8)
 		}
 	}
 
-	// Legend (even more compact)
+	// Legend (slightly larger)
 	legendY := y + float64(week+1)*cellHeight + 5
-	pdf.SetFont("Helvetica", "", 6) // Reduced from 7
+	pdf.SetFont("Helvetica", "", 7) // Increased from 6
 	pdf.SetXY(x, legendY)
-	pdf.CellFormat(25, 3, "Legend:", "", 0, "L", false, 0, "")
+	pdf.CellFormat(25, 4, "Legend:", "", 0, "L", false, 0, "")
 
-	legendBoxSize := 10.0
-	legendHeight := 3.0
+	legendBoxSize := 12.0 // Increased from 10.0
+	legendHeight := 4.0   // Increased from 3.0
 
 	// Green
 	pdf.SetFillColor(200, 255, 200)
 	pdf.Rect(x+30, legendY, legendBoxSize, legendHeight, "FD")
-	pdf.SetXY(x+41, legendY)
+	pdf.SetXY(x+43, legendY)
 	pdf.CellFormat(22, legendHeight, "No issues", "", 0, "L", false, 0, "")
 
 	// Yellow
 	pdf.SetFillColor(255, 255, 200)
 	pdf.Rect(x+70, legendY, legendBoxSize, legendHeight, "FD")
-	pdf.SetXY(x+81, legendY)
+	pdf.SetXY(x+83, legendY)
 	pdf.CellFormat(22, legendHeight, "1-2 events", "", 0, "L", false, 0, "")
 
 	// Orange
 	pdf.SetFillColor(255, 230, 200)
 	pdf.Rect(x+110, legendY, legendBoxSize, legendHeight, "FD")
-	pdf.SetXY(x+121, legendY)
+	pdf.SetXY(x+123, legendY)
 	pdf.CellFormat(22, legendHeight, "3-4 events", "", 0, "L", false, 0, "")
 
 	// Red
 	pdf.SetFillColor(255, 200, 200)
 	pdf.Rect(x+150, legendY, legendBoxSize, legendHeight, "FD")
-	pdf.SetXY(x+161, legendY)
+	pdf.SetXY(x+163, legendY)
 	pdf.CellFormat(22, legendHeight, "5+ events", "", 0, "L", false, 0, "")
 }
 
@@ -1181,10 +1170,23 @@ func domainToServiceName(domain string) string {
 	name = strings.ReplaceAll(name, "-", " ")
 	name = strings.ReplaceAll(name, ".", " ")
 
-	// Title case
+	// Title case with special handling for common patterns
 	words := strings.Fields(name)
 	for i, word := range words {
-		words[i] = strings.Title(word)
+		// Handle special cases
+		switch strings.ToLower(word) {
+		case "hub":
+			words[i] = "Hub"
+		case "rpc":
+			words[i] = "RPC"
+		case "api":
+			words[i] = "API"
+		default:
+			// Title case
+			if len(word) > 0 {
+				words[i] = strings.ToUpper(word[:1]) + strings.ToLower(word[1:])
+			}
+		}
 	}
 
 	return strings.Join(words, " ")
