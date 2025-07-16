@@ -443,7 +443,7 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 			if svcConfig, exists := c.Services[svc]; exists {
 				pdf.SetFont("Helvetica", "I", 8)
 				pdf.SetTextColor(100, 100, 100)
-				resourceText := fmt.Sprintf("   Resources: %d nodes, %.1f cores, %.1f GB RAM, %.1f GB disk, %.1f TB bandwidth",
+				resourceText := fmt.Sprintf("   Resources: %d nodes, %.1f cores, %.1f GB RAM, %.1f GB disk, %.1f GB bandwidth",
 					svcConfig.Resources.Nodes,
 					svcConfig.Resources.Cores,
 					svcConfig.Resources.Memory,
