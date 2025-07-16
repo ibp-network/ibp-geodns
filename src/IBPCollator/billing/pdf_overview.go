@@ -788,11 +788,11 @@ func getCountryRequestsForMonth(month time.Time) map[string]int {
 	query := `
         SELECT 
             COALESCE(country_code, 'XX') as country,
-            COALESCE(country_name, 'Unknown') as country_name,  // ADD THIS LINE
+            COALESCE(country_name, 'Unknown') as country_name,
             SUM(hits) as total_hits
         FROM requests
         WHERE date >= ? AND date <= ?
-        GROUP BY country_code, country_name  // ADD country_name HERE
+        GROUP BY country_code, country_name
         ORDER BY total_hits DESC
     `
 	rows, err := data2.DB.Query(query, startDate, endDate)
