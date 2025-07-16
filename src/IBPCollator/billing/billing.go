@@ -5,7 +5,6 @@ package billing
 // ─────────────────────────────────────────────────────────────────────────────
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -301,14 +300,20 @@ func generateMonthlyBillingPDF() {
 		log.Log(log.Info, "[billing] Total SLA violations for %s: %d", billingMonth.Format("January 2006"), violationCount)
 	}
 
-	// Generate the PDF with a specific filename including the month
-	filename := filepath.Join(tmpDir, fmt.Sprintf("member_billing_%s.pdf", billingMonth.Format("200601")))
-
+	// Generate the detailed member billing PDF
 	if err := writeMemberBillingPDF(&snap, sla, tmpDir, billingMonth); err != nil {
 		log.Log(log.Error, "[billing] failed to write member-billing PDF: %v", err)
 	} else {
-		log.Log(log.Info, "[billing] Successfully generated member billing PDF for %s: %s",
-			billingMonth.Format("January 2006"), filename)
+		log.Log(log.Info, "[billing] Successfully generated member billing PDF for %s",
+			billingMonth.Format("January 2006"))
+	}
+
+	// Generate the monthly overview PDF
+	if err := writeMonthlyOverviewPDF(&snap, sla, tmpDir, billingMonth); err != nil {
+		log.Log(log.Error, "[billing] failed to write monthly overview PDF: %v", err)
+	} else {
+		log.Log(log.Info, "[billing] Successfully generated monthly overview PDF for %s",
+			billingMonth.Format("January 2006"))
 	}
 }
 
