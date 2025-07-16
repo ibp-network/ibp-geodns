@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -16,6 +17,74 @@ import (
 
 	"github.com/phpdave11/gofpdf"
 )
+
+// downloadMemberLogo downloads a member's logo to the tmp/member_logos directory
+func downloadMemberLogo(memberName, logoURL, baseDir string) string {
+	if logoURL == "" {
+		return ""
+	}
+
+	// Create member_logos directory
+	logoDir := filepath.Join(baseDir, "tmp", "member_logos")
+	if err := os.MkdirAll(logoDir, 0755); err != nil {
+		log.Log(log.Error, "[billing] Failed to create logo directory: %v", err)
+		return ""
+	}
+
+	// Sanitize filename
+	filename := sanitizeFilename(memberName) + ".png"
+	logoPath := filepath.Join(logoDir, filename)
+
+	// Check if already downloaded
+	if _, err := os.Stat(logoPath); err == nil {
+		return logoPath
+	}
+
+	// Download the logo
+	resp, err := http.Get(logoURL)
+	if err != nil {
+		log.Log(log.Error, "[billing] Failed to download logo for %s: %v", memberName, err)
+		return ""
+	}
+	defer resp.Body.Close()
+
+	// Create the file
+	file, err := os.Create(logoPath)
+	if err != nil {
+		log.Log(log.Error, "[billing] Failed to create logo file for %s: %v", memberName, err)
+		return ""
+	}
+	defer file.Close()
+
+	// Copy the logo
+	_, err = io.Copy(file, resp.Body)
+	if err != nil {
+		log.Log(log.Error, "[billing] Failed to save logo for %s: %v", memberName, err)
+		os.Remove(logoPath)
+		return ""
+	}
+
+	return logoPath
+}
+
+// groupServicesByLevel groups services by their level requirement
+func groupServicesByLevel(memberCost MemberCost, services map[string]cfg.Service) map[int][]string {
+	levelGroups := make(map[int][]string)
+
+	for svcName := range memberCost.ServiceCosts {
+		if svc, exists := services[svcName]; exists {
+			level := svc.Configuration.LevelRequired
+			levelGroups[level] = append(levelGroups[level], svcName)
+		}
+	}
+
+	// Sort services within each level
+	for level := range levelGroups {
+		sort.Strings(levelGroups[level])
+	}
+
+	return levelGroups
+}
 
 // writeMemberPDF generates an individual PDF for a member
 func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir string, month time.Time) error {
@@ -68,176 +137,334 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.AliasNbPages("")
 	pdf.AddPage()
 
-	// Member info section with modern card design
+	// Get member configuration
 	memberConfig, hasMemberConfig := c.Members[memberName]
 	memberCost := sum.Members[memberName]
-	stats := calculateMemberStats(month)[memberName]
+
+	// Use the member's Details.Name for database lookup
+	dbMemberName := memberName
+	if hasMemberConfig && memberConfig.Details.Name != "" {
+		dbMemberName = memberConfig.Details.Name
+	}
+
+	stats := calculateMemberStats(month)[dbMemberName]
 	totalRequests := calculateTotalRequests(month)
 
-	// Member details card
-	drawMemberCard(pdf, 10, 35, 190, 40)
+	// Download member logo
+	memberLogoPath := ""
+	if hasMemberConfig && memberConfig.Details.Logo != "" {
+		memberLogoPath = downloadMemberLogo(memberName, memberConfig.Details.Logo, c.Local.System.WorkDir)
+	}
 
+	// Single large member information card
+	drawMemberCard(pdf, 10, 35, 190, 65)
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(15, 40)
-	pdf.CellFormat(180, 8, "Member Information", "", 1, "L", false, 0, "")
+	pdf.CellFormat(120, 8, "Member Information", "", 1, "L", false, 0, "")
+
+	// Member logo on the right
+	if memberLogoPath != "" {
+		// Try to add the logo, constrain to 40x40 max
+		info := pdf.RegisterImageOptions(memberLogoPath,
+			gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: true})
+		if info != nil {
+			logoW, logoH := 40.0, 40.0
+			aspectRatio := info.Width() / info.Height()
+			if aspectRatio > 1 {
+				logoH = logoW / aspectRatio
+			} else {
+				logoW = logoH * aspectRatio
+			}
+			pdf.ImageOptions(memberLogoPath, 155, 50, logoW, logoH,
+				false, gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: true}, 0, "")
+		}
+	}
 
 	pdf.SetFont("Helvetica", "", 10)
 	y := 50.0
 
+	// Left column
 	if hasMemberConfig {
+		// Website
 		if memberConfig.Details.Website != "" {
 			pdf.SetXY(15, y)
 			pdf.CellFormat(30, 5, "Website:", "", 0, "L", false, 0, "")
 			pdf.SetX(45)
 			pdf.SetFont("Helvetica", "B", 10)
-			pdf.CellFormat(140, 5, memberConfig.Details.Website, "", 1, "L", false, 0, "")
+			pdf.CellFormat(100, 5, memberConfig.Details.Website, "", 1, "L", false, 0, "")
 			pdf.SetFont("Helvetica", "", 10)
 			y += 6
 		}
 
+		// Member Level and Since
 		pdf.SetXY(15, y)
 		pdf.CellFormat(30, 5, "Member Level:", "", 0, "L", false, 0, "")
 		pdf.SetX(45)
 		pdf.SetFont("Helvetica", "B", 10)
-		pdf.CellFormat(40, 5, fmt.Sprintf("%d", memberConfig.Membership.Level), "", 0, "L", false, 0, "")
+		pdf.CellFormat(30, 5, fmt.Sprintf("%d", memberConfig.Membership.Level), "", 0, "L", false, 0, "")
 		pdf.SetFont("Helvetica", "", 10)
 
-		pdf.SetXY(105, y)
-		pdf.CellFormat(30, 5, "Member Since:", "", 0, "L", false, 0, "")
-		pdf.SetX(135)
+		pdf.SetXY(80, y)
+		pdf.CellFormat(30, 5, "Since:", "", 0, "L", false, 0, "")
+		pdf.SetX(95)
 		pdf.SetFont("Helvetica", "B", 10)
 		joinedTime := time.Unix(int64(memberConfig.Membership.Joined), 0)
-		pdf.CellFormat(40, 5, joinedTime.Format("January 2006"), "", 1, "L", false, 0, "")
+		pdf.CellFormat(40, 5, joinedTime.Format("Jan 2006"), "", 1, "L", false, 0, "")
 		pdf.SetFont("Helvetica", "", 10)
 		y += 6
+
+		// Location info
+		pdf.SetXY(15, y)
+		pdf.CellFormat(30, 5, "Region:", "", 0, "L", false, 0, "")
+		pdf.SetX(45)
+		pdf.SetFont("Helvetica", "B", 10)
+		pdf.CellFormat(100, 5, memberConfig.Location.Region, "", 1, "L", false, 0, "")
+		pdf.SetFont("Helvetica", "", 10)
+		y += 6
+
+		// Coordinates
+		pdf.SetXY(15, y)
+		pdf.CellFormat(30, 5, "Coordinates:", "", 0, "L", false, 0, "")
+		pdf.SetX(45)
+		pdf.SetFont("Helvetica", "B", 10)
+		pdf.CellFormat(100, 5, fmt.Sprintf("%.4f, %.4f", memberConfig.Location.Latitude, memberConfig.Location.Longitude), "", 1, "L", false, 0, "")
+		pdf.SetFont("Helvetica", "", 10)
+		y += 6
+
+		// Service IPs
+		if memberConfig.Service.ServiceIPv4 != "" {
+			pdf.SetXY(15, y)
+			pdf.CellFormat(30, 5, "IPv4:", "", 0, "L", false, 0, "")
+			pdf.SetX(45)
+			pdf.SetFont("Helvetica", "B", 10)
+			pdf.CellFormat(100, 5, memberConfig.Service.ServiceIPv4, "", 1, "L", false, 0, "")
+			pdf.SetFont("Helvetica", "", 10)
+			y += 6
+		}
+
+		if memberConfig.Service.ServiceIPv6 != "" {
+			pdf.SetXY(15, y)
+			pdf.CellFormat(30, 5, "IPv6:", "", 0, "L", false, 0, "")
+			pdf.SetX(45)
+			pdf.SetFont("Helvetica", "B", 10)
+			pdf.CellFormat(100, 5, memberConfig.Service.ServiceIPv6, "", 1, "L", false, 0, "")
+			pdf.SetFont("Helvetica", "", 10)
+			y += 6
+		}
 	}
 
-	// Usage statistics card
-	y = 85
-	drawMemberCard(pdf, 10, y, 190, 35)
+	// Usage statistics in the same box
+	y += 4
+	pdf.SetDrawColor(200, 200, 200)
+	pdf.Line(15, y, 145, y) // Separator line (don't cross logo area)
+	pdf.SetDrawColor(0, 0, 0)
+	y += 4
 
-	pdf.SetFont("Helvetica", "B", 14)
-	pdf.SetXY(15, y+5)
-	pdf.CellFormat(180, 8, "Usage Statistics", "", 1, "L", false, 0, "")
-
-	pdf.SetFont("Helvetica", "", 10)
-	pdf.SetXY(15, y+15)
+	pdf.SetXY(15, y)
 	pdf.CellFormat(30, 5, "DNS Requests:", "", 0, "L", false, 0, "")
 	pdf.SetX(45)
 	pdf.SetFont("Helvetica", "B", 10)
-	pdf.CellFormat(40, 5, fmt.Sprintf("%d", stats.RequestCount), "", 0, "L", false, 0, "")
-
+	pdf.CellFormat(30, 5, fmt.Sprintf("%d", stats.RequestCount), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
-	pdf.SetXY(105, y+15)
+
+	pdf.SetXY(80, y)
 	pdf.CellFormat(30, 5, "% of Network:", "", 0, "L", false, 0, "")
-	pdf.SetX(135)
+	pdf.SetX(110)
 	pdf.SetFont("Helvetica", "B", 10)
 	percentage := 0.0
 	if totalRequests > 0 {
 		percentage = float64(stats.RequestCount) / float64(totalRequests) * 100.0
 	}
-	pdf.CellFormat(40, 5, fmt.Sprintf("%.2f%%", percentage), "", 0, "L", false, 0, "")
+	pdf.CellFormat(30, 5, fmt.Sprintf("%.2f%%", percentage), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
 
-	// Service details
-	y = 130
+	// Service details grouped by level
+	y = 110
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(10, y)
 	pdf.CellFormat(190, 8, "Service Details", "", 1, "L", false, 0, "")
 	y += 10
 
-	// Sort services
-	svcNames := make([]string, 0, len(memberCost.ServiceCosts))
-	for s := range memberCost.ServiceCosts {
-		svcNames = append(svcNames, s)
+	// Group services by level
+	levelGroups := groupServicesByLevel(memberCost, c.Services)
+
+	// Get sorted levels (ascending)
+	levels := make([]int, 0, len(levelGroups))
+	for level := range levelGroups {
+		levels = append(levels, level)
 	}
-	sort.Strings(svcNames)
+	sort.Ints(levels)
 
 	memberTotal := 0.0
-	for _, svcName := range svcNames {
-		if y > 250 {
+
+	// Process each level group
+	for _, level := range levels {
+		services := levelGroups[level]
+		if len(services) == 0 {
+			continue
+		}
+
+		if y > 230 {
 			pdf.AddPage()
 			y = 35
 		}
 
-		// Service card
-		drawMemberCard(pdf, 10, y, 190, 45)
+		// Level header
+		pdf.SetFont("Helvetica", "B", 12)
+		pdf.SetXY(10, y)
+		pdf.CellFormat(190, 7, fmt.Sprintf("Level %d Services", level), "", 1, "L", false, 0, "")
+		y += 8
 
-		// Service header
-		pdf.SetFillColor(240, 240, 240)
-		pdf.Rect(10, y, 190, 10, "F")
+		levelTotal := 0.0
 
-		pdf.SetFont("Helvetica", "B", 11)
-		pdf.SetXY(15, y+2)
-		pdf.CellFormat(180, 6, svcName, "", 1, "L", false, 0, "")
+		// Process services in this level
+		for _, svcName := range services {
+			// Calculate service card height based on downtime events
+			baseHeight := 45.0
+			events := getServiceDowntimeEvents(dbMemberName, svcName, month)
+			filteredEvents := filterEvents(events, 5) // 5+ minute events
 
-		baseCost := memberCost.ServiceCosts[svcName]
-		breakdown := getSLABreakdown(sla, memberName, svcName)
-		billed := baseCost * (breakdown.Uptime / 100.0)
-		memberTotal += billed
+			if len(filteredEvents) > 0 {
+				baseHeight += 25 + float64(len(filteredEvents))*6 // Header + rows
+			}
 
-		// Service details
-		pdf.SetFont("Helvetica", "", 9)
-		y += 12
+			if y+baseHeight > 270 {
+				pdf.AddPage()
+				y = 35
+			}
 
-		// Resources
-		if svcConfig, exists := c.Services[svcName]; exists {
-			pdf.SetXY(15, y)
-			pdf.SetTextColor(100, 100, 100)
-			resourceText := fmt.Sprintf("Resources: %d nodes, %.1f cores, %.1f GB RAM, %.1f GB disk, %.1f TB bandwidth",
-				svcConfig.Resources.Nodes,
-				svcConfig.Resources.Cores,
-				svcConfig.Resources.Memory,
-				svcConfig.Resources.Disk,
-				svcConfig.Resources.Bandwidth)
-			pdf.CellFormat(180, 4, resourceText, "", 1, "L", false, 0, "")
+			// Service card
+			drawMemberCard(pdf, 10, y, 190, baseHeight)
+
+			// Service header
+			pdf.SetFillColor(240, 240, 240)
+			pdf.Rect(10, y, 190, 10, "F")
+			pdf.SetFont("Helvetica", "B", 11)
+			pdf.SetXY(15, y+2)
+			pdf.CellFormat(180, 6, svcName, "", 1, "L", false, 0, "")
+
+			baseCost := memberCost.ServiceCosts[svcName]
+			breakdown := getSLABreakdown(sla, memberName, svcName)
+			billed := baseCost * (breakdown.Uptime / 100.0)
+			levelTotal += billed
+			memberTotal += billed
+
+			// Service details
+			pdf.SetFont("Helvetica", "", 9)
+			serviceY := y + 12
+
+			// Resources
+			if svcConfig, exists := c.Services[svcName]; exists {
+				pdf.SetXY(15, serviceY)
+				pdf.SetTextColor(100, 100, 100)
+				resourceText := fmt.Sprintf("Resources: %d nodes, %.1f cores, %.1f GB RAM, %.1f GB disk, %.1f TB bandwidth",
+					svcConfig.Resources.Nodes,
+					svcConfig.Resources.Cores,
+					svcConfig.Resources.Memory,
+					svcConfig.Resources.Disk,
+					svcConfig.Resources.Bandwidth)
+				pdf.CellFormat(180, 4, resourceText, "", 1, "L", false, 0, "")
+				pdf.SetTextColor(0, 0, 0)
+				serviceY += 5
+			}
+
+			// Cost breakdown
+			pdf.SetXY(15, serviceY)
+			pdf.CellFormat(25, 5, "Base Cost:", "", 0, "L", false, 0, "")
+			pdf.SetX(40)
+			pdf.SetFont("Helvetica", "B", 9)
+			pdf.CellFormat(20, 5, fmt.Sprintf("$%.2f", baseCost), "", 0, "R", false, 0, "")
+			pdf.SetFont("Helvetica", "", 9)
+
+			pdf.SetX(70)
+			pdf.CellFormat(20, 5, "Uptime:", "", 0, "L", false, 0, "")
+			pdf.SetX(90)
+			if breakdown.Uptime < DefaultSLAPercentage {
+				pdf.SetTextColor(255, 0, 0)
+			} else {
+				pdf.SetTextColor(0, 128, 0)
+			}
+			pdf.SetFont("Helvetica", "B", 9)
+			pdf.CellFormat(25, 5, fmt.Sprintf("%.2f%%", breakdown.Uptime), "", 0, "R", false, 0, "")
 			pdf.SetTextColor(0, 0, 0)
-			y += 5
+			pdf.SetFont("Helvetica", "", 9)
+
+			pdf.SetX(125)
+			pdf.CellFormat(20, 5, "Billed:", "", 0, "L", false, 0, "")
+			pdf.SetX(145)
+			pdf.SetFont("Helvetica", "B", 9)
+			pdf.CellFormat(25, 5, fmt.Sprintf("$%.2f", billed), "", 0, "R", false, 0, "")
+			serviceY += 7
+
+			// SLA status
+			pdf.SetFont("Helvetica", "", 9)
+			pdf.SetXY(15, serviceY)
+			if breakdown.MeetsSLA {
+				pdf.SetTextColor(0, 128, 0)
+				pdf.CellFormat(180, 4, fmt.Sprintf("[OK] Meets SLA requirement of %.2f%%", DefaultSLAPercentage), "", 1, "L", false, 0, "")
+			} else {
+				pdf.SetTextColor(255, 0, 0)
+				pdf.CellFormat(180, 4, fmt.Sprintf("[FAIL] Below SLA: %.2f hours downtime (%.2f%% uptime required)",
+					breakdown.HoursDown, DefaultSLAPercentage), "", 1, "L", false, 0, "")
+			}
+			pdf.SetTextColor(0, 0, 0)
+			serviceY += 6
+
+			// Downtime table for this service (if any)
+			if len(filteredEvents) > 0 {
+				pdf.SetDrawColor(200, 200, 200)
+				pdf.Line(15, serviceY, 195, serviceY)
+				pdf.SetDrawColor(0, 0, 0)
+				serviceY += 3
+
+				pdf.SetFont("Helvetica", "B", 8)
+				pdf.SetXY(15, serviceY)
+				pdf.CellFormat(180, 4, "Downtime Events (5+ minutes):", "", 1, "L", false, 0, "")
+				serviceY += 5
+
+				// Table header
+				pdf.SetFont("Helvetica", "", 7)
+				pdf.SetFillColor(245, 245, 245)
+				pdf.SetXY(15, serviceY)
+				pdf.CellFormat(25, 4, "Duration", "1", 0, "L", true, 0, "")
+				pdf.CellFormat(50, 4, "Start Time", "1", 0, "L", true, 0, "")
+				pdf.CellFormat(50, 4, "End Time", "1", 0, "L", true, 0, "")
+				pdf.CellFormat(55, 4, "Error", "1", 1, "L", true, 0, "")
+				serviceY += 4
+
+				// Downtime rows
+				for _, event := range filteredEvents {
+					duration := event.EndTime.Sub(event.StartTime)
+					pdf.SetXY(15, serviceY)
+					pdf.SetFont("Helvetica", "", 6)
+					pdf.CellFormat(25, 4, formatDuration(duration), "1", 0, "L", false, 0, "")
+					pdf.CellFormat(50, 4, event.StartTime.Format("Jan 2 15:04 UTC"), "1", 0, "L", false, 0, "")
+					pdf.CellFormat(50, 4, event.EndTime.Format("Jan 2 15:04 UTC"), "1", 0, "L", false, 0, "")
+
+					errorText := event.ErrorText
+					if len(errorText) > 40 {
+						errorText = errorText[:37] + "..."
+					}
+					pdf.CellFormat(55, 4, errorText, "1", 1, "L", false, 0, "")
+					serviceY += 4
+				}
+			}
+
+			y = serviceY + 10
 		}
 
-		// Cost breakdown - improved alignment
-		pdf.SetXY(15, y)
-		pdf.CellFormat(25, 5, "Base Cost:", "", 0, "L", false, 0, "")
-		pdf.SetX(40)
-		pdf.SetFont("Helvetica", "B", 9)
-		pdf.CellFormat(20, 5, fmt.Sprintf("$%.2f", baseCost), "", 0, "R", false, 0, "")
-
-		pdf.SetFont("Helvetica", "", 9)
-		pdf.SetX(70)
-		pdf.CellFormat(20, 5, "Uptime:", "", 0, "L", false, 0, "")
-		pdf.SetX(90)
-
-		if breakdown.Uptime < DefaultSLAPercentage {
-			pdf.SetTextColor(255, 0, 0)
-		} else {
-			pdf.SetTextColor(0, 128, 0)
+		// Level total
+		if len(services) > 1 {
+			if y > 260 {
+				pdf.AddPage()
+				y = 35
+			}
+			pdf.SetFont("Helvetica", "B", 10)
+			pdf.SetXY(110, y)
+			pdf.CellFormat(60, 6, fmt.Sprintf("Level %d Total:", level), "", 0, "R", false, 0, "")
+			pdf.CellFormat(30, 6, fmt.Sprintf("$%.2f", levelTotal), "", 1, "R", false, 0, "")
+			y += 10
 		}
-		pdf.SetFont("Helvetica", "B", 9)
-		pdf.CellFormat(25, 5, fmt.Sprintf("%.2f%%", breakdown.Uptime), "", 0, "R", false, 0, "")
-		pdf.SetTextColor(0, 0, 0)
-
-		pdf.SetFont("Helvetica", "", 9)
-		pdf.SetX(125)
-		pdf.CellFormat(20, 5, "Billed:", "", 0, "L", false, 0, "")
-		pdf.SetX(145)
-		pdf.SetFont("Helvetica", "B", 9)
-		pdf.CellFormat(25, 5, fmt.Sprintf("$%.2f", billed), "", 0, "R", false, 0, "")
-		y += 7
-
-		// SLA status
-		pdf.SetFont("Helvetica", "", 9)
-		pdf.SetXY(15, y)
-		if breakdown.MeetsSLA {
-			pdf.SetTextColor(0, 128, 0)
-			pdf.CellFormat(180, 4, fmt.Sprintf("[OK] Meets SLA requirement of %.2f%%", DefaultSLAPercentage), "", 1, "L", false, 0, "")
-		} else {
-			pdf.SetTextColor(255, 0, 0)
-			pdf.CellFormat(180, 4, fmt.Sprintf("[FAIL] Below SLA: %.2f hours downtime (%.2f%% uptime required)",
-				breakdown.HoursDown, DefaultSLAPercentage), "", 1, "L", false, 0, "")
-		}
-		pdf.SetTextColor(0, 0, 0)
-
-		y += 15
 	}
 
 	// Total summary
@@ -249,133 +476,12 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	drawMemberCard(pdf, 10, y, 190, 20)
 	pdf.SetFillColor(30, 30, 30)
 	pdf.Rect(10, y, 190, 20, "F")
-
 	pdf.SetTextColor(255, 255, 255)
 	pdf.SetFont("Helvetica", "B", 12)
 	pdf.SetXY(15, y+7)
 	pdf.CellFormat(140, 6, "Total Amount Due", "", 0, "L", false, 0, "")
 	pdf.CellFormat(35, 6, fmt.Sprintf("$%.2f", memberTotal), "", 0, "R", false, 0, "")
 	pdf.SetTextColor(0, 0, 0)
-
-	// Downtime events section
-	pdf.AddPage()
-	y = 35
-
-	pdf.SetFont("Helvetica", "B", 14)
-	pdf.CellFormat(190, 8, "Downtime Events (5+ minutes)", "", 1, "L", false, 0, "")
-	y += 10
-
-	events := getMemberDowntimeEvents(memberName, month)
-
-	// Filter events to only show those longer than 5 minutes
-	filteredEvents := []DowntimeEvent{}
-	for _, event := range events {
-		duration := event.EndTime.Sub(event.StartTime)
-		if duration.Minutes() >= 5 {
-			filteredEvents = append(filteredEvents, event)
-		}
-	}
-
-	if len(filteredEvents) == 0 {
-		drawMemberCard(pdf, 10, y, 190, 20)
-		pdf.SetFont("Helvetica", "", 10)
-		pdf.SetXY(15, y+7)
-		pdf.SetTextColor(0, 128, 0)
-		pdf.CellFormat(180, 6, "No significant downtime events (5+ minutes) recorded this month", "", 0, "C", false, 0, "")
-		pdf.SetTextColor(0, 0, 0)
-	} else {
-		for _, event := range filteredEvents {
-			if y > 250 {
-				pdf.AddPage()
-				y = 35
-				pdf.SetFont("Helvetica", "B", 14)
-				pdf.CellFormat(190, 8, "Downtime Events (continued)", "", 1, "L", false, 0, "")
-				y += 10
-			}
-
-			// Event card
-			cardHeight := 35.0
-			if event.VoteData != "" {
-				cardHeight += 5
-			}
-			drawMemberCard(pdf, 10, y, 190, cardHeight)
-
-			// Event type and service
-			pdf.SetFont("Helvetica", "B", 10)
-			pdf.SetXY(15, y+5)
-			serviceAffected := getServiceFromEvent(event)
-			pdf.CellFormat(180, 5, fmt.Sprintf("%s - %s", strings.Title(event.CheckType), serviceAffected), "", 1, "L", false, 0, "")
-
-			// Downtime period
-			pdf.SetFont("Helvetica", "", 9)
-			pdf.SetXY(15, y+12)
-			duration := event.EndTime.Sub(event.StartTime)
-			pdf.CellFormat(180, 4, fmt.Sprintf("Duration: %s (%.2f hours)",
-				formatDuration(duration), duration.Hours()), "", 1, "L", false, 0, "")
-
-			// Dates
-			pdf.SetXY(15, y+18)
-			pdf.SetTextColor(100, 100, 100)
-			pdf.CellFormat(180, 4, fmt.Sprintf("From: %s",
-				event.StartTime.Format("Jan 2, 2006 15:04 UTC")), "", 1, "L", false, 0, "")
-			pdf.SetXY(15, y+23)
-			pdf.CellFormat(180, 4, fmt.Sprintf("To: %s",
-				event.EndTime.Format("Jan 2, 2006 15:04 UTC")), "", 1, "L", false, 0, "")
-			pdf.SetTextColor(0, 0, 0)
-
-			// Error
-			if event.ErrorText != "" {
-				pdf.SetXY(15, y+29)
-				pdf.SetTextColor(200, 0, 0)
-				pdf.SetFont("Helvetica", "", 8)
-				// Truncate error text if too long
-				errorText := event.ErrorText
-				if len(errorText) > 80 {
-					errorText = errorText[:77] + "..."
-				}
-				pdf.CellFormat(180, 4, fmt.Sprintf("Error: %s", errorText), "", 1, "L", false, 0, "")
-				pdf.SetTextColor(0, 0, 0)
-			}
-
-			// Vote data if present
-			if event.VoteData != "" && event.VoteData != "{}" {
-				pdf.SetXY(15, y+34)
-				pdf.SetFont("Helvetica", "", 8)
-				pdf.SetTextColor(100, 100, 100)
-				// Parse and format vote data if possible
-				voteText := formatVoteData(event.VoteData)
-				pdf.CellFormat(180, 4, voteText, "", 1, "L", false, 0, "")
-				pdf.SetTextColor(0, 0, 0)
-			}
-
-			y += cardHeight + 5
-		}
-
-		// Summary of downtime
-		if y > 230 {
-			pdf.AddPage()
-			y = 35
-		}
-
-		y += 10
-		pdf.SetFont("Helvetica", "B", 11)
-		pdf.SetXY(10, y)
-		pdf.CellFormat(190, 6, "Downtime Summary", "", 1, "L", false, 0, "")
-
-		pdf.SetFont("Helvetica", "", 10)
-		y += 8
-		pdf.SetXY(15, y)
-		pdf.CellFormat(190, 5, fmt.Sprintf("Total downtime events (5+ minutes): %d", len(filteredEvents)), "", 1, "L", false, 0, "")
-
-		// Calculate total downtime
-		totalDowntime := time.Duration(0)
-		for _, event := range filteredEvents {
-			totalDowntime += event.EndTime.Sub(event.StartTime)
-		}
-		y += 5
-		pdf.SetXY(15, y)
-		pdf.CellFormat(190, 5, fmt.Sprintf("Total downtime duration: %s", formatDuration(totalDowntime)), "", 1, "L", false, 0, "")
-	}
 
 	if err := pdf.OutputFileAndClose(filename); err != nil {
 		return err
@@ -385,24 +491,124 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	return nil
 }
 
-// formatVoteData attempts to parse and format vote data JSON
-func formatVoteData(voteData string) string {
-	// Simple formatting - could be enhanced to parse JSON
-	if voteData == "" || voteData == "{}" {
-		return ""
+// getServiceDowntimeEvents retrieves downtime events for a specific service
+func getServiceDowntimeEvents(memberName, serviceName string, month time.Time) []DowntimeEvent {
+	events := []DowntimeEvent{}
+	if data2.DB == nil {
+		return events
 	}
 
-	// Remove JSON brackets and format
-	cleaned := strings.Trim(voteData, "{}")
-	cleaned = strings.ReplaceAll(cleaned, "\"", "")
-	cleaned = strings.ReplaceAll(cleaned, ":", ": ")
-	cleaned = strings.ReplaceAll(cleaned, ",", ", ")
-
-	if len(cleaned) > 100 {
-		cleaned = cleaned[:97] + "..."
+	// Map service to domains
+	c := cfg.GetConfig()
+	domains := []string{}
+	if svc, exists := c.Services[serviceName]; exists {
+		for _, provider := range svc.Providers {
+			for _, rpcUrl := range provider.RpcUrls {
+				if domain := extractDomainFromURL(rpcUrl); domain != "" {
+					domains = append(domains, domain)
+				}
+			}
+		}
 	}
 
-	return "Votes: " + cleaned
+	if len(domains) == 0 {
+		return events
+	}
+
+	startTime := month
+	endTime := month.AddDate(0, 1, 0).Add(-time.Second)
+
+	// Build domain list for SQL IN clause
+	domainList := "('" + strings.Join(domains, "','") + "')"
+
+	query := fmt.Sprintf(`
+		SELECT 
+			check_type,
+			check_name,
+			COALESCE(domain_name, '') as domain_name,
+			COALESCE(endpoint, '') as endpoint,
+			start_time,
+			COALESCE(end_time, ?) as end_time,
+			COALESCE(error, '') as error,
+			COALESCE(vote_data, '') as vote_data,
+			is_ipv6
+		FROM member_events
+		WHERE member_name = ?
+		AND status = 0
+		AND domain_name IN %s
+		AND start_time < ?
+		AND (end_time IS NULL OR end_time > ?)
+		ORDER BY start_time DESC
+	`, domainList)
+
+	rows, err := data2.DB.Query(query, endTime, memberName, endTime, startTime)
+	if err != nil {
+		log.Log(log.Error, "[billing] Failed to query service downtime events: %v", err)
+		return events
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var event DowntimeEvent
+		err := rows.Scan(
+			&event.CheckType,
+			&event.CheckName,
+			&event.DomainName,
+			&event.Endpoint,
+			&event.StartTime,
+			&event.EndTime,
+			&event.ErrorText,
+			&event.VoteData,
+			&event.IsIPv6,
+		)
+		if err != nil {
+			log.Log(log.Error, "[billing] Failed to scan downtime event: %v", err)
+			continue
+		}
+
+		// Adjust times to be within month
+		if event.StartTime.Before(startTime) {
+			event.StartTime = startTime
+		}
+		if event.EndTime.After(endTime) {
+			event.EndTime = endTime
+		}
+
+		events = append(events, event)
+	}
+
+	return events
+}
+
+// filterEvents filters events to only show those longer than minMinutes
+func filterEvents(events []DowntimeEvent, minMinutes float64) []DowntimeEvent {
+	filtered := []DowntimeEvent{}
+	for _, event := range events {
+		duration := event.EndTime.Sub(event.StartTime)
+		if duration.Minutes() >= minMinutes {
+			filtered = append(filtered, event)
+		}
+	}
+	return filtered
+}
+
+// extractDomainFromURL extracts the domain from an RPC URL
+func extractDomainFromURL(rpcUrl string) string {
+	// Remove protocol
+	url := strings.TrimPrefix(rpcUrl, "wss://")
+	url = strings.TrimPrefix(url, "ws://")
+	url = strings.TrimPrefix(url, "https://")
+	url = strings.TrimPrefix(url, "http://")
+
+	// Remove path and port
+	if idx := strings.Index(url, "/"); idx != -1 {
+		url = url[:idx]
+	}
+	if idx := strings.Index(url, ":"); idx != -1 {
+		url = url[:idx]
+	}
+
+	return strings.ToLower(url)
 }
 
 // Helper functions remain the same...
@@ -446,7 +652,6 @@ func formatDuration(d time.Duration) string {
 // getMemberDowntimeEvents retrieves downtime events for a member in the given month
 func getMemberDowntimeEvents(memberName string, month time.Time) []DowntimeEvent {
 	events := []DowntimeEvent{}
-
 	if data2.DB == nil {
 		return events
 	}
