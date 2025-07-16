@@ -43,10 +43,10 @@ func Init() {
 	// Health check
 	mux.HandleFunc("/api/health", handleHealth)
 
-	addr := c.Local.System.WorkDir
-	port := "6200" // Default port for CollatorAPI
+	addr := c.Local.CollatorApi.ListenAddress
+	port := c.Local.CollatorApi.ListenPort
 
-	log.Log(log.Info, "[CollatorAPI] Starting API server on %s:%s", "0.0.0.0", port)
+	log.Log(log.Info, "[CollatorAPI] Starting API server on %s:%s", addr, port)
 
 	go func() {
 		if err := http.ListenAndServe(addr+port, mux); err != nil {

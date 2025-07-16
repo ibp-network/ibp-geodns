@@ -21,16 +21,17 @@ type Config struct {
 }
 
 type LocalConfig struct {
-	System     SystemConfig  `json:"System"`
-	Maxmind    MaxmindConfig `json:"Maxmind"`
-	Nats       NatsConfig    `json:"Nats"`
-	Mysql      MysqlConfig   `json:"Mysql"`
-	DnsApi     ApiConfig     `json:"DnsApi"`
-	MonitorApi ApiConfig     `json:"MonitorApi"`
-	MgmtApi    ApiConfig     `json:"MgmtApi"`
-	Discord    DiscordConfig
-	Matrix     MatrixConfig
-	Checks     []Check `json:"Checks"`
+	System      SystemConfig  `json:"System"`
+	Maxmind     MaxmindConfig `json:"Maxmind"`
+	Nats        NatsConfig    `json:"Nats"`
+	Mysql       MysqlConfig   `json:"Mysql"`
+	DnsApi      ApiConfig     `json:"DnsApi"`
+	CollatorApi ApiConfig     `json:"CollatorApi"`
+	MonitorApi  ApiConfig     `json:"MonitorApi"`
+	MgmtApi     ApiConfig     `json:"MgmtApi"`
+	Discord     DiscordConfig
+	Matrix      MatrixConfig
+	Checks      []Check `json:"Checks"`
 }
 
 type DiscordConfig struct {
