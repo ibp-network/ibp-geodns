@@ -503,10 +503,9 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 
 	// Center the table
 	const geoTableWidth = 240.0
-	geoTableX := (297.0 - geoTableWidth) / 2
 
 	// Draw unified country table
-	drawUnifiedCountryTable(pdf, countryStats, 55, geoTableX, geoTableWidth)
+	drawUnifiedCountryTable(pdf, countryStats, 55, 0, 0)
 
 	// ===== PAGE 5: SERVICE/CHAIN DISTRIBUTION =====
 	pdf.AddPage()
@@ -519,10 +518,9 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 
 	// Center the table
 	const svcTableWidth = 240.0
-	svcTableX := (297.0 - svcTableWidth) / 2
 
 	// Draw unified service table
-	drawUnifiedServiceTable(pdf, serviceStats, 55, svcTableX, svcTableWidth)
+	drawUnifiedServiceTable(pdf, serviceStats, 55, 0, 0)
 
 	if err := pdf.OutputFileAndClose(filename); err != nil {
 		return err
@@ -541,24 +539,29 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY, tab
 		return
 	}
 
-	// Column widths - adjusted for centered table and increased size
+	// Column widths - adjusted for centered table with 15% increase
 	const (
 		colRankW     = 17.0
-		colCountryW  = 92.0
-		colRequestsW = 46.0
-		colShareW    = 35.0
-		colChange1W  = 29.0
-		colChange3W  = 29.0
-		colChange6W  = 29.0
-		rowH         = 10.5
+		colCountryW  = 85.0
+		colRequestsW = 42.0
+		colShareW    = 30.0
+		colChange1W  = 26.0
+		colChange3W  = 26.0
+		colChange6W  = 26.0
+		rowH         = 10.0
 	)
+
+	// Center the table - total width is now 252
+	totalTableWidth := colRankW + colCountryW + colRequestsW + colShareW + colChange1W + colChange3W + colChange6W
+	x := (297.0 - totalTableWidth) / 2 // Center on A4 landscape page
+	y := startY
 
 	// Table header with modern style
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
 	pdf.SetFont("Helvetica", "B", 11)
-	x := tableX
-	y := startY
+	x = tableX
+	y = startY
 
 	pdf.SetXY(x, y)
 	pdf.CellFormat(colRankW, rowH, "#", "1", 0, "C", true, 0, "")
@@ -653,21 +656,26 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tab
 
 	const (
 		colRankW     = 17.0
-		colServiceW  = 92.0
-		colRequestsW = 46.0
-		colShareW    = 35.0
-		colChange1W  = 29.0
-		colChange3W  = 29.0
-		colChange6W  = 29.0
-		rowH         = 10.5
+		colServiceW  = 85.0
+		colRequestsW = 42.0
+		colShareW    = 30.0
+		colChange1W  = 26.0
+		colChange3W  = 26.0
+		colChange6W  = 26.0
+		rowH         = 10.0
 	)
+
+	// Center the table - total width is now 252
+	totalTableWidth := colRankW + colServiceW + colRequestsW + colShareW + colChange1W + colChange3W + colChange6W
+	x := (297.0 - totalTableWidth) / 2 // Center on A4 landscape page
+	y := startY
 
 	// Table header
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
 	pdf.SetFont("Helvetica", "B", 11)
-	x := tableX
-	y := startY
+	x = tableX
+	y = startY
 
 	pdf.SetXY(x, y)
 	pdf.CellFormat(colRankW, rowH, "#", "1", 0, "C", true, 0, "")
