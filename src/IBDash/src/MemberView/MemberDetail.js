@@ -40,10 +40,13 @@ const MemberDetail = () => {
       setMember(memberData);
       setStats(statsRes.data);
       setBilling(billingRes.data);
-      setDowntime(downtimeRes.data);
+      // Ensure downtime is always an array
+      setDowntime(Array.isArray(downtimeRes.data) ? downtimeRes.data : []);
       setLoading(false);
     } catch (error) {
       console.error('Error loading member data:', error);
+      // Set empty array on error to prevent null access
+      setDowntime([]);
       setLoading(false);
     }
   };
@@ -108,7 +111,7 @@ const MemberDetail = () => {
           </div>
         </div>
         <div className="stat-card glass">
-          <div className="stat-icon">🌐</div>
+          <div className="stat-icon">🌎</div>
           <div className="stat-content">
             <div className="stat-value">{stats?.uptime_percentage?.toFixed(2) || '100'}%</div>
             <div className="stat-label">Uptime</div>
@@ -176,7 +179,7 @@ const MemberDetail = () => {
                 </div>
               </div>
 
-              {stats?.top_countries && (
+              {stats?.top_countries && stats.top_countries.length > 0 && (
                 <div className="countries-section">
                   <h3>Top Countries by Requests</h3>
                   <Charts 
@@ -212,41 +215,43 @@ const MemberDetail = () => {
                     </div>
                   </div>
 
-                  <div className="services-billing">
-                    <h4>Service Breakdown</h4>
-                    <table className="billing-table">
-                      <thead>
-                        <tr>
-                          <th>Service</th>
-                          <th>Base Cost</th>
-                          <th>Uptime</th>
-                          <th>Billed</th>
-                          <th>Credits</th>
-                          <th>SLA Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {memberBilling.services?.map(service => (
-                          <tr key={service.name}>
-                            <td>{service.name}</td>
-                            <td>${service.base_cost?.toFixed(2)}</td>
-                            <td>
-                              <span className={service.uptime_percentage < 99.9 ? 'text-warning' : 'text-success'}>
-                                {service.uptime_percentage?.toFixed(2)}%
-                              </span>
-                            </td>
-                            <td>${service.billed_cost?.toFixed(2)}</td>
-                            <td>${service.credits?.toFixed(2)}</td>
-                            <td>
-                              <span className={`sla-badge ${service.meets_sla ? 'pass' : 'fail'}`}>
-                                {service.meets_sla ? 'PASS' : 'FAIL'}
-                              </span>
-                            </td>
+                  {memberBilling.services && memberBilling.services.length > 0 && (
+                    <div className="services-billing">
+                      <h4>Service Breakdown</h4>
+                      <table className="billing-table">
+                        <thead>
+                          <tr>
+                            <th>Service</th>
+                            <th>Base Cost</th>
+                            <th>Uptime</th>
+                            <th>Billed</th>
+                            <th>Credits</th>
+                            <th>SLA Status</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {memberBilling.services.map(service => (
+                            <tr key={service.name}>
+                              <td>{service.name}</td>
+                              <td>${service.base_cost?.toFixed(2)}</td>
+                              <td>
+                                <span className={service.uptime_percentage < 99.9 ? 'text-warning' : 'text-success'}>
+                                  {service.uptime_percentage?.toFixed(2)}%
+                                </span>
+                              </td>
+                              <td>${service.billed_cost?.toFixed(2)}</td>
+                              <td>${service.credits?.toFixed(2)}</td>
+                              <td>
+                                <span className={`sla-badge ${service.meets_sla ? 'pass' : 'fail'}`}>
+                                  {service.meets_sla ? 'PASS' : 'FAIL'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -274,11 +279,12 @@ const MemberDetail = () => {
               </div>
 
               <div className="downtime-list">
-                {downtime.length === 0 ? (
+                {/* Safe check for downtime array */}
+                {(!downtime || downtime.length === 0) ? (
                   <p className="no-downtime">No downtime events in the selected period</p>
                 ) : (
-                  downtime.map(event => (
-                    <div key={event.id} className={`downtime-event ${event.status}`}>
+                  downtime.map((event, index) => (
+                    <div key={event.id || index} className={`downtime-event ${event.status}`}>
                       <div className="event-header">
                         <div className="event-info">
                           <span className="event-type">{event.check_type}</span>
@@ -321,7 +327,8 @@ const MemberDetail = () => {
           {activeTab === 'usage' && stats && (
             <div className="usage-content">
               <h3>Usage Statistics</h3>
-              {stats.service_breakdown && (
+              
+              {stats.service_breakdown && stats.service_breakdown.length > 0 && (
                 <div className="usage-section">
                   <h4>Service Usage</h4>
                   <Charts data={stats.service_breakdown} type="service" />

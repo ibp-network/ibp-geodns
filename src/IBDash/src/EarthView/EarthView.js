@@ -5,6 +5,7 @@ import './EarthView.css';
 
 const EarthView = () => {
   const globeRef = useRef();
+  const globeInstance = useRef(null);
   const [members, setMembers] = useState([]);
   const [downtime, setDowntime] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,26 +18,39 @@ const EarthView = () => {
   const loadMembersData = async () => {
     try {
       const response = await ApiHelper.fetchMembers();
-      setMembers(response.data);
+      setMembers(response.data || []);
     } catch (error) {
       console.error('Error loading members:', error);
+      setMembers([]);
     }
   };
 
   const loadDowntimeData = async () => {
     try {
       const response = await ApiHelper.fetchCurrentDowntime();
-      setDowntime(response.data);
+      setDowntime(response.data || []);
       setLoading(false);
     } catch (error) {
       console.error('Error loading downtime:', error);
+      setDowntime([]);
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // Ensure we have a container and members data
     if (!globeRef.current || members.length === 0) return;
 
+    // Clean up previous instance
+    if (globeInstance.current) {
+      // Properly dispose of the previous globe
+      if (globeInstance.current._destructor) {
+        globeInstance.current._destructor();
+      }
+      globeInstance.current = null;
+    }
+
+    // Create new globe instance
     const globe = Globe()(globeRef.current)
       .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
       .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
@@ -57,7 +71,7 @@ const EarthView = () => {
       .pointLabel(d => {
         const memberDowntime = downtime.filter(dt => dt.member_name === d.name);
         const status = memberDowntime.length === 0 ? 'Operational' : 
-                      memberDowntime.length > 5 ? 'Major Outage' : 'Degraded';
+                       memberDowntime.length > 5 ? 'Major Outage' : 'Degraded';
         return `
           <div style="text-align: center; padding: 8px; background: rgba(0,0,0,0.8); border-radius: 8px;">
             <div style="font-weight: bold; font-size: 14px; color: #fff;">${d.name}</div>
@@ -69,7 +83,7 @@ const EarthView = () => {
               }; font-weight: bold;">${status}</span>
             </div>
             ${memberDowntime.length > 0 ? 
-              `<div style="font-size: 11px; color: #f59e0b; margin-top: 4px;">
+               `<div style="font-size: 11px; color: #f59e0b; margin-top: 4px;">
                 ${memberDowntime.length} service(s) affected
               </div>` : ''
             }
@@ -110,21 +124,32 @@ const EarthView = () => {
       .arcStroke(0.3)
       .arcAltitudeAutoScale(0.3);
 
-    // Auto-rotate
-    globe.controls().autoRotate = true;
-    globe.controls().autoRotateSpeed = 0.5;
+    // Check if globe has controls before accessing them
+    if (globe.controls && typeof globe.controls === 'function') {
+      const controls = globe.controls();
+      if (controls) {
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.5;
+      }
+    }
 
     // Set initial position
     globe.pointOfView({ lat: 20, lng: 0, altitude: 2.5 });
 
-    // Add atmosphere
-    const globeEl = globe.domElement;
-    globeEl.style.background = 'radial-gradient(circle at 50% 50%, #1a1a2e 0%, #0a0a0a 100%)';
+    // Add atmosphere effect only if domElement exists
+    if (globe.domElement) {
+      globe.domElement.style.background = 'radial-gradient(circle at 50% 50%, #1a1a2e 0%, #0a0a0a 100%)';
+    }
 
+    // Store the instance
+    globeInstance.current = globe;
+
+    // Cleanup function
     return () => {
-      if (globe) {
-        globe._destructor();
+      if (globeInstance.current && globeInstance.current._destructor) {
+        globeInstance.current._destructor();
       }
+      globeInstance.current = null;
     };
   }, [members, downtime]);
 
