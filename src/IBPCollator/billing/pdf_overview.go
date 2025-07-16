@@ -1012,24 +1012,26 @@ func drawDowntimeCalendar(pdf *gofpdf.Fpdf, x, y, width float64, month time.Time
 	firstDay := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC)
 	startWeekday := int(firstDay.Weekday())
 
+	// Reduced dimensions (75% of original)
 	cellWidth := width / 7
-	cellHeight := 25.0
+	cellHeight := 18.0  // Reduced from 25.0
+	headerHeight := 6.0 // Reduced from 8.0
 
 	// Draw day headers
 	days := []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
-	pdf.SetFont("Helvetica", "B", 10)
+	pdf.SetFont("Helvetica", "B", 8) // Reduced from 10
 
 	for i, day := range days {
 		pdf.SetXY(x+float64(i)*cellWidth, y)
-		pdf.CellFormat(cellWidth, 8, day, "1", 0, "C", true, 0, "")
+		pdf.CellFormat(cellWidth, headerHeight, day, "1", 0, "C", true, 0, "")
 	}
 	pdf.SetTextColor(0, 0, 0)
-	y += 8
+	y += headerHeight
 
 	// Draw calendar days
-	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetFont("Helvetica", "", 8) // Reduced from 9
 	week := 0
 
 	for day := 1; day <= daysInMonth; day++ {
@@ -1060,49 +1062,52 @@ func drawDowntimeCalendar(pdf *gofpdf.Fpdf, x, y, width float64, month time.Time
 		pdf.Rect(cellX, cellY, cellWidth, cellHeight, "FD")
 
 		// Add day number
-		pdf.SetXY(cellX, cellY+2)
-		pdf.CellFormat(cellWidth, 6, fmt.Sprintf("%d", day), "", 0, "C", false, 0, "")
+		pdf.SetXY(cellX, cellY+1)
+		pdf.CellFormat(cellWidth, 5, fmt.Sprintf("%d", day), "", 0, "C", false, 0, "")
 
 		// Add downtime count if any
 		if downtime > 0 {
-			pdf.SetFont("Helvetica", "", 7)
+			pdf.SetFont("Helvetica", "", 6) // Reduced from 7
 			pdf.SetTextColor(100, 100, 100)
-			pdf.SetXY(cellX, cellY+12)
-			pdf.CellFormat(cellWidth, 4, fmt.Sprintf("%d events", downtime), "", 0, "C", false, 0, "")
+			pdf.SetXY(cellX, cellY+8) // Adjusted from 12
+			pdf.CellFormat(cellWidth, 3, fmt.Sprintf("%d events", downtime), "", 0, "C", false, 0, "")
 			pdf.SetTextColor(0, 0, 0)
-			pdf.SetFont("Helvetica", "", 9)
+			pdf.SetFont("Helvetica", "", 8) // Reset to smaller default
 		}
 	}
 
-	// Legend
-	legendY := y + float64(week+1)*cellHeight + 10
-	pdf.SetFont("Helvetica", "", 8)
+	// Legend (smaller and more compact)
+	legendY := y + float64(week+1)*cellHeight + 8 // Reduced spacing
+	pdf.SetFont("Helvetica", "", 7)               // Reduced from 8
 	pdf.SetXY(x, legendY)
-	pdf.CellFormat(40, 5, "Legend:", "", 0, "L", false, 0, "")
+	pdf.CellFormat(30, 4, "Legend:", "", 0, "L", false, 0, "")
+
+	legendBoxSize := 12.0 // Reduced from 15x5
+	legendHeight := 4.0
 
 	// Green
 	pdf.SetFillColor(200, 255, 200)
-	pdf.Rect(x+50, legendY, 15, 5, "FD")
-	pdf.SetXY(x+67, legendY)
-	pdf.CellFormat(30, 5, "No issues", "", 0, "L", false, 0, "")
+	pdf.Rect(x+35, legendY, legendBoxSize, legendHeight, "FD")
+	pdf.SetXY(x+48, legendY)
+	pdf.CellFormat(25, legendHeight, "No issues", "", 0, "L", false, 0, "")
 
 	// Yellow
 	pdf.SetFillColor(255, 255, 200)
-	pdf.Rect(x+100, legendY, 15, 5, "FD")
-	pdf.SetXY(x+117, legendY)
-	pdf.CellFormat(30, 5, "1-2 events", "", 0, "L", false, 0, "")
+	pdf.Rect(x+80, legendY, legendBoxSize, legendHeight, "FD")
+	pdf.SetXY(x+93, legendY)
+	pdf.CellFormat(25, legendHeight, "1-2 events", "", 0, "L", false, 0, "")
 
 	// Orange
 	pdf.SetFillColor(255, 230, 200)
-	pdf.Rect(x+150, legendY, 15, 5, "FD")
-	pdf.SetXY(x+167, legendY)
-	pdf.CellFormat(30, 5, "3-4 events", "", 0, "L", false, 0, "")
+	pdf.Rect(x+125, legendY, legendBoxSize, legendHeight, "FD")
+	pdf.SetXY(x+138, legendY)
+	pdf.CellFormat(25, legendHeight, "3-4 events", "", 0, "L", false, 0, "")
 
 	// Red
 	pdf.SetFillColor(255, 200, 200)
-	pdf.Rect(x+200, legendY, 15, 5, "FD")
-	pdf.SetXY(x+217, legendY)
-	pdf.CellFormat(30, 5, "5+ events", "", 0, "L", false, 0, "")
+	pdf.Rect(x+170, legendY, legendBoxSize, legendHeight, "FD")
+	pdf.SetXY(x+183, legendY)
+	pdf.CellFormat(25, legendHeight, "5+ events", "", 0, "L", false, 0, "")
 }
 
 // getDowntimeByDay returns a map of day -> downtime event count
