@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
-	"strconv"
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
+	data2 "ibp-geodns/src/common/data2"
 	log "ibp-geodns/src/common/logging"
 
 	"github.com/phpdave11/gofpdf"
@@ -326,6 +326,13 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 	// Get config for resource info
 	c := cfg.GetConfig()
 
+	// Calculate total requests and member statistics
+	memberStats := calculateMemberStats(month)
+	totalRequests := 0
+	for _, stats := range memberStats {
+		totalRequests += stats.RequestCount
+	}
+
 	for _, mem := range memberNames {
 		startY := pdf.GetY()
 		if startY > 210 {
@@ -340,9 +347,25 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 		pdf.SetFont("Helvetica", "B", 12)
 		pdf.CellFormat(boxWidth, rowH+3, mem, "", 1, "L", false, 0, "")
 
+		// Calculate member-specific stats
+		stats := memberStats[mem]
+
+		// Calculate member total for this billing
+		memberTotal := 0.0
+		downtimeServices := 0
+		for svcName := range sum.Members[mem].ServiceCosts {
+			breakdown := getSLABreakdown(sla, mem, svcName)
+			if breakdown.HoursDown > 0 {
+				downtimeServices++
+			}
+			baseCost := sum.Members[mem].ServiceCosts[svcName]
+			billed := baseCost * (breakdown.Uptime / 100.0)
+			memberTotal += billed
+		}
+
 		// metadata lines
 		pdf.SetFont("Helvetica", "", 9)
-		metaLines := make([]string, 0, 6)
+		metaLines := make([]string, 0, 10)
 
 		// Get member config
 		memberConfig, hasMemberConfig := c.Members[mem]
@@ -360,10 +383,21 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 				fmt.Sprintf("IBP member level: %d", memberConfig.Membership.Level))
 		}
 
-		if req, ok := lookupInt64(sum.Members[mem], "DNSRequests"); ok && req > 0 {
+		// Add new statistics
+		metaLines = append(metaLines,
+			fmt.Sprintf("DNS requests served: %d", stats.RequestCount))
+
+		if totalRequests > 0 {
+			percentage := float64(stats.RequestCount) / float64(totalRequests) * 100.0
 			metaLines = append(metaLines,
-				"DNS requests (period): "+strconv.FormatInt(req, 10))
+				fmt.Sprintf("Percentage of total requests: %.2f%%", percentage))
 		}
+
+		metaLines = append(metaLines,
+			fmt.Sprintf("Services with downtime: %d", downtimeServices))
+
+		metaLines = append(metaLines,
+			fmt.Sprintf("Total amount owed: $%.2f", memberTotal))
 
 		for _, ln := range metaLines {
 			pdf.CellFormat(boxWidth, rowH, ln, "", 1, "L", false, 0, "")
@@ -381,7 +415,7 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 
 		pdf.SetFont("Helvetica", "", 10)
 
-		memberTotal := 0.0
+		memberTotal = 0.0 // Reset for table calculation
 		svcNames := make([]string, 0, len(sum.Members[mem].ServiceCosts))
 		for s := range sum.Members[mem].ServiceCosts {
 			svcNames = append(svcNames, s)
@@ -443,7 +477,7 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 			if svcConfig, exists := c.Services[svc]; exists {
 				pdf.SetFont("Helvetica", "I", 8)
 				pdf.SetTextColor(100, 100, 100)
-				resourceText := fmt.Sprintf("   Resources: %d nodes, %.1f cores, %.1f GB RAM, %.1f GB disk, %.1f GB bandwidth",
+				resourceText := fmt.Sprintf("   Resources: %d nodes, %.1f cores, %.1f GB RAM, %.1f GB disk, %.1f TB bandwidth",
 					svcConfig.Resources.Nodes,
 					svcConfig.Resources.Cores,
 					svcConfig.Resources.Memory,
@@ -509,6 +543,62 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 
 	log.Log(log.Info, "[billing] member-billing PDF written → %s", filename)
 	return nil
+}
+
+// MemberStats holds DNS request statistics for a member
+type MemberStats struct {
+	RequestCount int
+}
+
+// calculateMemberStats queries the database for member request statistics
+func calculateMemberStats(month time.Time) map[string]MemberStats {
+	stats := make(map[string]MemberStats)
+
+	// Check if database is initialized
+	if data2.DB == nil {
+		log.Log(log.Error, "[billing] Database not initialized for member stats calculation")
+		return stats
+	}
+
+	// Calculate the time range for the month
+	startDate := month.Format("2006-01-02")
+	endDate := month.AddDate(0, 1, 0).Add(-24 * time.Hour).Format("2006-01-02")
+
+	// Query for member request counts
+	query := `
+		SELECT 
+			COALESCE(member_name, '(none)') as member_name,
+			SUM(hits) as total_hits
+		FROM requests
+		WHERE date >= ? AND date <= ?
+		GROUP BY member_name
+	`
+
+	rows, err := data2.DB.Query(query, startDate, endDate)
+	if err != nil {
+		log.Log(log.Error, "[billing] Failed to query member stats: %v", err)
+		return stats
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var memberName string
+		var totalHits int
+
+		err := rows.Scan(&memberName, &totalHits)
+		if err != nil {
+			log.Log(log.Error, "[billing] Failed to scan member stats row: %v", err)
+			continue
+		}
+
+		if memberName != "(none)" {
+			stats[memberName] = MemberStats{
+				RequestCount: totalHits,
+			}
+		}
+	}
+
+	return stats
 }
 
 /* --------------------------------------------------------------------- */
