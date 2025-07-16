@@ -1,8 +1,8 @@
 package billing
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  Stake Plus Inc. – IBP GeoDNS / IBPCollator – Billing subsystem
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Stake Plus Inc. — IBP GeoDNS / IBPCollator — Billing subsystem
+// ─────────────────────────────────────────────────────────────────────────────
 
 import (
 	"os"
@@ -16,25 +16,25 @@ import (
 	log "ibp-geodns/src/common/logging"
 )
 
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 //  Public structures and accessors
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 // MemberCost houses the breakdown of costs that *one* member incurs.
 type MemberCost struct {
 	MemberName   string
-	ServiceCosts map[string]float64 // serviceName ➜ $ cost
+	ServiceCosts map[string]float64 // serviceName → $ cost
 	Total        float64
 }
 
 // ServiceCost houses the breakdown of costs *per service* across all members.
 type ServiceCost struct {
 	ServiceName string
-	MemberCosts map[string]float64 // memberName ➜ $ cost
+	MemberCosts map[string]float64 // memberName → $ cost
 	Total       float64
 }
 
-// Summary keeps both perspectives together (no mutex – read‑only snapshot).
+// Summary keeps both perspectives together (no mutex — read-only snapshot).
 type Summary struct {
 	Members  map[string]MemberCost
 	Services map[string]ServiceCost
@@ -47,7 +47,7 @@ var billingStore struct {
 	Summary
 }
 
-// GetSummary returns a deep‑copy of the current billing snapshot.
+// GetSummary returns a deep-copy of the current billing snapshot.
 func GetSummary() Summary {
 	billingStore.RLock()
 	defer billingStore.RUnlock()
@@ -61,6 +61,7 @@ func GetSummary() Summary {
 		}
 		mCopy[k] = MemberCost{MemberName: v.MemberName, ServiceCosts: svcCopy, Total: v.Total}
 	}
+
 	sCopy := make(map[string]ServiceCost, len(billingStore.Services))
 	for k, v := range billingStore.Services {
 		memCopy := make(map[string]float64, len(v.MemberCosts))
@@ -73,9 +74,9 @@ func GetSummary() Summary {
 	return Summary{Members: mCopy, Services: sCopy, Refresh: billingStore.Refresh}
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 //  Initialisation
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Init kicks off periodic billing refreshes and daily PDF exports.
 func Init() {
@@ -91,7 +92,7 @@ func Init() {
 		}
 	}()
 
-	// daily PDF generation at 00:05 UTC
+	// daily PDF generation at 00:05 UTC
 	go func() {
 		for {
 			next := time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour).Add(5 * time.Minute)
@@ -100,13 +101,13 @@ func Init() {
 		}
 	}()
 
-	// first set of PDFs right after start‑up
+	// first set of PDFs right after start-up
 	runPDFExports()
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 //  Refresh logic
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 func refresh(verbose bool) {
 	start := time.Now()
@@ -115,11 +116,12 @@ func refresh(verbose bool) {
 	newMemberCosts := make(map[string]MemberCost)
 	newServiceCosts := make(map[string]ServiceCost)
 
-	// indices (case‑insensitive)
+	// indices (case-insensitive)
 	svcByName := make(map[string]cfg.Service)
 	for n, s := range c.Services {
 		svcByName[strings.ToLower(strings.TrimSpace(n))] = s
 	}
+
 	priceByRegion := make(map[string]cfg.IaasPricing)
 	for r, p := range c.Pricing {
 		priceByRegion[strings.ToLower(strings.TrimSpace(r))] = p
@@ -129,7 +131,7 @@ func refresh(verbose bool) {
 		regionKey := strings.ToLower(strings.TrimSpace(mem.Location.Region))
 		price, ok := priceByRegion[regionKey]
 		if !ok {
-			log.Log(log.Warn, "[billing] region %q has no pricing entry – member %s skipped", mem.Location.Region, memName)
+			log.Log(log.Warn, "[billing] region %q has no pricing entry — member %s skipped", mem.Location.Region, memName)
 			continue
 		}
 
@@ -142,12 +144,11 @@ func refresh(verbose bool) {
 			for _, svcName := range svcList {
 				svc, exists := svcByName[strings.ToLower(strings.TrimSpace(svcName))]
 				if !exists {
-					log.Log(log.Warn, "[billing] unknown service %q referenced by member %s – skipped", svcName, memName)
+					log.Log(log.Warn, "[billing] unknown service %q referenced by member %s — skipped", svcName, memName)
 					continue
 				}
 
 				cost := costForServiceInstance(svc.Resources, price)
-
 				memCost.ServiceCosts[svcName] += cost
 				memCost.Total += cost
 
@@ -175,7 +176,7 @@ func refresh(verbose bool) {
 	billingStore.Unlock()
 
 	duration := time.Since(start).Round(time.Millisecond)
-	log.Log(log.Info, "[billing] refresh complete – %d members, %d services, in %s",
+	log.Log(log.Info, "[billing] refresh complete — %d members, %d services, in %s",
 		len(newMemberCosts), len(newServiceCosts), duration)
 
 	if verbose {
@@ -183,9 +184,9 @@ func refresh(verbose bool) {
 	}
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 //  Helpers
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 func costForServiceInstance(res cfg.Resources, price cfg.IaasPricing) float64 {
 	if res.Nodes == 0 {
@@ -205,16 +206,17 @@ func logDetails(memCosts map[string]MemberCost, svcCosts map[string]ServiceCost)
 		memberNames = append(memberNames, n)
 	}
 	sort.Strings(memberNames)
+
 	for _, m := range memberNames {
 		mc := memCosts[m]
-		log.Log(log.Info, "[billing] %s – $%.2f", mc.MemberName, mc.Total)
+		log.Log(log.Info, "[billing] %s — $%.2f", mc.MemberName, mc.Total)
 		svcNames := make([]string, 0, len(mc.ServiceCosts))
 		for s := range mc.ServiceCosts {
 			svcNames = append(svcNames, s)
 		}
 		sort.Strings(svcNames)
 		for _, s := range svcNames {
-			log.Log(log.Info, "[billing]   • %s – $%.2f", s, mc.ServiceCosts[s])
+			log.Log(log.Info, "[billing]   • %s — $%.2f", s, mc.ServiceCosts[s])
 		}
 	}
 
@@ -224,16 +226,17 @@ func logDetails(memCosts map[string]MemberCost, svcCosts map[string]ServiceCost)
 		serviceNames = append(serviceNames, s)
 	}
 	sort.Strings(serviceNames)
+
 	for _, s := range serviceNames {
 		sc := svcCosts[s]
-		log.Log(log.Info, "[billing] %s – $%.2f", sc.ServiceName, sc.Total)
+		log.Log(log.Info, "[billing] %s — $%.2f", sc.ServiceName, sc.Total)
 		memNames := make([]string, 0, len(sc.MemberCosts))
 		for m := range sc.MemberCosts {
 			memNames = append(memNames, m)
 		}
 		sort.Strings(memNames)
 		for _, m := range memNames {
-			log.Log(log.Info, "[billing]   • %s – $%.2f", m, sc.MemberCosts[m])
+			log.Log(log.Info, "[billing]   • %s — $%.2f", m, sc.MemberCosts[m])
 		}
 	}
 }
@@ -242,24 +245,35 @@ func runPDFExports() {
 	conf := cfg.GetConfig()
 	tmpDir := resolveTempDir(conf)
 	if tmpDir == "" {
-		log.Log(log.Warn, "[billing] tmp directory not configured – PDF exports skipped")
+		log.Log(log.Warn, "[billing] tmp directory not configured — PDF exports skipped")
 		return
 	}
 
 	snap := GetSummary()
-
 	if err := writeServiceCostPDF(&snap, tmpDir); err != nil {
-		log.Log(log.Error, "[billing] failed to write service‑cost PDF: %v", err)
+		log.Log(log.Error, "[billing] failed to write service-cost PDF: %v", err)
 	}
 
-	month := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	// Use current month for billing calculations
+	month := time.Now().UTC().AddDate(0, 0, -time.Now().UTC().Day()+1)
 	sla, err := CalculateSLAAdjustments(month, &snap)
 	if err != nil {
 		log.Log(log.Error, "[billing] failed SLA calculation: %v", err)
 		return
 	}
+
+	// Log members not meeting SLA
+	for memberName, services := range sla {
+		for serviceName, breakdown := range services {
+			if !breakdown.MeetsSLA {
+				log.Log(log.Warn, "[billing] SLA VIOLATION: %s / %s - Uptime: %.2f%% (Required: %.2f%%), Down: %.2f hrs",
+					memberName, serviceName, breakdown.Uptime, breakdown.SLAThreshold, breakdown.HoursDown)
+			}
+		}
+	}
+
 	if err := writeMemberBillingPDF(&snap, sla, tmpDir, month); err != nil {
-		log.Log(log.Error, "[billing] failed to write member‑billing PDF: %v", err)
+		log.Log(log.Error, "[billing] failed to write member-billing PDF: %v", err)
 	}
 }
 

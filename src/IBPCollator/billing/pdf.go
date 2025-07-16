@@ -1,19 +1,5 @@
 package billing
 
-// ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-// ┃  Stake Plus Inc. – IBPCollator Billing PDF helpers  (v0.4.8)       ┃
-// ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-//
-// Change log (excerpt)
-// --------------------
-// • v0.4.8 – Ensure report headers have breathing‑room: every page now
-//   starts ordinary content at Y = 32 mm, preventing the previously observed
-//   “title sitting on top of boxes” issue.
-// • v0.4.7 – Watermark logo scale 62.5 %, alpha 0.25; titles only in header.
-// • v0.4.6 – GoFPDF 4‑value GetMargins() compatibility.
-// • Earlier – initial implementation.
-//
-
 import (
 	"fmt"
 	"os"
@@ -41,16 +27,14 @@ func findLogo(baseDir string) string {
 	return ""
 }
 
-// addPageWithWatermark creates a new page, draws the centred logo (62.5 %
-// width, 25 % transparency) and **moves Y to 32 mm** so subsequent content
+// addPageWithWatermark creates a new page, draws the centred logo (62.5%
+// width, 25% transparency) and **moves Y to 32mm** so subsequent content
 // never collides with the header/title.
 func addPageWithWatermark(pdf *gofpdf.Fpdf, logo string) {
 	pdf.AddPage()
-
 	if logo != "" {
 		pageW, pageH := pdf.GetPageSize()
-		imgW := pageW * 0.625 // 62.5 %
-
+		imgW := pageW * 0.625 // 62.5%
 		info := pdf.RegisterImageOptions(logo,
 			gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: true})
 		nativeW, nativeH := info.Extent()
@@ -58,13 +42,11 @@ func addPageWithWatermark(pdf *gofpdf.Fpdf, logo string) {
 		imgH := nativeH * scale
 		imgX := (pageW - imgW) / 2
 		imgY := (pageH - imgH) / 2
-
 		pdf.SetAlpha(0.25, "Normal")
 		pdf.ImageOptions(logo, imgX, imgY, imgW, 0,
 			false, gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: true}, 0, "")
 		pdf.SetAlpha(1, "Normal")
 	}
-
 	// Reserve vertical space so data never overlaps the header
 	pdf.SetY(32.0)
 }
@@ -109,7 +91,7 @@ func lookupInt64(obj interface{}, field string) (int64, bool) {
 }
 
 /* ---------------------------------------------------------------------
-                     “cost by service”  –  PDF report
+                     "cost by service" — PDF report
 --------------------------------------------------------------------- */
 
 func writeServiceCostPDF(sum *Summary, tmpDir string) error {
@@ -117,7 +99,6 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 	logoPath := findLogo(c.Local.System.WorkDir)
 
 	const title = "IBP Network - Cost by Service"
-
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.SetTitle(title, false)
 	pdf.SetAuthor("IBPCollator "+Version(), false)
@@ -137,8 +118,8 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 		pdf.CellFormat(0, 10,
 			fmt.Sprintf("page %d of {nb}", pdf.PageNo()), "", 0, "C", false, 0, "")
 	})
-	pdf.AliasNbPages("")
 
+	pdf.AliasNbPages("")
 	addPageWithWatermark(pdf, logoPath)
 
 	// deterministic ordering
@@ -159,7 +140,6 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 	)
 	boxWidth := colSvcW + colCostW
 	leftMargin := (pageW - boxWidth) / 2
-
 	origLeft, _, _, _ := pdf.GetMargins()
 
 	for _, svc := range serviceNames {
@@ -182,6 +162,7 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 		pdf.SetFillColor(240, 240, 240)
 		pdf.CellFormat(colSvcW, rowH, "Member", "1", 0, "L", true, 0, "")
 		pdf.CellFormat(colCostW, rowH, "Cost (USD)", "1", 1, "R", true, 0, "")
+
 		pdf.SetFont("Helvetica", "", 10)
 
 		// member list
@@ -200,7 +181,6 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 				pdf.Rect(leftMargin, startY-1, boxWidth, endY-startY+1, "D")
 				addPageWithWatermark(pdf, logoPath)
 				startY = pdf.GetY()
-
 				pdf.SetLeftMargin(leftMargin)
 				pdf.SetX(leftMargin)
 
@@ -209,9 +189,11 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 				pdf.CellFormat(boxWidth, rowH+2, svc+" (cont'd)", "",
 					1, "L", false, 0, "")
 				pdf.Ln(1)
+
 				pdf.SetFont("Helvetica", "B", 11)
 				pdf.CellFormat(colSvcW, rowH, "Member", "1", 0, "L", true, 0, "")
 				pdf.CellFormat(colCostW, rowH, "Cost (USD)", "1", 1, "R", true, 0, "")
+
 				pdf.SetFont("Helvetica", "", 10)
 			}
 
@@ -227,13 +209,14 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 		pdf.CellFormat(colSvcW, rowH, "Service Total", "1", 0, "R", false, 0, "")
 		pdf.CellFormat(colCostW, rowH, fmt.Sprintf("$%.2f", sc.Total),
 			"1", 1, "R", false, 0, "")
+
 		pdf.SetFont("Helvetica", "", 10)
 
 		// border
 		endY := pdf.GetY()
 		pdf.Rect(leftMargin, startY-1, boxWidth, endY-startY+1, "D")
-		pdf.Ln(boxGap)
 
+		pdf.Ln(boxGap)
 		pdf.SetLeftMargin(origLeft)
 	}
 
@@ -242,9 +225,11 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 	for _, sc := range sum.Services {
 		grand += sc.Total
 	}
+
 	if pdf.GetY() > 260 {
 		addPageWithWatermark(pdf, logoPath)
 	}
+
 	pdf.SetLeftMargin(leftIndent)
 	pdf.SetX(leftIndent)
 	pdf.SetFont("Helvetica", "B", 12)
@@ -257,21 +242,31 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 	if err := pdf.OutputFileAndClose(filename); err != nil {
 		return err
 	}
+
 	log.Log(log.Info, "[billing] service-cost PDF written → %s", filename)
 	return nil
 }
 
 /* ---------------------------------------------------------------------
-                 “billing by member”  –  PDF report
+                 "billing by member" — PDF report
 --------------------------------------------------------------------- */
 
-func getUptimePercent(sla SLASummary, member, service string) float64 {
+func getSLABreakdown(sla SLASummary, member, service string) SLABreakdown {
 	if upm, ok := sla[member]; ok {
 		if bd, ok2 := upm[service]; ok2 {
-			return bd.Uptime
+			return bd
 		}
 	}
-	return 100.0
+	// Return default if not found
+	return SLABreakdown{
+		HoursTotal:   730, // Default month hours
+		HoursDown:    0,
+		HoursUp:      730,
+		Uptime:       100.0,
+		SLAThreshold: DefaultSLAPercentage,
+		SLAHours:     730 * (DefaultSLAPercentage / 100.0),
+		MeetsSLA:     true,
+	}
 }
 
 func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month time.Time) error {
@@ -300,8 +295,8 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 		pdf.CellFormat(0, 10,
 			fmt.Sprintf("page %d of {nb}", pdf.PageNo()), "", 0, "C", false, 0, "")
 	})
-	pdf.AliasNbPages("")
 
+	pdf.AliasNbPages("")
 	addPageWithWatermark(pdf, logoPath)
 
 	// deterministic order
@@ -319,14 +314,17 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 		colServiceW = 60.0
 		colBaseW    = 30.0
 		colUptimeW  = 30.0
-		colBillW    = 40.0
+		colHoursW   = 30.0
+		colBillW    = 30.0
 	)
-	boxWidth := colServiceW + colBaseW + colUptimeW + colBillW
+	boxWidth := colServiceW + colBaseW + colUptimeW + colHoursW + colBillW
 	leftMargin := (pageW - boxWidth) / 2
-
 	origLeft, _, _, _ := pdf.GetMargins()
 
 	grandTotal := 0.0
+
+	// Get config for resource info
+	c := cfg.GetConfig()
 
 	for _, mem := range memberNames {
 		startY := pdf.GetY()
@@ -346,18 +344,20 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 		pdf.SetFont("Helvetica", "", 9)
 		metaLines := make([]string, 0, 6)
 
-		if web, ok := lookupString(sum.Members[mem], "Website"); ok && web != "" {
-			metaLines = append(metaLines, "Website: "+web)
+		// Get member config
+		memberConfig, hasMemberConfig := c.Members[mem]
+		if hasMemberConfig {
+			if memberConfig.Details.Website != "" {
+				metaLines = append(metaLines, "Website: "+memberConfig.Details.Website)
+			}
 		}
+
 		metaLines = append(metaLines,
 			"Billing period: "+month.Format("January 2006"))
 
-		if lvl, ok := lookupString(sum.Members[mem], "Level"); ok && lvl != "" {
-			metaLines = append(metaLines, "IBP member level: "+lvl)
-		}
-
-		if joined, ok := lookupString(sum.Members[mem], "Joined"); ok && joined != "" {
-			metaLines = append(metaLines, "Joined: "+joined)
+		if hasMemberConfig {
+			metaLines = append(metaLines,
+				fmt.Sprintf("IBP member level: %d", memberConfig.Membership.Level))
 		}
 
 		if req, ok := lookupInt64(sum.Members[mem], "DNSRequests"); ok && req > 0 {
@@ -376,7 +376,9 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 		pdf.CellFormat(colServiceW, rowH, "Service", "1", 0, "L", true, 0, "")
 		pdf.CellFormat(colBaseW, rowH, "Base (USD)", "1", 0, "R", true, 0, "")
 		pdf.CellFormat(colUptimeW, rowH, "Uptime %", "1", 0, "R", true, 0, "")
+		pdf.CellFormat(colHoursW, rowH, "Hours Up", "1", 0, "R", true, 0, "")
 		pdf.CellFormat(colBillW, rowH, "Billed (USD)", "1", 1, "R", true, 0, "")
+
 		pdf.SetFont("Helvetica", "", 10)
 
 		memberTotal := 0.0
@@ -394,7 +396,6 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 				pdf.Rect(leftMargin, startY-1, boxWidth, endY-startY+1, "D")
 				addPageWithWatermark(pdf, logoPath)
 				startY = pdf.GetY()
-
 				pdf.SetLeftMargin(leftMargin)
 				pdf.SetX(leftMargin)
 
@@ -403,27 +404,66 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 					1, "L", false, 0, "")
 				pdf.Ln(1)
 
-				// re‑header
+				// re-header
 				pdf.SetFont("Helvetica", "B", 11)
 				pdf.CellFormat(colServiceW, rowH, "Service", "1", 0, "L", true, 0, "")
 				pdf.CellFormat(colBaseW, rowH, "Base (USD)", "1", 0, "R", true, 0, "")
 				pdf.CellFormat(colUptimeW, rowH, "Uptime %", "1", 0, "R", true, 0, "")
+				pdf.CellFormat(colHoursW, rowH, "Hours Up", "1", 0, "R", true, 0, "")
 				pdf.CellFormat(colBillW, rowH, "Billed (USD)", "1", 1, "R", true, 0, "")
+
 				pdf.SetFont("Helvetica", "", 10)
 			}
 
 			baseCost := sum.Members[mem].ServiceCosts[svc]
-			uptime := getUptimePercent(sla, mem, svc)
-			billed := baseCost * (uptime / 100.0)
+			breakdown := getSLABreakdown(sla, mem, svc)
+			billed := baseCost * (breakdown.Uptime / 100.0)
 
 			fillToggle = !fillToggle
+
+			// Service name row
 			pdf.CellFormat(colServiceW, rowH, svc, "1", 0, "L", fillToggle, 0, "")
 			pdf.CellFormat(colBaseW, rowH, fmt.Sprintf("$%.2f", baseCost),
 				"1", 0, "R", fillToggle, 0, "")
-			pdf.CellFormat(colUptimeW, rowH, fmt.Sprintf("%.4f", uptime),
+
+			// Color code the uptime based on SLA
+			if !breakdown.MeetsSLA {
+				pdf.SetTextColor(255, 0, 0) // Red for not meeting SLA
+			}
+			pdf.CellFormat(colUptimeW, rowH, fmt.Sprintf("%.2f", breakdown.Uptime),
+				"1", 0, "R", fillToggle, 0, "")
+			pdf.SetTextColor(0, 0, 0) // Reset to black
+
+			pdf.CellFormat(colHoursW, rowH, fmt.Sprintf("%.2f", breakdown.HoursUp),
 				"1", 0, "R", fillToggle, 0, "")
 			pdf.CellFormat(colBillW, rowH, fmt.Sprintf("$%.2f", billed),
 				"1", 1, "R", fillToggle, 0, "")
+
+			// Resource details row
+			if svcConfig, exists := c.Services[svc]; exists {
+				pdf.SetFont("Helvetica", "I", 8)
+				pdf.SetTextColor(100, 100, 100)
+				resourceText := fmt.Sprintf("   Resources: %d nodes, %.1f cores, %.1f GB RAM, %.1f GB disk, %.1f TB bandwidth",
+					svcConfig.Resources.Nodes,
+					svcConfig.Resources.Cores,
+					svcConfig.Resources.Memory,
+					svcConfig.Resources.Disk,
+					svcConfig.Resources.Bandwidth)
+				pdf.CellFormat(boxWidth, rowH-1, resourceText, "LR", 1, "L", false, 0, "")
+				pdf.SetTextColor(0, 0, 0)
+				pdf.SetFont("Helvetica", "", 10)
+			}
+
+			// SLA info row if not meeting SLA
+			if !breakdown.MeetsSLA {
+				pdf.SetFont("Helvetica", "I", 8)
+				pdf.SetTextColor(255, 0, 0)
+				slaText := fmt.Sprintf("   BELOW SLA: Required %.2f%% (%.2f hrs), Actual %.2f hrs down",
+					breakdown.SLAThreshold, breakdown.SLAHours, breakdown.HoursDown)
+				pdf.CellFormat(boxWidth, rowH-1, slaText, "LR", 1, "L", false, 0, "")
+				pdf.SetTextColor(0, 0, 0)
+				pdf.SetFont("Helvetica", "", 10)
+			}
 
 			memberTotal += billed
 			grandTotal += billed
@@ -431,10 +471,11 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 
 		// subtotal
 		pdf.SetFont("Helvetica", "B", 10)
-		pdf.CellFormat(colServiceW+colBaseW+colUptimeW, rowH, "Member Total",
+		pdf.CellFormat(colServiceW+colBaseW+colUptimeW+colHoursW, rowH, "Member Total",
 			"1", 0, "R", false, 0, "")
 		pdf.CellFormat(colBillW, rowH, fmt.Sprintf("$%.2f", memberTotal),
 			"1", 1, "R", false, 0, "")
+
 		pdf.SetFont("Helvetica", "", 10)
 
 		// border
@@ -449,13 +490,15 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 	if pdf.GetY() > 260 {
 		addPageWithWatermark(pdf, logoPath)
 	}
+
 	pdf.SetLeftMargin(leftMargin)
 	pdf.SetX(leftMargin)
 	pdf.SetFont("Helvetica", "B", 12)
-	pdf.CellFormat(colServiceW+colBaseW+colUptimeW, rowH+1, "Grand Total",
+	pdf.CellFormat(colServiceW+colBaseW+colUptimeW+colHoursW, rowH+1, "Grand Total",
 		"1", 0, "R", false, 0, "")
 	pdf.CellFormat(colBillW, rowH+1, fmt.Sprintf("$%.2f", grandTotal),
 		"1", 1, "R", false, 0, "")
+
 	pdf.SetLeftMargin(origLeft)
 
 	filename := filepath.Join(tmpDir,
@@ -463,10 +506,13 @@ func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month ti
 	if err := pdf.OutputFileAndClose(filename); err != nil {
 		return err
 	}
+
 	log.Log(log.Info, "[billing] member-billing PDF written → %s", filename)
 	return nil
 }
 
 /* --------------------------------------------------------------------- */
 
-func Version() string { return "v0.4.8" }
+func Version() string {
+	return "v0.4.8"
+}
