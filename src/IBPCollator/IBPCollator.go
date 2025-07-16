@@ -26,22 +26,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	// ── load configuration ────────────────────────────────────────────────
+	// ── load configuration ────────────────────────────────────────────────────
 	cfg.Init(*cfgPath)
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
 
-	// ── subsystems ────────────────────────────────────────────────────────
-	matrix.Init()   // outbound Matrix alerts
-	go data2.Init() // collator local DB layer
-	billing.Init()  // ← new hourly‑billing subsystem
+	// ── subsystems ────────────────────────────────────────────────────────────
+	matrix.Init() // outbound Matrix alerts
+	data2.Init()  // collator local DB layer - CHANGED: now synchronous
+
+	// Wait a moment to ensure DB is fully ready
+	time.Sleep(2 * time.Second)
+
+	billing.Init() // ← billing subsystem
 
 	if err := nats.Connect(); err != nil {
 		log.Log(log.Fatal, "NATS connect: %v", err)
 		os.Exit(1)
 	}
 
-	// ── register with the NATS cluster ────────────────────────────────────
+	// ── register with the NATS cluster ────────────────────────────────────────
 	nats.State.NodeID = c.Local.Nats.NodeID
 	nats.State.ThisNode = nats.NodeInfo{
 		NodeID:        c.Local.Nats.NodeID,
@@ -49,12 +53,13 @@ func main() {
 		ListenPort:    "0",
 		NodeRole:      "IBPCollator",
 	}
+
 	if err := nats.EnableCollatorRole(); err != nil {
 		log.Log(log.Fatal, "enable collator role: %v", err)
 		os.Exit(1)
 	}
 
-	// kick‑off background collectors
+	// kick-off background collectors
 	go nats.StartUsageCollector()
 	go nats.StartMemoryJanitor()
 
