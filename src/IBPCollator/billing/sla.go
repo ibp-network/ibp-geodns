@@ -31,6 +31,11 @@ const DefaultSLAPercentage = 99.99
 func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) {
 	out := make(SLASummary)
 
+	// Check if database is initialized
+	if mysql.DB == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
 	// Calculate the time range for the month
 	startTime := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC)
 	endTime := startTime.AddDate(0, 1, 0).Add(-time.Second)
