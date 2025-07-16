@@ -85,9 +85,6 @@ func GetSummary() Summary {
 
 // Init kicks off periodic billing refreshes and monthly billing PDF generation.
 func Init() {
-	// Wait a bit for database initialization
-	time.Sleep(10 * time.Second)
-
 	// synchronous first refresh with verbose output
 	refresh(true)
 
@@ -132,7 +129,7 @@ func Init() {
 
 	// Generate initial PDFs if we haven't generated for the previous month yet
 	go func() {
-		time.Sleep(15 * time.Second) // Increased delay to ensure DB is ready
+		time.Sleep(5 * time.Second) // Reduced delay since DB is now ready
 
 		// Check if we need to generate last month's billing
 		now := time.Now().UTC()
