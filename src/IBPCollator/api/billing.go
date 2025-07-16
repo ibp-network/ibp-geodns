@@ -2,7 +2,6 @@ package api
 
 import (
 	"database/sql"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -261,16 +260,20 @@ func getServiceDowntimeForAPI(memberName, serviceName string, month time.Time) [
 	startTime := month
 	endTime := month.AddDate(0, 1, 0).Add(-time.Second)
 
-	// Build domain list for SQL IN clause
-	domainPlaceholders := make([]string, len(domains))
-	args := []interface{}{endTime, memberName}
+	// Build parameterized query with proper placeholders
+	placeholders := make([]string, len(domains))
+	args := make([]interface{}, 0, len(domains)+4)
+	args = append(args, endTime, memberName)
+
 	for i, domain := range domains {
-		domainPlaceholders[i] = "?"
+		placeholders[i] = "?"
 		args = append(args, domain)
 	}
+
 	args = append(args, endTime, startTime)
 
-	query := fmt.Sprintf(`
+	// Safe query construction with parameterized inputs
+	query := `
 		SELECT 
 			id,
 			check_type,
@@ -284,11 +287,10 @@ func getServiceDowntimeForAPI(memberName, serviceName string, month time.Time) [
 		FROM member_events
 		WHERE member_name = ?
 		AND status = 0
-		AND domain_name IN (%s)
+		AND domain_name IN (` + strings.Join(placeholders, ",") + `)
 		AND start_time < ?
 		AND (end_time IS NULL OR end_time > ?)
-		ORDER BY start_time DESC
-	`, strings.Join(domainPlaceholders, ","))
+		ORDER BY start_time DESC`
 
 	rows, err := data2.DB.Query(query, args...)
 	if err != nil {

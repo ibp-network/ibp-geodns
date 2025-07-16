@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -31,8 +32,8 @@ type RequestStats struct {
 	Requests    int    `json:"requests"`
 }
 
-func parseRequestFilters(r *http.Request) RequestFilter {
-	return RequestFilter{
+func parseRequestFilters(r *http.Request) (RequestFilter, error) {
+	filter := RequestFilter{
 		Country: r.URL.Query().Get("country"),
 		ASN:     r.URL.Query().Get("asn"),
 		Network: r.URL.Query().Get("network"),
@@ -40,6 +41,13 @@ func parseRequestFilters(r *http.Request) RequestFilter {
 		Member:  r.URL.Query().Get("member"),
 		Domain:  r.URL.Query().Get("domain"),
 	}
+
+	// Validate and sanitize the filter
+	if err := sanitizeRequestFilter(&filter); err != nil {
+		return filter, err
+	}
+
+	return filter, nil
 }
 
 func handleRequestsByCountry(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +57,11 @@ func handleRequestsByCountry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filters := parseRequestFilters(r)
+	filters, err := parseRequestFilters(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid filter: %v", err))
+		return
+	}
 
 	query := `
 		SELECT 
@@ -63,7 +75,7 @@ func handleRequestsByCountry(w http.ResponseWriter, r *http.Request) {
 
 	args := []interface{}{start.Format("2006-01-02"), end.Format("2006-01-02")}
 
-	// Apply filters
+	// Apply filters with parameterized queries
 	if filters.Member != "" {
 		query += " AND member_name = ?"
 		args = append(args, filters.Member)
@@ -119,7 +131,11 @@ func handleRequestsByASN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filters := parseRequestFilters(r)
+	filters, err := parseRequestFilters(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid filter: %v", err))
+		return
+	}
 
 	query := `
 		SELECT 
@@ -178,7 +194,11 @@ func handleRequestsByService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filters := parseRequestFilters(r)
+	filters, err := parseRequestFilters(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid filter: %v", err))
+		return
+	}
 
 	query := `
 		SELECT 
@@ -241,7 +261,11 @@ func handleRequestsByMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filters := parseRequestFilters(r)
+	filters, err := parseRequestFilters(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid filter: %v", err))
+		return
+	}
 
 	query := `
 		SELECT 
@@ -299,6 +323,12 @@ func handleRequestsSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate dates
+	if !validateDate(start.Format("2006-01-02")) || !validateDate(end.Format("2006-01-02")) {
+		writeError(w, http.StatusBadRequest, "Invalid date format")
+		return
+	}
+
 	// Get total requests
 	var totalRequests int
 	err = data2.DB.QueryRow(`
@@ -352,7 +382,7 @@ func handleRequestsSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, summary)
 }
 
-// Update the domainToServiceName function with complete implementation
+// Helper function to convert domain to service name
 func domainToServiceName(domain string) string {
 	// First try to find exact match in config
 	c := cfg.GetConfig()

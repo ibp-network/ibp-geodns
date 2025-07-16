@@ -32,12 +32,42 @@ func handleDowntimeEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get filters
-	member := r.URL.Query().Get("member")
-	service := r.URL.Query().Get("service")
-	domain := r.URL.Query().Get("domain")
-	checkType := r.URL.Query().Get("check_type")
-	status := r.URL.Query().Get("status") // "ongoing", "resolved", or empty for all
+	// Get and validate filters
+	member := sanitizeString(r.URL.Query().Get("member"))
+	service := sanitizeString(r.URL.Query().Get("service"))
+	domain := sanitizeString(r.URL.Query().Get("domain"))
+	checkType := sanitizeString(r.URL.Query().Get("check_type"))
+	status := sanitizeString(r.URL.Query().Get("status"))
+
+	// Validate member name
+	if member != "" && !validateIdentifier(member) {
+		writeError(w, http.StatusBadRequest, "Invalid member name")
+		return
+	}
+
+	// Validate service name
+	if service != "" && !validateIdentifier(service) {
+		writeError(w, http.StatusBadRequest, "Invalid service name")
+		return
+	}
+
+	// Validate domain
+	if domain != "" && !validateIdentifier(domain) {
+		writeError(w, http.StatusBadRequest, "Invalid domain")
+		return
+	}
+
+	// Validate check type
+	if checkType != "" && checkType != "site" && checkType != "domain" && checkType != "endpoint" {
+		writeError(w, http.StatusBadRequest, "Invalid check type")
+		return
+	}
+
+	// Validate status
+	if status != "" && status != "ongoing" && status != "resolved" {
+		writeError(w, http.StatusBadRequest, "Invalid status")
+		return
+	}
 
 	query := `
 		SELECT 
@@ -59,7 +89,7 @@ func handleDowntimeEvents(w http.ResponseWriter, r *http.Request) {
 
 	args := []interface{}{end, start}
 
-	// Apply filters
+	// Apply filters with parameterized queries
 	if member != "" {
 		query += " AND member_name = ?"
 		args = append(args, member)
