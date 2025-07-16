@@ -352,7 +352,8 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	pdf.CellFormat(tableWidth, 10, "Member Billings", "", 1, "L", false, 0, "")
 
 	// Calculate vertical centering
-	startY := 55.0
+	startY := 48.0
+
 	// Estimate table height: header + (rows * rowH) + total row
 	estimatedHeight := 8.0 + float64(len(memberData))*8.0 + 8.0
 	availableHeight := 190.0 - startY // From startY to before footer
@@ -494,8 +495,8 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	// ===== PAGE 4: GEOGRAPHIC DISTRIBUTION =====
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "B", 16)
-	pdf.SetXY(10, 40)
-	pdf.CellFormat(277, 10, "Geographic Distribution - Top 15", "", 1, "C", false, 0, "")
+	pdf.SetXY(20, 40)
+	pdf.CellFormat(257, 10, "Geographic Distribution - Top 10", "", 1, "L", false, 0, "")
 
 	// Get country statistics
 	countryStats := getCountryStatistics(month)
@@ -510,8 +511,8 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	// ===== PAGE 5: SERVICE/CHAIN DISTRIBUTION =====
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "B", 16)
-	pdf.SetXY(10, 40)
-	pdf.CellFormat(277, 10, "Service/Chain Distribution - Top 15", "", 1, "C", false, 0, "")
+	pdf.SetXY(20, 40)
+	pdf.CellFormat(257, 10, "Service/Chain Distribution - Top 10", "", 1, "L", false, 0, "")
 
 	// Get service statistics
 	serviceStats := getServiceStatistics(month)
@@ -540,22 +541,22 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY, tab
 		return
 	}
 
-	// Column widths - adjusted for centered table
+	// Column widths - adjusted for centered table and increased size
 	const (
-		colRankW     = 15.0
-		colCountryW  = 80.0
-		colRequestsW = 40.0
-		colShareW    = 30.0
-		colChange1W  = 25.0
-		colChange3W  = 25.0
-		colChange6W  = 25.0
-		rowH         = 9.0
+		colRankW     = 17.0
+		colCountryW  = 92.0
+		colRequestsW = 46.0
+		colShareW    = 35.0
+		colChange1W  = 29.0
+		colChange3W  = 29.0
+		colChange6W  = 29.0
+		rowH         = 10.5
 	)
 
 	// Table header with modern style
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
-	pdf.SetFont("Helvetica", "B", 10)
+	pdf.SetFont("Helvetica", "B", 11)
 	x := tableX
 	y := startY
 
@@ -575,7 +576,7 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY, tab
 	pdf.SetFont("Helvetica", "", 10)
 	fillToggle := false
 
-	for i := 0; i < 15 && i < len(stats); i++ {
+	for i := 0; i < 10 && i < len(stats); i++ {
 		if y > 180 {
 			pdf.AddPage()
 			y = 40
@@ -651,20 +652,20 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tab
 	}
 
 	const (
-		colRankW     = 15.0
-		colServiceW  = 80.0
-		colRequestsW = 40.0
-		colShareW    = 30.0
-		colChange1W  = 25.0
-		colChange3W  = 25.0
-		colChange6W  = 25.0
-		rowH         = 9.0
+		colRankW     = 17.0
+		colServiceW  = 92.0
+		colRequestsW = 46.0
+		colShareW    = 35.0
+		colChange1W  = 29.0
+		colChange3W  = 29.0
+		colChange6W  = 29.0
+		rowH         = 10.5
 	)
 
 	// Table header
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
-	pdf.SetFont("Helvetica", "B", 10)
+	pdf.SetFont("Helvetica", "B", 11)
 	x := tableX
 	y := startY
 
@@ -684,7 +685,7 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tab
 	pdf.SetFont("Helvetica", "", 10)
 	fillToggle := false
 
-	for i := 0; i < 15 && i < len(stats); i++ {
+	for i := 0; i < 10 && i < len(stats); i++ {
 		if y > 180 {
 			pdf.AddPage()
 			y = 40
@@ -1151,7 +1152,7 @@ func getDowntimeByDay(month time.Time) map[int]int {
 	return result
 }
 
-// domainToServiceName converts a domain like "hydration.dotters.network" to "Hydration"
+// domainToServiceName converts a domain like "hydration.dotters.network" to "HYDRATION"
 func domainToServiceName(domain string) string {
 	// Map domains to service names based on configuration
 	c := cfg.GetConfig()
@@ -1170,24 +1171,6 @@ func domainToServiceName(domain string) string {
 	name = strings.ReplaceAll(name, "-", " ")
 	name = strings.ReplaceAll(name, ".", " ")
 
-	// Title case with special handling for common patterns
-	words := strings.Fields(name)
-	for i, word := range words {
-		// Handle special cases
-		switch strings.ToLower(word) {
-		case "hub":
-			words[i] = "Hub"
-		case "rpc":
-			words[i] = "RPC"
-		case "api":
-			words[i] = "API"
-		default:
-			// Title case
-			if len(word) > 0 {
-				words[i] = strings.ToUpper(word[:1]) + strings.ToLower(word[1:])
-			}
-		}
-	}
-
-	return strings.Join(words, " ")
+	// Convert to uppercase
+	return strings.ToUpper(name)
 }
