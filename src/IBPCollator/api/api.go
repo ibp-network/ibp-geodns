@@ -49,7 +49,7 @@ func Init() {
 	log.Log(log.Info, "[CollatorAPI] Starting API server on %s:%s", addr, port)
 
 	go func() {
-		if err := http.ListenAndServe(addr+port, mux); err != nil {
+		if err := http.ListenAndServe(addr+":"+port, mux); err != nil {
 			log.Log(log.Fatal, "[CollatorAPI] Failed to start server: %v", err)
 		}
 	}()
