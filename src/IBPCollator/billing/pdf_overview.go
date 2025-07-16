@@ -14,6 +14,47 @@ import (
 	"github.com/phpdave11/gofpdf"
 )
 
+// CountryRequestData holds country request data with name
+type CountryRequestData struct {
+	Hits        int
+	CountryName string
+}
+
+// memberRow holds data for a member billing row
+type memberRow struct {
+	name             string
+	level            int
+	requests         int
+	percentage       float64
+	serviceCount     int
+	downtimeServices int
+	baseCost         float64
+	billedCost       float64
+	avgUptime        float64
+	meetsSLA         bool
+}
+
+// CountryStats holds statistics for a country
+type CountryStats struct {
+	Country       string
+	CountryName   string
+	Requests      int
+	Percentage    float64
+	Change1Month  float64
+	Change3Months float64
+	Change6Months float64
+}
+
+// ServiceStats holds statistics for a service
+type ServiceStats struct {
+	Service       string
+	Requests      int
+	Percentage    float64
+	Change1Month  float64
+	Change3Months float64
+	Change6Months float64
+}
+
 // writeMonthlyOverviewPDF generates a summary PDF for all members with modern design
 func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month time.Time) error {
 	logoPath := findLogo(filepath.Dir(outDir))
@@ -109,6 +150,14 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 				row.percentage = float64(stats.RequestCount) / float64(totalRequests) * 100.0
 			}
 		}
+
+		// Sort by level descending, then alphabetically
+		sort.Slice(memberData, func(i, j int) bool {
+			if memberData[i].level != memberData[j].level {
+				return memberData[i].level > memberData[j].level
+			}
+			return memberData[i].name < memberData[j].name
+		})
 
 		row.serviceCount = len(sum.Members[mem].ServiceCosts)
 		totalUptime := 0.0
@@ -292,6 +341,16 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	pdf.SetFont("Helvetica", "B", 11)
 	pdf.CellFormat(30, 6, fmt.Sprintf("%.2f%%", DefaultSLAPercentage), "", 0, "L", false, 0, "")
 
+	// Add downtime calendar
+	y += 40
+	pdf.SetFont("Helvetica", "B", 14)
+	pdf.SetXY(20, y)
+	pdf.CellFormat(257, 8, "Downtime Calendar", "", 1, "L", false, 0, "")
+	y += 10
+
+	// Draw calendar
+	drawDowntimeCalendar(pdf, 20, y, 257, month)
+
 	// ===== PAGE 3: MEMBER BILLINGS TABLE =====
 	pdf.AddPage()
 	y = 40
@@ -474,19 +533,19 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY floa
 		return
 	}
 
-	// Column widths
+	// Column widths - matching member table style
 	const (
 		colRankW     = 15.0
-		colCountryW  = 60.0
-		colRequestsW = 25.0
-		colShareW    = 20.0
-		colChange1W  = 20.0
-		colChange3W  = 20.0
-		colChange6W  = 20.0
-		rowH         = 6.0
+		colCountryW  = 70.0
+		colRequestsW = 35.0
+		colShareW    = 25.0
+		colChange1W  = 25.0
+		colChange3W  = 25.0
+		colChange6W  = 25.0
+		rowH         = 8.0
 	)
 
-	// Table header
+	// Table header with modern style (same as member table)
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
 	pdf.SetFont("Helvetica", "B", 9)
@@ -505,8 +564,8 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY floa
 	pdf.SetTextColor(0, 0, 0)
 	y += rowH
 
-	// Data rows
-	pdf.SetFont("Helvetica", "", 8)
+	// Data rows with alternating colors (same style as member table)
+	pdf.SetFont("Helvetica", "", 9)
 	fillToggle := false
 
 	for i := 0; i < 20 && i < len(stats); i++ {
@@ -514,7 +573,7 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY floa
 			pdf.AddPage()
 			y = 40
 
-			// Reprint header
+			// Reprint header with consistent styling
 			pdf.SetFillColor(50, 50, 50)
 			pdf.SetTextColor(255, 255, 255)
 			pdf.SetFont("Helvetica", "B", 9)
@@ -527,7 +586,7 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY floa
 			pdf.CellFormat(colChange3W, rowH, "3M Ago", "1", 0, "R", true, 0, "")
 			pdf.CellFormat(colChange6W, rowH, "6M Ago", "1", 1, "R", true, 0, "")
 			pdf.SetTextColor(0, 0, 0)
-			pdf.SetFont("Helvetica", "", 8)
+			pdf.SetFont("Helvetica", "", 9)
 			y += rowH
 		}
 
@@ -539,42 +598,40 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY floa
 		}
 
 		pdf.SetXY(x, y)
-		pdf.CellFormat(colRankW, 5, fmt.Sprintf("%d", i+1), "1", 0, "C", fillToggle, 0, "")
-		pdf.CellFormat(colCountryW, 5, stats[i].CountryName, "1", 0, "L", fillToggle, 0, "")
-		pdf.CellFormat(colRequestsW, 5, formatNumber(stats[i].Requests), "1", 0, "R", fillToggle, 0, "")
-		pdf.CellFormat(colShareW, 5, fmt.Sprintf("%.1f%%", stats[i].Percentage), "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colRankW, rowH, fmt.Sprintf("%d", i+1), "1", 0, "C", fillToggle, 0, "")
+		pdf.CellFormat(colCountryW, rowH, stats[i].CountryName, "1", 0, "L", fillToggle, 0, "")
+		pdf.CellFormat(colRequestsW, rowH, formatNumber(stats[i].Requests), "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colShareW, rowH, fmt.Sprintf("%.1f%%", stats[i].Percentage), "1", 0, "R", fillToggle, 0, "")
 
-		// 1M change
+		// Change colors
 		changeStr1 := formatChange(stats[i].Change1Month)
 		if stats[i].Change1Month > 0 {
 			pdf.SetTextColor(0, 150, 0)
 		} else if stats[i].Change1Month < 0 {
 			pdf.SetTextColor(255, 0, 0)
 		}
-		pdf.CellFormat(colChange1W, 5, changeStr1, "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colChange1W, rowH, changeStr1, "1", 0, "R", fillToggle, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 
-		// 3M change
 		changeStr3 := formatChange(stats[i].Change3Months)
 		if stats[i].Change3Months > 0 {
 			pdf.SetTextColor(0, 150, 0)
 		} else if stats[i].Change3Months < 0 {
 			pdf.SetTextColor(255, 0, 0)
 		}
-		pdf.CellFormat(colChange3W, 5, changeStr3, "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colChange3W, rowH, changeStr3, "1", 0, "R", fillToggle, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 
-		// 6M change
 		changeStr6 := formatChange(stats[i].Change6Months)
 		if stats[i].Change6Months > 0 {
 			pdf.SetTextColor(0, 150, 0)
 		} else if stats[i].Change6Months < 0 {
 			pdf.SetTextColor(255, 0, 0)
 		}
-		pdf.CellFormat(colChange6W, 5, changeStr6, "1", 1, "R", fillToggle, 0, "")
+		pdf.CellFormat(colChange6W, rowH, changeStr6, "1", 1, "R", fillToggle, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 
-		y += 5
+		y += rowH
 	}
 }
 
@@ -697,27 +754,6 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY floa
 	}
 }
 
-// CountryStats holds statistics for a country
-type CountryStats struct {
-	Country       string
-	CountryName   string
-	Requests      int
-	Percentage    float64
-	Change1Month  float64
-	Change3Months float64
-	Change6Months float64
-}
-
-// ServiceStats holds statistics for a service
-type ServiceStats struct {
-	Service       string
-	Requests      int
-	Percentage    float64
-	Change1Month  float64
-	Change3Months float64
-	Change6Months float64
-}
-
 // getCountryStatistics retrieves country statistics with historical comparisons
 func getCountryStatistics(month time.Time) []CountryStats {
 	if data2.DB == nil {
@@ -734,33 +770,33 @@ func getCountryStatistics(month time.Time) []CountryStats {
 
 	// Calculate total for percentages
 	totalRequests := 0
-	for _, count := range currentStats {
-		totalRequests += count
+	for _, data := range currentStats {
+		totalRequests += data.Hits
 	}
 
 	// Build stats with comparisons
 	var stats []CountryStats
-	for country, requests := range currentStats {
+	for country, data := range currentStats {
 		stat := CountryStats{
 			Country:     country,
-			CountryName: getCountryName(country),
-			Requests:    requests,
+			CountryName: data.CountryName, // Use from database
+			Requests:    data.Hits,
 			Percentage:  0,
 		}
 
 		if totalRequests > 0 {
-			stat.Percentage = float64(requests) / float64(totalRequests) * 100.0
+			stat.Percentage = float64(data.Hits) / float64(totalRequests) * 100.0
 		}
 
 		// Calculate changes
-		if prev, exists := oneMonthAgo[country]; exists && prev > 0 {
-			stat.Change1Month = ((float64(requests) - float64(prev)) / float64(prev)) * 100.0
+		if prev, exists := oneMonthAgo[country]; exists && prev.Hits > 0 {
+			stat.Change1Month = ((float64(data.Hits) - float64(prev.Hits)) / float64(prev.Hits)) * 100.0
 		}
-		if prev, exists := threeMonthsAgo[country]; exists && prev > 0 {
-			stat.Change3Months = ((float64(requests) - float64(prev)) / float64(prev)) * 100.0
+		if prev, exists := threeMonthsAgo[country]; exists && prev.Hits > 0 {
+			stat.Change3Months = ((float64(data.Hits) - float64(prev.Hits)) / float64(prev.Hits)) * 100.0
 		}
-		if prev, exists := sixMonthsAgo[country]; exists && prev > 0 {
-			stat.Change6Months = ((float64(requests) - float64(prev)) / float64(prev)) * 100.0
+		if prev, exists := sixMonthsAgo[country]; exists && prev.Hits > 0 {
+			stat.Change6Months = ((float64(data.Hits) - float64(prev.Hits)) / float64(prev.Hits)) * 100.0
 		}
 
 		stats = append(stats, stat)
@@ -775,8 +811,8 @@ func getCountryStatistics(month time.Time) []CountryStats {
 }
 
 // getCountryRequestsForMonth gets request counts by country for a specific month
-func getCountryRequestsForMonth(month time.Time) map[string]int {
-	result := make(map[string]int)
+func getCountryRequestsForMonth(month time.Time) map[string]CountryRequestData {
+	result := make(map[string]CountryRequestData)
 
 	if data2.DB == nil {
 		return result
@@ -788,27 +824,29 @@ func getCountryRequestsForMonth(month time.Time) map[string]int {
 	query := `
         SELECT 
             COALESCE(country_code, 'XX') as country,
-            COALESCE(country_name, 'Unknown') as country_name,
+            COALESCE(MAX(country_name), 'Unknown') as country_name,
             SUM(hits) as total_hits
         FROM requests
         WHERE date >= ? AND date <= ?
-        GROUP BY country_code, country_name
+        GROUP BY country_code
         ORDER BY total_hits DESC
     `
+
 	rows, err := data2.DB.Query(query, startDate, endDate)
 	if err != nil {
 		log.Log(log.Error, "[billing] Failed to query country stats: %v", err)
 		return result
 	}
-
 	defer rows.Close()
 
 	for rows.Next() {
-		var country string
-		var countryName string
+		var country, countryName string
 		var hits int
 		if err := rows.Scan(&country, &countryName, &hits); err == nil {
-			result[country] = hits
+			result[country] = CountryRequestData{
+				Hits:        hits,
+				CountryName: countryName,
+			}
 		}
 	}
 
@@ -964,35 +1002,143 @@ func formatChange(change float64) string {
 	return fmt.Sprintf("%s%.1f%%", sign, change)
 }
 
-// getCountryName returns the full country name from country code
-func getCountryName(code string) string {
-	// This would ideally use a proper country code database
-	// For now, return a simple mapping for common countries
-	countryMap := map[string]string{
-		"US": "United States",
-		"CN": "China",
-		"GB": "United Kingdom",
-		"DE": "Germany",
-		"FR": "France",
-		"JP": "Japan",
-		"CA": "Canada",
-		"AU": "Australia",
-		"BR": "Brazil",
-		"IN": "India",
-		"RU": "Russia",
-		"KR": "South Korea",
-		"NL": "Netherlands",
-		"ES": "Spain",
-		"IT": "Italy",
-		"SE": "Sweden",
-		"PL": "Poland",
-		"CH": "Switzerland",
-		"SG": "Singapore",
-		"MX": "Mexico",
+// drawDowntimeCalendar draws a monthly calendar with downtime indicators
+func drawDowntimeCalendar(pdf *gofpdf.Fpdf, x, y, width float64, month time.Time) {
+	// Get downtime events for the month
+	downtimeByDay := getDowntimeByDay(month)
+
+	// Calendar setup
+	daysInMonth := time.Date(month.Year(), month.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()
+	firstDay := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC)
+	startWeekday := int(firstDay.Weekday())
+
+	cellWidth := width / 7
+	cellHeight := 25.0
+
+	// Draw day headers
+	days := []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
+	pdf.SetFillColor(50, 50, 50)
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetFont("Helvetica", "B", 10)
+
+	for i, day := range days {
+		pdf.SetXY(x+float64(i)*cellWidth, y)
+		pdf.CellFormat(cellWidth, 8, day, "1", 0, "C", true, 0, "")
+	}
+	pdf.SetTextColor(0, 0, 0)
+	y += 8
+
+	// Draw calendar days
+	pdf.SetFont("Helvetica", "", 9)
+	week := 0
+
+	for day := 1; day <= daysInMonth; day++ {
+		col := (startWeekday + day - 1) % 7
+		if day > 1 && col == 0 {
+			week++
+		}
+
+		cellX := x + float64(col)*cellWidth
+		cellY := y + float64(week)*cellHeight
+
+		// Determine cell color based on downtime
+		downtime := downtimeByDay[day]
+		if downtime > 0 {
+			// Color based on severity
+			if downtime >= 5 {
+				pdf.SetFillColor(255, 200, 200) // Red for 5+ events
+			} else if downtime >= 3 {
+				pdf.SetFillColor(255, 230, 200) // Orange for 3-4 events
+			} else {
+				pdf.SetFillColor(255, 255, 200) // Yellow for 1-2 events
+			}
+		} else {
+			pdf.SetFillColor(200, 255, 200) // Green for no downtime
+		}
+
+		// Draw cell
+		pdf.Rect(cellX, cellY, cellWidth, cellHeight, "FD")
+
+		// Add day number
+		pdf.SetXY(cellX, cellY+2)
+		pdf.CellFormat(cellWidth, 6, fmt.Sprintf("%d", day), "", 0, "C", false, 0, "")
+
+		// Add downtime count if any
+		if downtime > 0 {
+			pdf.SetFont("Helvetica", "", 7)
+			pdf.SetTextColor(100, 100, 100)
+			pdf.SetXY(cellX, cellY+12)
+			pdf.CellFormat(cellWidth, 4, fmt.Sprintf("%d events", downtime), "", 0, "C", false, 0, "")
+			pdf.SetTextColor(0, 0, 0)
+			pdf.SetFont("Helvetica", "", 9)
+		}
 	}
 
-	if name, exists := countryMap[code]; exists {
-		return name
+	// Legend
+	legendY := y + float64(week+1)*cellHeight + 10
+	pdf.SetFont("Helvetica", "", 8)
+	pdf.SetXY(x, legendY)
+	pdf.CellFormat(40, 5, "Legend:", "", 0, "L", false, 0, "")
+
+	// Green
+	pdf.SetFillColor(200, 255, 200)
+	pdf.Rect(x+50, legendY, 15, 5, "FD")
+	pdf.SetXY(x+67, legendY)
+	pdf.CellFormat(30, 5, "No issues", "", 0, "L", false, 0, "")
+
+	// Yellow
+	pdf.SetFillColor(255, 255, 200)
+	pdf.Rect(x+100, legendY, 15, 5, "FD")
+	pdf.SetXY(x+117, legendY)
+	pdf.CellFormat(30, 5, "1-2 events", "", 0, "L", false, 0, "")
+
+	// Orange
+	pdf.SetFillColor(255, 230, 200)
+	pdf.Rect(x+150, legendY, 15, 5, "FD")
+	pdf.SetXY(x+167, legendY)
+	pdf.CellFormat(30, 5, "3-4 events", "", 0, "L", false, 0, "")
+
+	// Red
+	pdf.SetFillColor(255, 200, 200)
+	pdf.Rect(x+200, legendY, 15, 5, "FD")
+	pdf.SetXY(x+217, legendY)
+	pdf.CellFormat(30, 5, "5+ events", "", 0, "L", false, 0, "")
+}
+
+// getDowntimeByDay returns a map of day -> downtime event count
+func getDowntimeByDay(month time.Time) map[int]int {
+	result := make(map[int]int)
+
+	if data2.DB == nil {
+		return result
 	}
-	return code
+
+	startTime := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC)
+	endTime := startTime.AddDate(0, 1, 0).Add(-time.Second)
+
+	query := `
+        SELECT 
+            DAY(start_time) as day,
+            COUNT(*) as event_count
+        FROM member_events
+        WHERE status = 0
+        AND start_time >= ? AND start_time < ?
+        GROUP BY DAY(start_time)
+    `
+
+	rows, err := data2.DB.Query(query, startTime, endTime)
+	if err != nil {
+		log.Log(log.Error, "[billing] Failed to query downtime by day: %v", err)
+		return result
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var day, count int
+		if err := rows.Scan(&day, &count); err == nil {
+			result[day] = count
+		}
+	}
+
+	return result
 }
