@@ -1,15 +1,26 @@
 package api
 
 import (
+	"crypto/tls"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"sync"
+	"time"
+
 	cfg "ibp-geodns/src/common/config"
 	log "ibp-geodns/src/common/logging"
-	"net/http"
-	"time"
 )
 
 var (
-	mux *http.ServeMux
+	mux         *http.ServeMux
+	tlsConfig   *tls.Config
+	tlsMutex    sync.RWMutex
+	certPath    string
+	keyPath     string
+	lastCertMod time.Time
+	lastKeyMod  time.Time
 )
 
 // CORS middleware
@@ -63,13 +74,122 @@ func Init() {
 	addr := c.Local.CollatorApi.ListenAddress
 	port := c.Local.CollatorApi.ListenPort
 
-	log.Log(log.Info, "[CollatorAPI] Starting API server on %s:%s", addr, port)
+	// Check if SSL environment variables are set
+	certPath = os.Getenv("SSL_CERT")
+	keyPath = os.Getenv("SSL_KEY")
 
-	go func() {
-		if err := http.ListenAndServe(addr+":"+port, mux); err != nil {
-			log.Log(log.Fatal, "[CollatorAPI] Failed to start server: %v", err)
+	if certPath != "" && keyPath != "" {
+		// Initialize TLS configuration
+		if err := loadTLSConfig(); err != nil {
+			log.Log(log.Fatal, "[CollatorAPI] Failed to load TLS configuration: %v", err)
+			return
 		}
-	}()
+
+		// Start certificate watcher
+		go watchCertificates()
+
+		// Create HTTPS server
+		server := &http.Server{
+			Addr:    addr + ":" + port,
+			Handler: mux,
+			TLSConfig: &tls.Config{
+				GetCertificate: getCertificate,
+			},
+		}
+
+		log.Log(log.Info, "[CollatorAPI] Starting HTTPS API server on %s:%s", addr, port)
+		go func() {
+			if err := server.ListenAndServeTLS("", ""); err != nil {
+				log.Log(log.Fatal, "[CollatorAPI] Failed to start HTTPS server: %v", err)
+			}
+		}()
+	} else {
+		// Start HTTP server (no SSL)
+		log.Log(log.Info, "[CollatorAPI] Starting HTTP API server on %s:%s (no SSL configured)", addr, port)
+		go func() {
+			if err := http.ListenAndServe(addr+":"+port, mux); err != nil {
+				log.Log(log.Fatal, "[CollatorAPI] Failed to start HTTP server: %v", err)
+			}
+		}()
+	}
+}
+
+// loadTLSConfig loads the certificate and key from disk
+func loadTLSConfig() error {
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return fmt.Errorf("failed to load certificate: %w", err)
+	}
+
+	tlsMutex.Lock()
+	tlsConfig = &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
+	tlsMutex.Unlock()
+
+	// Update modification times
+	if certInfo, err := os.Stat(certPath); err == nil {
+		lastCertMod = certInfo.ModTime()
+	}
+	if keyInfo, err := os.Stat(keyPath); err == nil {
+		lastKeyMod = keyInfo.ModTime()
+	}
+
+	log.Log(log.Info, "[CollatorAPI] TLS configuration loaded successfully")
+	return nil
+}
+
+// getCertificate is called by the TLS handshake to get the current certificate
+func getCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	tlsMutex.RLock()
+	defer tlsMutex.RUnlock()
+
+	if tlsConfig != nil && len(tlsConfig.Certificates) > 0 {
+		return &tlsConfig.Certificates[0], nil
+	}
+
+	return nil, fmt.Errorf("no certificate available")
+}
+
+// watchCertificates monitors certificate files for changes
+func watchCertificates() {
+	ticker := time.NewTicker(30 * time.Second) // Check every 30 seconds
+	defer ticker.Stop()
+
+	for range ticker.C {
+		reloadNeeded := false
+
+		// Check certificate file
+		if certInfo, err := os.Stat(certPath); err == nil {
+			if !certInfo.ModTime().Equal(lastCertMod) {
+				reloadNeeded = true
+				log.Log(log.Info, "[CollatorAPI] Certificate file changed, reloading...")
+			}
+		} else {
+			log.Log(log.Error, "[CollatorAPI] Failed to stat certificate file: %v", err)
+			continue
+		}
+
+		// Check key file
+		if keyInfo, err := os.Stat(keyPath); err == nil {
+			if !keyInfo.ModTime().Equal(lastKeyMod) {
+				reloadNeeded = true
+				log.Log(log.Info, "[CollatorAPI] Key file changed, reloading...")
+			}
+		} else {
+			log.Log(log.Error, "[CollatorAPI] Failed to stat key file: %v", err)
+			continue
+		}
+
+		// Reload if needed
+		if reloadNeeded {
+			if err := loadTLSConfig(); err != nil {
+				log.Log(log.Error, "[CollatorAPI] Failed to reload TLS configuration: %v", err)
+			} else {
+				log.Log(log.Info, "[CollatorAPI] TLS configuration reloaded successfully")
+			}
+		}
+	}
 }
 
 // Helper functions
@@ -114,9 +234,23 @@ func parseTimeParams(r *http.Request) (time.Time, time.Time, error) {
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
+	// Check SSL status
+	sslEnabled := certPath != "" && keyPath != ""
+	sslStatus := "disabled"
+	if sslEnabled {
+		tlsMutex.RLock()
+		if tlsConfig != nil && len(tlsConfig.Certificates) > 0 {
+			sslStatus = "enabled"
+		} else {
+			sslStatus = "error"
+		}
+		tlsMutex.RUnlock()
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":    "healthy",
 		"timestamp": time.Now().UTC(),
 		"version":   cfg.GetVersion(),
+		"ssl":       sslStatus,
 	})
 }
