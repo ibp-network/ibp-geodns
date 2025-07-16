@@ -1,0 +1,184 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import ApiHelper from '../components/ApiHelper/ApiHelper';
+import './MemberView.css';
+
+const MemberView = () => {
+  const [members, setMembers] = useState([]);
+  const [downtime, setDowntime] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterLevel, setFilterLevel] = useState('all');
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [membersRes, downtimeRes] = await Promise.all([
+        ApiHelper.fetchMembers(),
+        ApiHelper.fetchCurrentDowntime()
+      ]);
+      setMembers(membersRes.data);
+      setDowntime(downtimeRes.data);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setLoading(false);
+    }
+  };
+
+  const getMemberStatus = (member) => {
+    const memberDowntime = downtime.filter(dt => dt.member_name === member.name);
+    if (memberDowntime.length === 0) return 'operational';
+    if (memberDowntime.length > 5) return 'offline';
+    return 'degraded';
+  };
+
+  const filteredMembers = members.filter(member => {
+    const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         member.region.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesLevel = filterLevel === 'all' || member.level === parseInt(filterLevel);
+    return matchesSearch && matchesLevel;
+  });
+
+  const groupedMembers = filteredMembers.reduce((acc, member) => {
+    const level = member.level || 1;
+    if (!acc[level]) acc[level] = [];
+    acc[level].push(member);
+    return acc;
+  }, {});
+
+  if (loading) {
+    return (
+      <div className="members-loading">
+        <div className="loading-spinner"></div>
+        <p>Loading members...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="member-view fade-in">
+      <div className="view-header">
+        <h1>Network Members</h1>
+        <div className="header-stats">
+          <div className="stat-item">
+            <span className="stat-value">{members.length}</span>
+            <span className="stat-label">Total Members</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value">{members.filter(m => getMemberStatus(m) === 'operational').length}</span>
+            <span className="stat-label">Operational</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value">{members.filter(m => m.services?.length > 0).reduce((sum, m) => sum + (m.services?.length || 0), 0)}</span>
+            <span className="stat-label">Total Services</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="member-controls">
+        <div className="search-box">
+          <span className="search-icon">🔍</span>
+          <input
+            type="text"
+            placeholder="Search members by name or region..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="search-input"
+          />
+        </div>
+        <select
+          value={filterLevel}
+          onChange={(e) => setFilterLevel(e.target.value)}
+          className="filter-select"
+        >
+          <option value="all">All Levels</option>
+          <option value="1">Level 1</option>
+          <option value="2">Level 2</option>
+          <option value="3">Level 3</option>
+        </select>
+      </div>
+
+      <div className="members-grid">
+        {Object.entries(groupedMembers).sort((a, b) => b[0] - a[0]).map(([level, levelMembers]) => (
+          <div key={level} className="level-section">
+            <h2 className="level-header">Level {level} Members</h2>
+            <div className="members-list">
+              {levelMembers.map(member => {
+                const status = getMemberStatus(member);
+                const memberDowntime = downtime.filter(dt => dt.member_name === member.name);
+                
+                return (
+                  <div
+                    key={member.name}
+                    className={`member-card card ${status}`}
+                    onClick={() => navigate(`/members/${member.name}`)}
+                  >
+                    <div className="member-header">
+                      <div className="member-logo">
+                        {member.logo ? (
+                          <img src={member.logo} alt={member.name} />
+                        ) : (
+                          <div className="logo-placeholder">
+                            {member.name.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="member-info">
+                        <h3 className="member-name">{member.name}</h3>
+                        <p className="member-region">{member.region}</p>
+                      </div>
+                      <div className={`member-status status-${status}`}>
+                        <span className="status-indicator"></span>
+                        <span className="status-text">
+                          {status === 'operational' ? 'Operational' :
+                           status === 'degraded' ? 'Degraded' : 'Offline'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="member-details">
+                      <div className="detail-item">
+                        <span className="detail-label">Services</span>
+                        <span className="detail-value">{member.services?.length || 0}</span>
+                      </div>
+                      <div className="detail-item">
+                        <span className="detail-label">Joined</span>
+                        <span className="detail-value">{member.joined_date}</span>
+                      </div>
+                      <div className="detail-item">
+                        <span className="detail-label">Location</span>
+                        <span className="detail-value">{member.latitude?.toFixed(2)}, {member.longitude?.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    {memberDowntime.length > 0 && (
+                      <div className="member-issues">
+                        <p className="issues-text">
+                          {memberDowntime.length} service{memberDowntime.length > 1 ? 's' : ''} affected
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="member-footer">
+                      <a href={member.website} target="_blank" rel="noopener noreferrer" 
+                         onClick={(e) => e.stopPropagation()} className="member-website">
+                        🌐 Visit Website
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default MemberView;
