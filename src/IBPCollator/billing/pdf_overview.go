@@ -12,43 +12,51 @@ import (
 	"github.com/phpdave11/gofpdf"
 )
 
-// writeMonthlyOverviewPDF generates a summary PDF for all members
-func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, tmpDir string, month time.Time) error {
-	baseDir := filepath.Dir(tmpDir)
-	logoPath := findLogo(baseDir)
+// writeMonthlyOverviewPDF generates a summary PDF for all members with modern design
+func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month time.Time) error {
+	logoPath := findLogo(filepath.Dir(outDir))
+	filename := filepath.Join(outDir, fmt.Sprintf("%s-Monthly_Overview.pdf", month.Format("2006_01")))
 
-	const titleFmt = "IBP Network - Monthly Overview (%s %d)"
-	title := fmt.Sprintf(titleFmt, month.Format("January"), month.Year())
-
-	pdf := gofpdf.New("L", "mm", "A4", "") // Landscape orientation for more columns
-	pdf.SetTitle(title, false)
+	pdf := gofpdf.New("L", "mm", "A4", "") // Landscape
+	pdf.SetTitle("IBP Network Monthly Overview", false)
 	pdf.SetAuthor("IBPCollator "+Version(), false)
 
-	// Global header
+	// Modern header
 	pdf.SetHeaderFuncMode(func() {
-		pdf.SetFont("Helvetica", "B", 15)
-		pdf.CellFormat(0, 10, title, "", 1, "C", false, 0, "")
-		pdf.SetFont("Helvetica", "", 10)
-		pdf.CellFormat(0, 6, time.Now().UTC().Format("02 Jan 2006 15:04 UTC"),
-			"", 0, "C", false, 0, "")
+		pdf.SetFillColor(30, 30, 30)
+		pdf.Rect(0, 0, 297, 25, "F")
+
+		if logoPath != "" {
+			pdf.Image(logoPath, 10, 5, 30, 0, false, "", 0, "")
+		}
+
+		pdf.SetTextColor(255, 255, 255)
+		pdf.SetFont("Helvetica", "B", 18)
+		pdf.SetXY(50, 8)
+		pdf.CellFormat(200, 8, "IBP Network Monthly Overview", "", 0, "L", false, 0, "")
+
+		pdf.SetFont("Helvetica", "", 12)
+		pdf.SetXY(50, 16)
+		pdf.CellFormat(200, 5, month.Format("January 2006"), "", 0, "L", false, 0, "")
+
+		pdf.SetTextColor(0, 0, 0)
+		pdf.SetY(30)
 	}, true)
 
 	pdf.SetFooterFunc(func() {
 		pdf.SetY(-15)
-		pdf.SetFont("Helvetica", "I", 9)
-		pdf.CellFormat(0, 10,
-			fmt.Sprintf("page %d of {nb}", pdf.PageNo()), "", 0, "C", false, 0, "")
+		pdf.SetFont("Helvetica", "I", 8)
+		pdf.SetTextColor(128, 128, 128)
+		pdf.CellFormat(0, 10, fmt.Sprintf("Page %d of {nb}", pdf.PageNo()), "", 0, "C", false, 0, "")
+		pdf.SetTextColor(0, 0, 0)
 	})
 
 	pdf.AliasNbPages("")
-	addPageWithWatermark(pdf, logoPath)
+	pdf.AddPage()
 
 	// Calculate statistics
 	memberStats := calculateMemberStats(month)
-	totalRequests := 0
-	for _, stats := range memberStats {
-		totalRequests += stats.RequestCount
-	}
+	totalRequests := calculateTotalRequests(month)
 
 	// Get member names in order
 	memberNames := make([]string, 0, len(sum.Members))
@@ -57,32 +65,94 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, tmpDir string, month 
 	}
 	sort.Strings(memberNames)
 
-	// Summary statistics at the top
-	pdf.SetFont("Helvetica", "B", 12)
-	pdf.CellFormat(0, 8, fmt.Sprintf("Total DNS Requests: %d", totalRequests), "", 1, "L", false, 0, "")
-	pdf.CellFormat(0, 8, fmt.Sprintf("Active Members: %d", len(memberNames)), "", 1, "L", false, 0, "")
-	pdf.CellFormat(0, 8, fmt.Sprintf("Billing Period: %s", month.Format("January 2006")), "", 1, "L", false, 0, "")
-	pdf.Ln(5)
+	// Summary cards at the top
+	y := 35.0
+	cardWidth := 90.0
+	cardHeight := 25.0
+	spacing := 5.0
 
-	// Table columns
+	// Total requests card
+	drawGradientCard(pdf, 10, y, cardWidth, cardHeight, 70, 130, 180)
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetXY(12, y+5)
+	pdf.CellFormat(cardWidth-4, 5, "Total DNS Requests", "", 1, "C", false, 0, "")
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.SetXY(12, y+12)
+	pdf.CellFormat(cardWidth-4, 8, formatNumber(totalRequests), "", 0, "C", false, 0, "")
+
+	// Active members card
+	drawGradientCard(pdf, 10+cardWidth+spacing, y, cardWidth, cardHeight, 46, 125, 50)
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetXY(12+cardWidth+spacing, y+5)
+	pdf.CellFormat(cardWidth-4, 5, "Active Members", "", 1, "C", false, 0, "")
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.SetXY(12+cardWidth+spacing, y+12)
+	pdf.CellFormat(cardWidth-4, 8, fmt.Sprintf("%d", len(memberNames)), "", 0, "C", false, 0, "")
+
+	// Total billed card
+	var grandTotalBilled float64
+	for _, mem := range memberNames {
+		for svcName, baseCost := range sum.Members[mem].ServiceCosts {
+			breakdown := getSLABreakdown(sla, mem, svcName)
+			grandTotalBilled += baseCost * (breakdown.Uptime / 100.0)
+		}
+	}
+
+	drawGradientCard(pdf, 10+2*(cardWidth+spacing), y, cardWidth, cardHeight, 255, 152, 0)
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetXY(12+2*(cardWidth+spacing), y+5)
+	pdf.CellFormat(cardWidth-4, 5, "Total Billed", "", 1, "C", false, 0, "")
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.SetXY(12+2*(cardWidth+spacing), y+12)
+	pdf.CellFormat(cardWidth-4, 8, fmt.Sprintf("$%s", formatNumber(int(grandTotalBilled))), "", 0, "C", false, 0, "")
+
+	pdf.SetTextColor(0, 0, 0)
+
+	// Main table
+	y = 70
+	pdf.SetFont("Helvetica", "B", 14)
+	pdf.SetXY(10, y)
+	pdf.CellFormat(277, 8, "Member Performance Summary", "", 1, "L", false, 0, "")
+	y += 10
+
+	// Table setup
 	const (
-		colMemberW   = 40.0
+		colMemberW   = 45.0
 		colLevelW    = 15.0
-		colRequestsW = 30.0
+		colRequestsW = 35.0
 		colPercentW  = 25.0
 		colServicesW = 20.0
-		colDowntimeW = 30.0
-		colBaseCostW = 30.0
-		colBilledW   = 30.0
+		colDowntimeW = 25.0
 		colUptimeW   = 25.0
-		rowH         = 7.0
+		colBaseCostW = 35.0
+		colBilledW   = 35.0
+		colStatusW   = 20.0
+		rowH         = 8.0
 	)
 
-	// Calculate totals
-	var grandTotalBase, grandTotalBilled float64
-	totalDowntimeServices := 0
+	// Table header with modern style
+	pdf.SetFillColor(50, 50, 50)
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetFont("Helvetica", "B", 9)
 
-	// Prepare data
+	pdf.SetXY(10, y)
+	pdf.CellFormat(colMemberW, rowH, "Member", "1", 0, "L", true, 0, "")
+	pdf.CellFormat(colLevelW, rowH, "Lvl", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(colRequestsW, rowH, "Requests", "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colPercentW, rowH, "Share", "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colServicesW, rowH, "Svcs", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(colDowntimeW, rowH, "Down", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(colUptimeW, rowH, "Uptime", "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colBaseCostW, rowH, "Base Cost", "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colBilledW, rowH, "Billed", "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colStatusW, rowH, "SLA", "1", 1, "C", true, 0, "")
+
+	pdf.SetTextColor(0, 0, 0)
+	pdf.SetFont("Helvetica", "", 9)
+	y += rowH
+
+	// Prepare member data
 	type memberRow struct {
 		name             string
 		level            int
@@ -102,12 +172,10 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, tmpDir string, month 
 	for _, mem := range memberNames {
 		row := memberRow{name: mem}
 
-		// Get member config
 		if memberConfig, exists := c.Members[mem]; exists {
 			row.level = memberConfig.Membership.Level
 		}
 
-		// Get request stats
 		if stats, exists := memberStats[mem]; exists {
 			row.requests = stats.RequestCount
 			if totalRequests > 0 {
@@ -115,15 +183,16 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, tmpDir string, month 
 			}
 		}
 
-		// Calculate costs and uptime
 		row.serviceCount = len(sum.Members[mem].ServiceCosts)
 		totalUptime := 0.0
 		uptimeCount := 0
+		row.meetsSLA = true
 
 		for svcName, baseCost := range sum.Members[mem].ServiceCosts {
 			row.baseCost += baseCost
 			breakdown := getSLABreakdown(sla, mem, svcName)
 
+			// For site checks, if there's downtime it affects all services
 			if breakdown.HoursDown > 0 {
 				row.downtimeServices++
 			}
@@ -146,135 +215,127 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, tmpDir string, month 
 		}
 
 		memberData = append(memberData, row)
-		grandTotalBase += row.baseCost
-		grandTotalBilled += row.billedCost
-		totalDowntimeServices += row.downtimeServices
 	}
 
-	// Table header
-	pdf.SetFont("Helvetica", "B", 10)
-	pdf.SetFillColor(240, 240, 240)
-
-	pdf.CellFormat(colMemberW, rowH, "Member", "1", 0, "L", true, 0, "")
-	pdf.CellFormat(colLevelW, rowH, "Level", "1", 0, "C", true, 0, "")
-	pdf.CellFormat(colRequestsW, rowH, "Requests", "1", 0, "R", true, 0, "")
-	pdf.CellFormat(colPercentW, rowH, "% of Total", "1", 0, "R", true, 0, "")
-	pdf.CellFormat(colServicesW, rowH, "Services", "1", 0, "C", true, 0, "")
-	pdf.CellFormat(colDowntimeW, rowH, "Down Services", "1", 0, "C", true, 0, "")
-	pdf.CellFormat(colUptimeW, rowH, "Avg Uptime", "1", 0, "R", true, 0, "")
-	pdf.CellFormat(colBaseCostW, rowH, "Base Cost", "1", 0, "R", true, 0, "")
-	pdf.CellFormat(colBilledW, rowH, "Billed Amount", "1", 1, "R", true, 0, "")
-
-	pdf.SetFont("Helvetica", "", 9)
+	// Table rows with alternating colors
 	fillToggle := false
-
-	// Table rows
 	for _, row := range memberData {
-		if pdf.GetY() > 180 { // Landscape has less vertical space
-			addPageWithWatermark(pdf, logoPath)
+		if y > 180 {
+			pdf.AddPage()
+			y = 35
 
 			// Reprint header
-			pdf.SetFont("Helvetica", "B", 10)
-			pdf.SetFillColor(240, 240, 240)
+			pdf.SetFillColor(50, 50, 50)
+			pdf.SetTextColor(255, 255, 255)
+			pdf.SetFont("Helvetica", "B", 9)
 
+			pdf.SetXY(10, y)
 			pdf.CellFormat(colMemberW, rowH, "Member", "1", 0, "L", true, 0, "")
-			pdf.CellFormat(colLevelW, rowH, "Level", "1", 0, "C", true, 0, "")
+			pdf.CellFormat(colLevelW, rowH, "Lvl", "1", 0, "C", true, 0, "")
 			pdf.CellFormat(colRequestsW, rowH, "Requests", "1", 0, "R", true, 0, "")
-			pdf.CellFormat(colPercentW, rowH, "% of Total", "1", 0, "R", true, 0, "")
-			pdf.CellFormat(colServicesW, rowH, "Services", "1", 0, "C", true, 0, "")
-			pdf.CellFormat(colDowntimeW, rowH, "Down Services", "1", 0, "C", true, 0, "")
-			pdf.CellFormat(colUptimeW, rowH, "Avg Uptime", "1", 0, "R", true, 0, "")
+			pdf.CellFormat(colPercentW, rowH, "Share", "1", 0, "R", true, 0, "")
+			pdf.CellFormat(colServicesW, rowH, "Svcs", "1", 0, "C", true, 0, "")
+			pdf.CellFormat(colDowntimeW, rowH, "Down", "1", 0, "C", true, 0, "")
+			pdf.CellFormat(colUptimeW, rowH, "Uptime", "1", 0, "R", true, 0, "")
 			pdf.CellFormat(colBaseCostW, rowH, "Base Cost", "1", 0, "R", true, 0, "")
-			pdf.CellFormat(colBilledW, rowH, "Billed Amount", "1", 1, "R", true, 0, "")
+			pdf.CellFormat(colBilledW, rowH, "Billed", "1", 0, "R", true, 0, "")
+			pdf.CellFormat(colStatusW, rowH, "SLA", "1", 1, "C", true, 0, "")
 
+			pdf.SetTextColor(0, 0, 0)
 			pdf.SetFont("Helvetica", "", 9)
+			y += rowH
 		}
 
 		fillToggle = !fillToggle
+		if fillToggle {
+			pdf.SetFillColor(245, 245, 245)
+		} else {
+			pdf.SetFillColor(255, 255, 255)
+		}
+
+		pdf.SetXY(10, y)
 
 		// Member name
-		pdf.CellFormat(colMemberW, rowH, row.name, "1", 0, "L", fillToggle, 0, "")
+		pdf.CellFormat(colMemberW, rowH, row.name, "1", 0, "L", true, 0, "")
 
 		// Level
-		pdf.CellFormat(colLevelW, rowH, fmt.Sprintf("%d", row.level), "1", 0, "C", fillToggle, 0, "")
+		pdf.CellFormat(colLevelW, rowH, fmt.Sprintf("%d", row.level), "1", 0, "C", true, 0, "")
 
 		// Requests
-		pdf.CellFormat(colRequestsW, rowH, fmt.Sprintf("%d", row.requests), "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colRequestsW, rowH, formatNumber(row.requests), "1", 0, "R", true, 0, "")
 
 		// Percentage
-		pdf.CellFormat(colPercentW, rowH, fmt.Sprintf("%.2f%%", row.percentage), "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colPercentW, rowH, fmt.Sprintf("%.1f%%", row.percentage), "1", 0, "R", true, 0, "")
 
 		// Services
-		pdf.CellFormat(colServicesW, rowH, fmt.Sprintf("%d", row.serviceCount), "1", 0, "C", fillToggle, 0, "")
+		pdf.CellFormat(colServicesW, rowH, fmt.Sprintf("%d", row.serviceCount), "1", 0, "C", true, 0, "")
 
 		// Downtime services
 		if row.downtimeServices > 0 {
 			pdf.SetTextColor(255, 0, 0)
 		}
-		pdf.CellFormat(colDowntimeW, rowH, fmt.Sprintf("%d", row.downtimeServices), "1", 0, "C", fillToggle, 0, "")
+		pdf.CellFormat(colDowntimeW, rowH, fmt.Sprintf("%d", row.downtimeServices), "1", 0, "C", true, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 
 		// Average uptime
 		if row.avgUptime < DefaultSLAPercentage {
 			pdf.SetTextColor(255, 0, 0)
 		}
-		pdf.CellFormat(colUptimeW, rowH, fmt.Sprintf("%.2f%%", row.avgUptime), "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colUptimeW, rowH, fmt.Sprintf("%.2f%%", row.avgUptime), "1", 0, "R", true, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 
 		// Base cost
-		pdf.CellFormat(colBaseCostW, rowH, fmt.Sprintf("$%.2f", row.baseCost), "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colBaseCostW, rowH, fmt.Sprintf("$%.2f", row.baseCost), "1", 0, "R", true, 0, "")
 
 		// Billed amount
-		pdf.CellFormat(colBilledW, rowH, fmt.Sprintf("$%.2f", row.billedCost), "1", 1, "R", fillToggle, 0, "")
-	}
+		pdf.CellFormat(colBilledW, rowH, fmt.Sprintf("$%.2f", row.billedCost), "1", 0, "R", true, 0, "")
 
-	// Totals row
-	pdf.SetFont("Helvetica", "B", 10)
-	totalColWidth := colMemberW + colLevelW + colRequestsW + colPercentW + colServicesW + colDowntimeW + colUptimeW
-	pdf.CellFormat(totalColWidth, rowH, "TOTALS", "1", 0, "R", false, 0, "")
-	pdf.CellFormat(colBaseCostW, rowH, fmt.Sprintf("$%.2f", grandTotalBase), "1", 0, "R", false, 0, "")
-	pdf.CellFormat(colBilledW, rowH, fmt.Sprintf("$%.2f", grandTotalBilled), "1", 1, "R", false, 0, "")
-
-	// Summary section
-	pdf.Ln(10)
-	pdf.SetFont("Helvetica", "B", 11)
-	pdf.CellFormat(0, 8, "Summary Statistics", "", 1, "L", false, 0, "")
-
-	pdf.SetFont("Helvetica", "", 10)
-	pdf.CellFormat(0, 6, fmt.Sprintf("Total Base Cost: $%.2f", grandTotalBase), "", 1, "L", false, 0, "")
-	pdf.CellFormat(0, 6, fmt.Sprintf("Total Billed Amount: $%.2f", grandTotalBilled), "", 1, "L", false, 0, "")
-	pdf.CellFormat(0, 6, fmt.Sprintf("Total Savings from SLA Credits: $%.2f", grandTotalBase-grandTotalBilled), "", 1, "L", false, 0, "")
-	pdf.CellFormat(0, 6, fmt.Sprintf("Services with Downtime: %d", totalDowntimeServices), "", 1, "L", false, 0, "")
-
-	// SLA violations section
-	pdf.Ln(5)
-	pdf.SetFont("Helvetica", "B", 11)
-	pdf.CellFormat(0, 8, "SLA Violations", "", 1, "L", false, 0, "")
-
-	pdf.SetFont("Helvetica", "", 9)
-	violationCount := 0
-	for _, row := range memberData {
-		if row.avgUptime < DefaultSLAPercentage {
-			violationCount++
+		// SLA status
+		if row.meetsSLA {
+			pdf.SetTextColor(0, 150, 0)
+			pdf.CellFormat(colStatusW, rowH, "✓", "1", 1, "C", true, 0, "")
+		} else {
 			pdf.SetTextColor(255, 0, 0)
-			pdf.CellFormat(0, 5, fmt.Sprintf("• %s - Average uptime: %.2f%% (Required: %.2f%%)",
-				row.name, row.avgUptime, DefaultSLAPercentage), "", 1, "L", false, 0, "")
-			pdf.SetTextColor(0, 0, 0)
+			pdf.CellFormat(colStatusW, rowH, "✗", "1", 1, "C", true, 0, "")
 		}
-	}
-
-	if violationCount == 0 {
-		pdf.SetTextColor(0, 128, 0)
-		pdf.CellFormat(0, 5, "No SLA violations this month", "", 1, "L", false, 0, "")
 		pdf.SetTextColor(0, 0, 0)
+
+		y += rowH
 	}
 
-	filename := filepath.Join(tmpDir,
-		fmt.Sprintf("monthly_overview_%s.pdf", month.Format("200601")))
 	if err := pdf.OutputFileAndClose(filename); err != nil {
 		return err
 	}
 
-	log.Log(log.Info, "[billing] monthly overview PDF written → %s", filename)
+	log.Log(log.Info, "[billing] Monthly overview PDF written → %s", filename)
 	return nil
+}
+
+// Helper functions for better design
+func drawGradientCard(pdf *gofpdf.Fpdf, x, y, w, h float64, r, g, b int) {
+	// Simple solid color card with shadow effect
+	pdf.SetFillColor(r-20, g-20, b-20)
+	pdf.Rect(x+1, y+1, w, h, "F")
+	pdf.SetFillColor(r, g, b)
+	pdf.Rect(x, y, w, h, "F")
+}
+
+func formatNumber(n int) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
+	}
+	if n < 1000000 {
+		return fmt.Sprintf("%.1fK", float64(n)/1000)
+	}
+	return fmt.Sprintf("%.1fM", float64(n)/1000000)
+}
+
+// calculateTotalRequests gets the total requests for the month
+func calculateTotalRequests(month time.Time) int {
+	stats := calculateMemberStats(month)
+	total := 0
+	for _, s := range stats {
+		total += s.RequestCount
+	}
+	return total
 }

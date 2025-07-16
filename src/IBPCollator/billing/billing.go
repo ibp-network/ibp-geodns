@@ -5,6 +5,7 @@ package billing
 // ─────────────────────────────────────────────────────────────────────────────
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -273,6 +274,13 @@ func generateMonthlyBillingPDF() {
 		return
 	}
 
+	// Create month directory
+	monthDir := filepath.Join(tmpDir, billingMonth.Format("2006-01"))
+	if err := os.MkdirAll(monthDir, 0755); err != nil {
+		log.Log(log.Error, "[billing] Failed to create month directory: %v", err)
+		return
+	}
+
 	snap := GetSummary()
 
 	// Calculate SLA for the billing month
@@ -300,21 +308,27 @@ func generateMonthlyBillingPDF() {
 		log.Log(log.Info, "[billing] Total SLA violations for %s: %d", billingMonth.Format("January 2006"), violationCount)
 	}
 
-	// Generate the detailed member billing PDF
-	if err := writeMemberBillingPDF(&snap, sla, tmpDir, billingMonth); err != nil {
-		log.Log(log.Error, "[billing] failed to write member-billing PDF: %v", err)
-	} else {
-		log.Log(log.Info, "[billing] Successfully generated member billing PDF for %s",
-			billingMonth.Format("January 2006"))
+	// Generate the monthly overview PDF
+	if err := writeMonthlyOverviewPDF(&snap, sla, monthDir, billingMonth); err != nil {
+		log.Log(log.Error, "[billing] failed to write monthly overview PDF: %v", err)
 	}
 
-	// Generate the monthly overview PDF
-	if err := writeMonthlyOverviewPDF(&snap, sla, tmpDir, billingMonth); err != nil {
-		log.Log(log.Error, "[billing] failed to write monthly overview PDF: %v", err)
-	} else {
-		log.Log(log.Info, "[billing] Successfully generated monthly overview PDF for %s",
-			billingMonth.Format("January 2006"))
+	// Generate individual member PDFs
+	for memberName := range snap.Members {
+		if err := writeMemberPDF(memberName, &snap, sla, monthDir, billingMonth); err != nil {
+			log.Log(log.Error, "[billing] failed to write member PDF for %s: %v", memberName, err)
+		}
 	}
+
+	// Create zip file
+	zipPath := filepath.Join(tmpDir, fmt.Sprintf("%s.zip", billingMonth.Format("2006-01")))
+	if err := createMonthlyZip(monthDir, zipPath); err != nil {
+		log.Log(log.Error, "[billing] failed to create zip file: %v", err)
+	} else {
+		log.Log(log.Info, "[billing] Successfully created billing zip: %s", zipPath)
+	}
+
+	log.Log(log.Info, "[billing] Monthly billing generation completed for %s", billingMonth.Format("January 2006"))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

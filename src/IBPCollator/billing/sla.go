@@ -3,6 +3,7 @@ package billing
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
@@ -116,12 +117,27 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 			out[memberID] = make(map[string]SLABreakdown)
 		}
 
+		// Check if there's a site-level downtime
+		siteDowntime := 0.0
+		if allServicesDowntime, exists := memberServiceDowntime[memberID]; exists {
+			if siteDown, exists2 := allServicesDowntime["ALL_SERVICES"]; exists2 {
+				siteDowntime = siteDown
+			}
+		}
+
 		for svcKey := range m.ServiceCosts {
-			downtime := 0.0
+			downtime := siteDowntime // Start with site-level downtime
+
+			// Add service-specific downtime
 			if memberDowntime, exists := memberServiceDowntime[memberID]; exists {
 				if svcDowntime, exists2 := memberDowntime[svcKey]; exists2 {
-					downtime = svcDowntime
+					downtime += svcDowntime
 				}
+			}
+
+			// Cap downtime at total hours
+			if downtime > totalHours {
+				downtime = totalHours
 			}
 
 			uptime := totalHours - downtime
@@ -145,29 +161,39 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 
 // mapDomainToService maps a domain name to a service name
 func mapDomainToService(domain, checkType string) string {
-	if domain == "" && checkType == "site" {
+	if checkType == "site" {
 		// Site-level checks affect all services
-		return "ALL"
+		return "ALL_SERVICES"
+	}
+
+	if domain == "" {
+		return ""
 	}
 
 	c := cfg.GetConfig()
 	for svcName, svc := range c.Services {
 		for _, provider := range svc.Providers {
 			for _, rpcUrl := range provider.RpcUrls {
-				if containsDomain(rpcUrl, domain) {
+				// Clean up the URL for comparison
+				cleanUrl := strings.ToLower(strings.TrimSpace(rpcUrl))
+				cleanDomain := strings.ToLower(strings.TrimSpace(domain))
+
+				// Check if the domain is contained in the RPC URL
+				if strings.Contains(cleanUrl, cleanDomain) {
+					return svcName
+				}
+
+				// Also check if the RPC URL contains the domain without protocol
+				if strings.Contains(cleanUrl, "://"+cleanDomain) ||
+					strings.Contains(cleanUrl, "://"+cleanDomain+":") ||
+					strings.Contains(cleanUrl, "://"+cleanDomain+"/") {
 					return svcName
 				}
 			}
 		}
 	}
 
+	// If no match found, log it for debugging
+	log.Log(log.Debug, "[SLA] Could not map domain '%s' to any service", domain)
 	return ""
-}
-
-func containsDomain(rpcUrl, domain string) bool {
-	if domain == "" || rpcUrl == "" {
-		return false
-	}
-	// Simple domain matching - could be enhanced
-	return true // Simplified for now, enhance based on actual URL parsing needs
 }
