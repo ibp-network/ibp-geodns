@@ -502,10 +502,11 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	countryStats := getCountryStatistics(month)
 
 	// Center the table
-	const geoTableWidth = 240.0
+	const geoTableWidth = 252.0
+	geoTableX := (297.0 - geoTableWidth) / 2
 
 	// Draw unified country table
-	drawUnifiedCountryTable(pdf, countryStats, 55, 0, 0)
+	drawUnifiedCountryTable(pdf, countryStats, 55, geoTableX, geoTableWidth)
 
 	// ===== PAGE 5: SERVICE/CHAIN DISTRIBUTION =====
 	pdf.AddPage()
@@ -517,10 +518,11 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	serviceStats := getServiceStatistics(month)
 
 	// Center the table
-	const svcTableWidth = 240.0
+	const svcTableWidth = 252.0
+	svcTableX := (297.0 - svcTableWidth) / 2
 
 	// Draw unified service table
-	drawUnifiedServiceTable(pdf, serviceStats, 55, 0, 0)
+	drawUnifiedServiceTable(pdf, serviceStats, 55, svcTableX, svcTableWidth)
 
 	if err := pdf.OutputFileAndClose(filename); err != nil {
 		return err
@@ -673,7 +675,7 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tab
 	// Table header
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
-	pdf.SetFont("Helvetica", "B", 10)
+	pdf.SetFont("Helvetica", "B", 11)
 	x = tableX
 	y = startY
 
