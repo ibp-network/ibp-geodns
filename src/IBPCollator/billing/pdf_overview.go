@@ -66,6 +66,7 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	// Calculate all statistics first
 	memberStats := calculateMemberStats(month)
 	totalRequests := calculateTotalRequests(month)
+
 	memberNames := make([]string, 0, len(sum.Members))
 	for m := range sum.Members {
 		memberNames = append(memberNames, m)
@@ -117,19 +118,15 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 		for svcName, baseCost := range sum.Members[mem].ServiceCosts {
 			row.baseCost += baseCost
 			breakdown := getSLABreakdown(sla, mem, svcName)
-
 			if breakdown.HoursDown > 0 {
 				row.downtimeServices++
 			}
-
 			if !breakdown.MeetsSLA {
 				row.meetsSLA = false
 				totalSLAViolations++
 			}
-
 			totalUptime += breakdown.Uptime
 			uptimeCount++
-
 			billed := baseCost * (breakdown.Uptime / 100.0)
 			row.billedCost += billed
 		}
@@ -199,7 +196,6 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	pdf.SetFont("Helvetica", "B", 20)
 	pdf.SetXY(startX+2*(cardWidth+spacing)+2, y+15)
 	pdf.CellFormat(cardWidth-4, 10, fmt.Sprintf("%.2f%%", avgNetworkUptime), "", 0, "C", false, 0, "")
-
 	pdf.SetTextColor(0, 0, 0)
 
 	// Financial Summary
@@ -249,11 +245,12 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	pdf.SetFont("Helvetica", "", 9)
 	pdf.SetXY(startX+2*(cardWidth+spacing)+2, y+28)
 	pdf.CellFormat(cardWidth-4, 5, fmt.Sprintf("%.1f%% savings", (savings/grandTotalBase)*100), "", 0, "C", false, 0, "")
-
 	pdf.SetTextColor(0, 0, 0)
 
-	// Service Health Summary
-	y += 55
+	// ===== PAGE 2: SERVICE HEALTH =====
+	pdf.AddPage()
+	y = 40
+
 	pdf.SetFont("Helvetica", "B", 16)
 	pdf.SetXY(20, y)
 	pdf.CellFormat(257, 10, "Service Health", "", 1, "L", false, 0, "")
@@ -295,13 +292,13 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	pdf.SetFont("Helvetica", "B", 11)
 	pdf.CellFormat(30, 6, fmt.Sprintf("%.2f%%", DefaultSLAPercentage), "", 0, "L", false, 0, "")
 
-	// ===== PAGE 2: MEMBER TABLE =====
+	// ===== PAGE 3: MEMBER BILLINGS TABLE =====
 	pdf.AddPage()
-
 	y = 40
+
 	pdf.SetFont("Helvetica", "B", 16)
 	pdf.SetXY(10, y)
-	pdf.CellFormat(277, 10, "Member Performance Details", "", 1, "L", false, 0, "")
+	pdf.CellFormat(277, 10, "Member Billings", "", 1, "L", false, 0, "")
 	y += 12
 
 	// Table setup
@@ -323,7 +320,6 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
 	pdf.SetFont("Helvetica", "B", 9)
-
 	pdf.SetXY(10, y)
 	pdf.CellFormat(colMemberW, rowH, "Member", "1", 0, "L", true, 0, "")
 	pdf.CellFormat(colLevelW, rowH, "Lvl", "1", 0, "C", true, 0, "")
@@ -335,7 +331,6 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	pdf.CellFormat(colBaseCostW, rowH, "Base Cost", "1", 0, "R", true, 0, "")
 	pdf.CellFormat(colBilledW, rowH, "Billed", "1", 0, "R", true, 0, "")
 	pdf.CellFormat(colStatusW, rowH, "SLA", "1", 1, "C", true, 0, "")
-
 	pdf.SetTextColor(0, 0, 0)
 	pdf.SetFont("Helvetica", "", 9)
 	y += rowH
@@ -351,7 +346,6 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 			pdf.SetFillColor(50, 50, 50)
 			pdf.SetTextColor(255, 255, 255)
 			pdf.SetFont("Helvetica", "B", 9)
-
 			pdf.SetXY(10, y)
 			pdf.CellFormat(colMemberW, rowH, "Member", "1", 0, "L", true, 0, "")
 			pdf.CellFormat(colLevelW, rowH, "Lvl", "1", 0, "C", true, 0, "")
@@ -363,7 +357,6 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 			pdf.CellFormat(colBaseCostW, rowH, "Base Cost", "1", 0, "R", true, 0, "")
 			pdf.CellFormat(colBilledW, rowH, "Billed", "1", 0, "R", true, 0, "")
 			pdf.CellFormat(colStatusW, rowH, "SLA", "1", 1, "C", true, 0, "")
-
 			pdf.SetTextColor(0, 0, 0)
 			pdf.SetFont("Helvetica", "", 9)
 			y += rowH
@@ -436,35 +429,33 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 	pdf.CellFormat(colBilledW, rowH, fmt.Sprintf("$%.2f", grandTotalBilled), "1", 0, "R", true, 0, "")
 	pdf.CellFormat(colStatusW, rowH, "", "1", 1, "C", true, 0, "")
 
-	// ===== PAGE 3: TOP COUNTRIES =====
+	// ===== PAGE 4: GEOGRAPHIC DISTRIBUTION =====
 	pdf.AddPage()
-
 	y = 40
 	pdf.SetFont("Helvetica", "B", 16)
 	pdf.SetXY(10, y)
-	pdf.CellFormat(277, 10, "Geographic Distribution", "", 1, "L", false, 0, "")
+	pdf.CellFormat(277, 10, "Geographic Distribution - Top 20", "", 1, "L", false, 0, "")
 	y += 15
 
 	// Get country statistics
 	countryStats := getCountryStatistics(month)
 
-	// Draw country statistics tables
-	drawCountryTables(pdf, countryStats, y)
+	// Draw unified country table
+	drawUnifiedCountryTable(pdf, countryStats, y)
 
-	// ===== PAGE 4: TOP SERVICES/CHAINS =====
+	// ===== PAGE 5: SERVICE/CHAIN DISTRIBUTION =====
 	pdf.AddPage()
-
 	y = 40
 	pdf.SetFont("Helvetica", "B", 16)
 	pdf.SetXY(10, y)
-	pdf.CellFormat(277, 10, "Service/Chain Distribution", "", 1, "L", false, 0, "")
+	pdf.CellFormat(277, 10, "Service/Chain Distribution - Top 20", "", 1, "L", false, 0, "")
 	y += 15
 
 	// Get service statistics
 	serviceStats := getServiceStatistics(month)
 
-	// Draw service statistics tables
-	drawServiceTables(pdf, serviceStats, y)
+	// Draw unified service table
+	drawUnifiedServiceTable(pdf, serviceStats, y)
 
 	if err := pdf.OutputFileAndClose(filename); err != nil {
 		return err
@@ -472,6 +463,238 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 
 	log.Log(log.Info, "[billing] Monthly overview PDF written → %s", filename)
 	return nil
+}
+
+// drawUnifiedCountryTable draws a single table with all 20 countries
+func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY float64) {
+	if len(stats) == 0 {
+		pdf.SetFont("Helvetica", "", 10)
+		pdf.SetXY(10, startY)
+		pdf.CellFormat(277, 10, "No country statistics available", "", 1, "C", false, 0, "")
+		return
+	}
+
+	// Column widths
+	const (
+		colRankW     = 15.0
+		colCountryW  = 60.0
+		colRequestsW = 25.0
+		colShareW    = 20.0
+		colChange1W  = 20.0
+		colChange3W  = 20.0
+		colChange6W  = 20.0
+		rowH         = 6.0
+	)
+
+	// Table header
+	pdf.SetFillColor(50, 50, 50)
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetFont("Helvetica", "B", 9)
+
+	x := 10.0
+	y := startY
+
+	pdf.SetXY(x, y)
+	pdf.CellFormat(colRankW, rowH, "#", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(colCountryW, rowH, "Country", "1", 0, "L", true, 0, "")
+	pdf.CellFormat(colRequestsW, rowH, "Requests", "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colShareW, rowH, "Share", "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colChange1W, rowH, "1M Ago", "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colChange3W, rowH, "3M Ago", "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colChange6W, rowH, "6M Ago", "1", 1, "R", true, 0, "")
+	pdf.SetTextColor(0, 0, 0)
+	y += rowH
+
+	// Data rows
+	pdf.SetFont("Helvetica", "", 8)
+	fillToggle := false
+
+	for i := 0; i < 20 && i < len(stats); i++ {
+		if y > 180 {
+			pdf.AddPage()
+			y = 40
+
+			// Reprint header
+			pdf.SetFillColor(50, 50, 50)
+			pdf.SetTextColor(255, 255, 255)
+			pdf.SetFont("Helvetica", "B", 9)
+			pdf.SetXY(x, y)
+			pdf.CellFormat(colRankW, rowH, "#", "1", 0, "C", true, 0, "")
+			pdf.CellFormat(colCountryW, rowH, "Country", "1", 0, "L", true, 0, "")
+			pdf.CellFormat(colRequestsW, rowH, "Requests", "1", 0, "R", true, 0, "")
+			pdf.CellFormat(colShareW, rowH, "Share", "1", 0, "R", true, 0, "")
+			pdf.CellFormat(colChange1W, rowH, "1M Ago", "1", 0, "R", true, 0, "")
+			pdf.CellFormat(colChange3W, rowH, "3M Ago", "1", 0, "R", true, 0, "")
+			pdf.CellFormat(colChange6W, rowH, "6M Ago", "1", 1, "R", true, 0, "")
+			pdf.SetTextColor(0, 0, 0)
+			pdf.SetFont("Helvetica", "", 8)
+			y += rowH
+		}
+
+		fillToggle = !fillToggle
+		if fillToggle {
+			pdf.SetFillColor(245, 245, 245)
+		} else {
+			pdf.SetFillColor(255, 255, 255)
+		}
+
+		pdf.SetXY(x, y)
+		pdf.CellFormat(colRankW, 5, fmt.Sprintf("%d", i+1), "1", 0, "C", fillToggle, 0, "")
+		pdf.CellFormat(colCountryW, 5, stats[i].CountryName, "1", 0, "L", fillToggle, 0, "")
+		pdf.CellFormat(colRequestsW, 5, formatNumber(stats[i].Requests), "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colShareW, 5, fmt.Sprintf("%.1f%%", stats[i].Percentage), "1", 0, "R", fillToggle, 0, "")
+
+		// 1M change
+		changeStr1 := formatChange(stats[i].Change1Month)
+		if stats[i].Change1Month > 0 {
+			pdf.SetTextColor(0, 150, 0)
+		} else if stats[i].Change1Month < 0 {
+			pdf.SetTextColor(255, 0, 0)
+		}
+		pdf.CellFormat(colChange1W, 5, changeStr1, "1", 0, "R", fillToggle, 0, "")
+		pdf.SetTextColor(0, 0, 0)
+
+		// 3M change
+		changeStr3 := formatChange(stats[i].Change3Months)
+		if stats[i].Change3Months > 0 {
+			pdf.SetTextColor(0, 150, 0)
+		} else if stats[i].Change3Months < 0 {
+			pdf.SetTextColor(255, 0, 0)
+		}
+		pdf.CellFormat(colChange3W, 5, changeStr3, "1", 0, "R", fillToggle, 0, "")
+		pdf.SetTextColor(0, 0, 0)
+
+		// 6M change
+		changeStr6 := formatChange(stats[i].Change6Months)
+		if stats[i].Change6Months > 0 {
+			pdf.SetTextColor(0, 150, 0)
+		} else if stats[i].Change6Months < 0 {
+			pdf.SetTextColor(255, 0, 0)
+		}
+		pdf.CellFormat(colChange6W, 5, changeStr6, "1", 1, "R", fillToggle, 0, "")
+		pdf.SetTextColor(0, 0, 0)
+
+		y += 5
+	}
+}
+
+// drawUnifiedServiceTable draws a single table with all 20 services
+func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY float64) {
+	if len(stats) == 0 {
+		pdf.SetFont("Helvetica", "", 10)
+		pdf.SetXY(10, startY)
+		pdf.CellFormat(277, 10, "No service statistics available", "", 1, "C", false, 0, "")
+		return
+	}
+
+	// Column widths
+	const (
+		colRankW     = 15.0
+		colServiceW  = 70.0
+		colRequestsW = 25.0
+		colShareW    = 20.0
+		colChange1W  = 20.0
+		colChange3W  = 20.0
+		colChange6W  = 20.0
+		rowH         = 6.0
+	)
+
+	// Table header
+	pdf.SetFillColor(50, 50, 50)
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetFont("Helvetica", "B", 9)
+
+	x := 10.0
+	y := startY
+
+	pdf.SetXY(x, y)
+	pdf.CellFormat(colRankW, rowH, "#", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(colServiceW, rowH, "Service/Chain", "1", 0, "L", true, 0, "")
+	pdf.CellFormat(colRequestsW, rowH, "Requests", "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colShareW, rowH, "Share", "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colChange1W, rowH, "1M Ago", "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colChange3W, rowH, "3M Ago", "1", 0, "R", true, 0, "")
+	pdf.CellFormat(colChange6W, rowH, "6M Ago", "1", 1, "R", true, 0, "")
+	pdf.SetTextColor(0, 0, 0)
+	y += rowH
+
+	// Data rows
+	pdf.SetFont("Helvetica", "", 8)
+	fillToggle := false
+
+	for i := 0; i < 20 && i < len(stats); i++ {
+		if y > 180 {
+			pdf.AddPage()
+			y = 40
+
+			// Reprint header
+			pdf.SetFillColor(50, 50, 50)
+			pdf.SetTextColor(255, 255, 255)
+			pdf.SetFont("Helvetica", "B", 9)
+			pdf.SetXY(x, y)
+			pdf.CellFormat(colRankW, rowH, "#", "1", 0, "C", true, 0, "")
+			pdf.CellFormat(colServiceW, rowH, "Service/Chain", "1", 0, "L", true, 0, "")
+			pdf.CellFormat(colRequestsW, rowH, "Requests", "1", 0, "R", true, 0, "")
+			pdf.CellFormat(colShareW, rowH, "Share", "1", 0, "R", true, 0, "")
+			pdf.CellFormat(colChange1W, rowH, "1M Ago", "1", 0, "R", true, 0, "")
+			pdf.CellFormat(colChange3W, rowH, "3M Ago", "1", 0, "R", true, 0, "")
+			pdf.CellFormat(colChange6W, rowH, "6M Ago", "1", 1, "R", true, 0, "")
+			pdf.SetTextColor(0, 0, 0)
+			pdf.SetFont("Helvetica", "", 8)
+			y += rowH
+		}
+
+		fillToggle = !fillToggle
+		if fillToggle {
+			pdf.SetFillColor(245, 245, 245)
+		} else {
+			pdf.SetFillColor(255, 255, 255)
+		}
+
+		// Truncate service name if too long
+		serviceName := stats[i].Service
+		if len(serviceName) > 35 {
+			serviceName = serviceName[:32] + "..."
+		}
+
+		pdf.SetXY(x, y)
+		pdf.CellFormat(colRankW, 5, fmt.Sprintf("%d", i+1), "1", 0, "C", fillToggle, 0, "")
+		pdf.CellFormat(colServiceW, 5, serviceName, "1", 0, "L", fillToggle, 0, "")
+		pdf.CellFormat(colRequestsW, 5, formatNumber(stats[i].Requests), "1", 0, "R", fillToggle, 0, "")
+		pdf.CellFormat(colShareW, 5, fmt.Sprintf("%.1f%%", stats[i].Percentage), "1", 0, "R", fillToggle, 0, "")
+
+		// 1M change
+		changeStr1 := formatChange(stats[i].Change1Month)
+		if stats[i].Change1Month > 0 {
+			pdf.SetTextColor(0, 150, 0)
+		} else if stats[i].Change1Month < 0 {
+			pdf.SetTextColor(255, 0, 0)
+		}
+		pdf.CellFormat(colChange1W, 5, changeStr1, "1", 0, "R", fillToggle, 0, "")
+		pdf.SetTextColor(0, 0, 0)
+
+		// 3M change
+		changeStr3 := formatChange(stats[i].Change3Months)
+		if stats[i].Change3Months > 0 {
+			pdf.SetTextColor(0, 150, 0)
+		} else if stats[i].Change3Months < 0 {
+			pdf.SetTextColor(255, 0, 0)
+		}
+		pdf.CellFormat(colChange3W, 5, changeStr3, "1", 0, "R", fillToggle, 0, "")
+		pdf.SetTextColor(0, 0, 0)
+
+		// 6M change
+		changeStr6 := formatChange(stats[i].Change6Months)
+		if stats[i].Change6Months > 0 {
+			pdf.SetTextColor(0, 150, 0)
+		} else if stats[i].Change6Months < 0 {
+			pdf.SetTextColor(255, 0, 0)
+		}
+		pdf.CellFormat(colChange6W, 5, changeStr6, "1", 1, "R", fillToggle, 0, "")
+		pdf.SetTextColor(0, 0, 0)
+
+		y += 5
+	}
 }
 
 // CountryStats holds statistics for a country
@@ -563,26 +786,28 @@ func getCountryRequestsForMonth(month time.Time) map[string]int {
 	endDate := month.AddDate(0, 1, 0).Add(-24 * time.Hour).Format("2006-01-02")
 
 	query := `
-		SELECT 
-			COALESCE(country_code, 'XX') as country,
-			SUM(hits) as total_hits
-		FROM requests
-		WHERE date >= ? AND date <= ?
-		GROUP BY country_code
-		ORDER BY total_hits DESC
-	`
-
+        SELECT 
+            COALESCE(country_code, 'XX') as country,
+            COALESCE(country_name, 'Unknown') as country_name,  // ADD THIS LINE
+            SUM(hits) as total_hits
+        FROM requests
+        WHERE date >= ? AND date <= ?
+        GROUP BY country_code, country_name  // ADD country_name HERE
+        ORDER BY total_hits DESC
+    `
 	rows, err := data2.DB.Query(query, startDate, endDate)
 	if err != nil {
 		log.Log(log.Error, "[billing] Failed to query country stats: %v", err)
 		return result
 	}
+
 	defer rows.Close()
 
 	for rows.Next() {
 		var country string
+		var countryName string
 		var hits int
-		if err := rows.Scan(&country, &hits); err == nil {
+		if err := rows.Scan(&country, &countryName, &hits); err == nil {
 			result[country] = hits
 		}
 	}
@@ -691,228 +916,40 @@ func getServiceRequestsForMonth(month time.Time) map[string]int {
 	return result
 }
 
-// drawCountryTables draws the country statistics tables
-func drawCountryTables(pdf *gofpdf.Fpdf, stats []CountryStats, startY float64) {
-	if len(stats) == 0 {
-		pdf.SetFont("Helvetica", "", 10)
-		pdf.SetXY(10, startY)
-		pdf.CellFormat(277, 10, "No country statistics available", "", 1, "C", false, 0, "")
-		return
-	}
-
-	// Column widths
-	const (
-		colRankW     = 12.0
-		colCountryW  = 40.0
-		colRequestsW = 30.0
-		colShareW    = 20.0
-		colChangeW   = 25.0
-		tableWidth   = colRankW + colCountryW + colRequestsW + colShareW + colChangeW
-		spacing      = 10.0
-	)
-
-	leftX := 10.0
-	rightX := leftX + tableWidth + spacing
-
-	// Left side - Top 10
-	y := startY
-	pdf.SetFont("Helvetica", "B", 12)
-	pdf.SetXY(leftX, y)
-	pdf.CellFormat(tableWidth, 8, "Top 10 Countries", "", 1, "L", false, 0, "")
-	y += 10
-
-	// Header
-	pdf.SetFillColor(50, 50, 50)
-	pdf.SetTextColor(255, 255, 255)
-	pdf.SetFont("Helvetica", "B", 8)
-	pdf.SetXY(leftX, y)
-	pdf.CellFormat(colRankW, 6, "#", "1", 0, "C", true, 0, "")
-	pdf.CellFormat(colCountryW, 6, "Country", "1", 0, "L", true, 0, "")
-	pdf.CellFormat(colRequestsW, 6, "Requests", "1", 0, "R", true, 0, "")
-	pdf.CellFormat(colShareW, 6, "Share", "1", 0, "R", true, 0, "")
-	pdf.CellFormat(colChangeW, 6, "vs 1M ago", "1", 1, "R", true, 0, "")
-	pdf.SetTextColor(0, 0, 0)
-	y += 6
-
-	// Data rows
-	pdf.SetFont("Helvetica", "", 8)
-	for i := 0; i < 10 && i < len(stats); i++ {
-		pdf.SetXY(leftX, y)
-		pdf.CellFormat(colRankW, 5, fmt.Sprintf("%d", i+1), "1", 0, "C", false, 0, "")
-		pdf.CellFormat(colCountryW, 5, stats[i].CountryName, "1", 0, "L", false, 0, "")
-		pdf.CellFormat(colRequestsW, 5, formatNumber(stats[i].Requests), "1", 0, "R", false, 0, "")
-		pdf.CellFormat(colShareW, 5, fmt.Sprintf("%.1f%%", stats[i].Percentage), "1", 0, "R", false, 0, "")
-
-		// Change color
-		changeStr := formatChange(stats[i].Change1Month)
-		if stats[i].Change1Month > 0 {
-			pdf.SetTextColor(0, 150, 0)
-		} else if stats[i].Change1Month < 0 {
-			pdf.SetTextColor(255, 0, 0)
-		}
-		pdf.CellFormat(colChangeW, 5, changeStr, "1", 1, "R", false, 0, "")
-		pdf.SetTextColor(0, 0, 0)
-		y += 5
-	}
-
-	// Right side - Top 11-20
-	y = startY
-	pdf.SetFont("Helvetica", "B", 12)
-	pdf.SetXY(rightX, y)
-	pdf.CellFormat(tableWidth, 8, "Countries 11-20", "", 1, "L", false, 0, "")
-	y += 10
-
-	// Header
-	pdf.SetFillColor(50, 50, 50)
-	pdf.SetTextColor(255, 255, 255)
-	pdf.SetFont("Helvetica", "B", 8)
-	pdf.SetXY(rightX, y)
-	pdf.CellFormat(colRankW, 6, "#", "1", 0, "C", true, 0, "")
-	pdf.CellFormat(colCountryW, 6, "Country", "1", 0, "L", true, 0, "")
-	pdf.CellFormat(colRequestsW, 6, "Requests", "1", 0, "R", true, 0, "")
-	pdf.CellFormat(colShareW, 6, "Share", "1", 0, "R", true, 0, "")
-	pdf.CellFormat(colChangeW, 6, "vs 3M ago", "1", 1, "R", true, 0, "")
-	pdf.SetTextColor(0, 0, 0)
-	y += 6
-
-	// Data rows
-	pdf.SetFont("Helvetica", "", 8)
-	for i := 10; i < 20 && i < len(stats); i++ {
-		pdf.SetXY(rightX, y)
-		pdf.CellFormat(colRankW, 5, fmt.Sprintf("%d", i+1), "1", 0, "C", false, 0, "")
-		pdf.CellFormat(colCountryW, 5, stats[i].CountryName, "1", 0, "L", false, 0, "")
-		pdf.CellFormat(colRequestsW, 5, formatNumber(stats[i].Requests), "1", 0, "R", false, 0, "")
-		pdf.CellFormat(colShareW, 5, fmt.Sprintf("%.1f%%", stats[i].Percentage), "1", 0, "R", false, 0, "")
-
-		// Change color
-		changeStr := formatChange(stats[i].Change3Months)
-		if stats[i].Change3Months > 0 {
-			pdf.SetTextColor(0, 150, 0)
-		} else if stats[i].Change3Months < 0 {
-			pdf.SetTextColor(255, 0, 0)
-		}
-		pdf.CellFormat(colChangeW, 5, changeStr, "1", 1, "R", false, 0, "")
-		pdf.SetTextColor(0, 0, 0)
-		y += 5
-	}
+// Helper functions remain the same...
+func drawGradientCard(pdf *gofpdf.Fpdf, x, y, w, h float64, r, g, b int) {
+	// Simple solid color card with shadow effect
+	pdf.SetFillColor(r-20, g-20, b-20)
+	pdf.Rect(x+1, y+1, w, h, "F")
+	pdf.SetFillColor(r, g, b)
+	pdf.Rect(x, y, w, h, "F")
 }
 
-// drawServiceTables draws the service statistics tables
-func drawServiceTables(pdf *gofpdf.Fpdf, stats []ServiceStats, startY float64) {
-	if len(stats) == 0 {
-		pdf.SetFont("Helvetica", "", 10)
-		pdf.SetXY(10, startY)
-		pdf.CellFormat(277, 10, "No service statistics available", "", 1, "C", false, 0, "")
-		return
+func drawCard(pdf *gofpdf.Fpdf, x, y, w, h float64) {
+	pdf.SetDrawColor(200, 200, 200)
+	pdf.SetLineWidth(0.3)
+	pdf.Rect(x, y, w, h, "D")
+	pdf.SetDrawColor(0, 0, 0)
+}
+
+func formatNumber(n int) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
 	}
-
-	// Column widths
-	const (
-		colRankW     = 12.0
-		colServiceW  = 50.0
-		colRequestsW = 30.0
-		colShareW    = 20.0
-		colChangeW   = 25.0
-		tableWidth   = colRankW + colServiceW + colRequestsW + colShareW + colChangeW
-		spacing      = 10.0
-	)
-
-	leftX := 10.0
-	rightX := leftX + tableWidth + spacing
-
-	// Left side - Top 10
-	y := startY
-	pdf.SetFont("Helvetica", "B", 12)
-	pdf.SetXY(leftX, y)
-	pdf.CellFormat(tableWidth, 8, "Top 10 Services/Chains", "", 1, "L", false, 0, "")
-	y += 10
-
-	// Header
-	pdf.SetFillColor(50, 50, 50)
-	pdf.SetTextColor(255, 255, 255)
-	pdf.SetFont("Helvetica", "B", 8)
-	pdf.SetXY(leftX, y)
-	pdf.CellFormat(colRankW, 6, "#", "1", 0, "C", true, 0, "")
-	pdf.CellFormat(colServiceW, 6, "Service/Chain", "1", 0, "L", true, 0, "")
-	pdf.CellFormat(colRequestsW, 6, "Requests", "1", 0, "R", true, 0, "")
-	pdf.CellFormat(colShareW, 6, "Share", "1", 0, "R", true, 0, "")
-	pdf.CellFormat(colChangeW, 6, "vs 1M ago", "1", 1, "R", true, 0, "")
-	pdf.SetTextColor(0, 0, 0)
-	y += 6
-
-	// Data rows
-	pdf.SetFont("Helvetica", "", 8)
-	for i := 0; i < 10 && i < len(stats); i++ {
-		pdf.SetXY(leftX, y)
-		pdf.CellFormat(colRankW, 5, fmt.Sprintf("%d", i+1), "1", 0, "C", false, 0, "")
-
-		// Truncate service name if too long
-		serviceName := stats[i].Service
-		if len(serviceName) > 25 {
-			serviceName = serviceName[:22] + "..."
-		}
-		pdf.CellFormat(colServiceW, 5, serviceName, "1", 0, "L", false, 0, "")
-		pdf.CellFormat(colRequestsW, 5, formatNumber(stats[i].Requests), "1", 0, "R", false, 0, "")
-		pdf.CellFormat(colShareW, 5, fmt.Sprintf("%.1f%%", stats[i].Percentage), "1", 0, "R", false, 0, "")
-
-		// Change color
-		changeStr := formatChange(stats[i].Change1Month)
-		if stats[i].Change1Month > 0 {
-			pdf.SetTextColor(0, 150, 0)
-		} else if stats[i].Change1Month < 0 {
-			pdf.SetTextColor(255, 0, 0)
-		}
-		pdf.CellFormat(colChangeW, 5, changeStr, "1", 1, "R", false, 0, "")
-		pdf.SetTextColor(0, 0, 0)
-		y += 5
+	if n < 1000000 {
+		return fmt.Sprintf("%.1fK", float64(n)/1000)
 	}
+	return fmt.Sprintf("%.1fM", float64(n)/1000000)
+}
 
-	// Right side - Top 11-20
-	y = startY
-	pdf.SetFont("Helvetica", "B", 12)
-	pdf.SetXY(rightX, y)
-	pdf.CellFormat(tableWidth, 8, "Services/Chains 11-20", "", 1, "L", false, 0, "")
-	y += 10
-
-	// Header
-	pdf.SetFillColor(50, 50, 50)
-	pdf.SetTextColor(255, 255, 255)
-	pdf.SetFont("Helvetica", "B", 8)
-	pdf.SetXY(rightX, y)
-	pdf.CellFormat(colRankW, 6, "#", "1", 0, "C", true, 0, "")
-	pdf.CellFormat(colServiceW, 6, "Service/Chain", "1", 0, "L", true, 0, "")
-	pdf.CellFormat(colRequestsW, 6, "Requests", "1", 0, "R", true, 0, "")
-	pdf.CellFormat(colShareW, 6, "Share", "1", 0, "R", true, 0, "")
-	pdf.CellFormat(colChangeW, 6, "vs 6M ago", "1", 1, "R", true, 0, "")
-	pdf.SetTextColor(0, 0, 0)
-	y += 6
-
-	// Data rows
-	pdf.SetFont("Helvetica", "", 8)
-	for i := 10; i < 20 && i < len(stats); i++ {
-		pdf.SetXY(rightX, y)
-		pdf.CellFormat(colRankW, 5, fmt.Sprintf("%d", i+1), "1", 0, "C", false, 0, "")
-
-		// Truncate service name if too long
-		serviceName := stats[i].Service
-		if len(serviceName) > 25 {
-			serviceName = serviceName[:22] + "..."
-		}
-		pdf.CellFormat(colServiceW, 5, serviceName, "1", 0, "L", false, 0, "")
-		pdf.CellFormat(colRequestsW, 5, formatNumber(stats[i].Requests), "1", 0, "R", false, 0, "")
-		pdf.CellFormat(colShareW, 5, fmt.Sprintf("%.1f%%", stats[i].Percentage), "1", 0, "R", false, 0, "")
-
-		// Change color
-		changeStr := formatChange(stats[i].Change6Months)
-		if stats[i].Change6Months > 0 {
-			pdf.SetTextColor(0, 150, 0)
-		} else if stats[i].Change6Months < 0 {
-			pdf.SetTextColor(255, 0, 0)
-		}
-		pdf.CellFormat(colChangeW, 5, changeStr, "1", 1, "R", false, 0, "")
-		pdf.SetTextColor(0, 0, 0)
-		y += 5
+// calculateTotalRequests gets the total requests for the month
+func calculateTotalRequests(month time.Time) int {
+	stats := calculateMemberStats(month)
+	total := 0
+	for _, s := range stats {
+		total += s.RequestCount
 	}
+	return total
 }
 
 // formatChange formats a percentage change value
@@ -958,40 +995,4 @@ func getCountryName(code string) string {
 		return name
 	}
 	return code
-}
-
-// Helper functions remain the same...
-func drawGradientCard(pdf *gofpdf.Fpdf, x, y, w, h float64, r, g, b int) {
-	// Simple solid color card with shadow effect
-	pdf.SetFillColor(r-20, g-20, b-20)
-	pdf.Rect(x+1, y+1, w, h, "F")
-	pdf.SetFillColor(r, g, b)
-	pdf.Rect(x, y, w, h, "F")
-}
-
-func drawCard(pdf *gofpdf.Fpdf, x, y, w, h float64) {
-	pdf.SetDrawColor(200, 200, 200)
-	pdf.SetLineWidth(0.3)
-	pdf.Rect(x, y, w, h, "D")
-	pdf.SetDrawColor(0, 0, 0)
-}
-
-func formatNumber(n int) string {
-	if n < 1000 {
-		return fmt.Sprintf("%d", n)
-	}
-	if n < 1000000 {
-		return fmt.Sprintf("%.1fK", float64(n)/1000)
-	}
-	return fmt.Sprintf("%.1fM", float64(n)/1000000)
-}
-
-// calculateTotalRequests gets the total requests for the month
-func calculateTotalRequests(month time.Time) int {
-	stats := calculateMemberStats(month)
-	total := 0
-	for _, s := range stats {
-		total += s.RequestCount
-	}
-	return total
 }
