@@ -20,20 +20,6 @@ type CountryRequestData struct {
 	CountryName string
 }
 
-// memberRow holds data for a member billing row
-type memberRow struct {
-	name             string
-	level            int
-	requests         int
-	percentage       float64
-	serviceCount     int
-	downtimeServices int
-	baseCost         float64
-	billedCost       float64
-	avgUptime        float64
-	meetsSLA         bool
-}
-
 // CountryStats holds statistics for a country
 type CountryStats struct {
 	Country       string
@@ -353,14 +339,29 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 
 	// ===== PAGE 3: MEMBER BILLINGS TABLE =====
 	pdf.AddPage()
-	y = 40
 
+	// Calculate table dimensions
+	const tableWidth = 280.0
+	pageWidth := 297.0 // A4 landscape width
+	tableX := (pageWidth - tableWidth) / 2
+
+	// Title
 	pdf.SetFont("Helvetica", "B", 16)
-	pdf.SetXY(10, y)
-	pdf.CellFormat(277, 10, "Member Billings", "", 1, "L", false, 0, "")
-	y += 12
+	pdf.SetXY(tableX, 40)
+	pdf.CellFormat(tableWidth, 10, "Member Billings", "", 1, "L", false, 0, "")
 
-	// Table setup
+	// Calculate vertical centering
+	startY := 55.0
+	// Estimate table height: header + (rows * rowH) + total row
+	estimatedHeight := 8.0 + float64(len(memberData))*8.0 + 8.0
+	availableHeight := 190.0 - startY // From startY to before footer
+	if estimatedHeight < availableHeight {
+		startY += (availableHeight - estimatedHeight) / 2
+	}
+
+	y = startY
+
+	// Table setup (adjust column widths for centering)
 	const (
 		colMemberW   = 45.0
 		colLevelW    = 15.0
@@ -375,11 +376,11 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 		rowH         = 8.0
 	)
 
-	// Table header with modern style
+	// Table header
 	pdf.SetFillColor(50, 50, 50)
 	pdf.SetTextColor(255, 255, 255)
 	pdf.SetFont("Helvetica", "B", 9)
-	pdf.SetXY(10, y)
+	pdf.SetXY(tableX, y)
 	pdf.CellFormat(colMemberW, rowH, "Member", "1", 0, "L", true, 0, "")
 	pdf.CellFormat(colLevelW, rowH, "Lvl", "1", 0, "C", true, 0, "")
 	pdf.CellFormat(colRequestsW, rowH, "Requests", "1", 0, "R", true, 0, "")
@@ -490,31 +491,37 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 
 	// ===== PAGE 4: GEOGRAPHIC DISTRIBUTION =====
 	pdf.AddPage()
-	y = 40
+
 	pdf.SetFont("Helvetica", "B", 16)
-	pdf.SetXY(10, y)
-	pdf.CellFormat(277, 10, "Geographic Distribution - Top 20", "", 1, "L", false, 0, "")
-	y += 15
+	pdf.SetXY(10, 40)
+	pdf.CellFormat(277, 10, "Geographic Distribution - Top 15", "", 1, "C", false, 0, "")
 
 	// Get country statistics
 	countryStats := getCountryStatistics(month)
 
+	// Center the table
+	const geoTableWidth = 220.0
+	geoTableX := (297.0 - geoTableWidth) / 2
+
 	// Draw unified country table
-	drawUnifiedCountryTable(pdf, countryStats, y)
+	drawUnifiedCountryTable(pdf, countryStats, 55, geoTableX, geoTableWidth)
 
 	// ===== PAGE 5: SERVICE/CHAIN DISTRIBUTION =====
 	pdf.AddPage()
-	y = 40
+
 	pdf.SetFont("Helvetica", "B", 16)
-	pdf.SetXY(10, y)
-	pdf.CellFormat(277, 10, "Service/Chain Distribution - Top 20", "", 1, "L", false, 0, "")
-	y += 15
+	pdf.SetXY(10, 40)
+	pdf.CellFormat(277, 10, "Service/Chain Distribution - Top 15", "", 1, "C", false, 0, "")
 
 	// Get service statistics
 	serviceStats := getServiceStatistics(month)
 
+	// Center the table
+	const svcTableWidth = 240.0
+	svcTableX := (297.0 - svcTableWidth) / 2
+
 	// Draw unified service table
-	drawUnifiedServiceTable(pdf, serviceStats, y)
+	drawUnifiedServiceTable(pdf, serviceStats, 55, svcTableX, svcTableWidth)
 
 	if err := pdf.OutputFileAndClose(filename); err != nil {
 		return err
@@ -525,7 +532,7 @@ func writeMonthlyOverviewPDF(sum *Summary, sla SLASummary, outDir string, month 
 }
 
 // drawUnifiedCountryTable draws a single table with all 20 countries
-func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY float64) {
+func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY, tableX, tableWidth float64) {
 	if len(stats) == 0 {
 		pdf.SetFont("Helvetica", "", 10)
 		pdf.SetXY(10, startY)
@@ -568,7 +575,7 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY floa
 	pdf.SetFont("Helvetica", "", 9)
 	fillToggle := false
 
-	for i := 0; i < 20 && i < len(stats); i++ {
+	for i := 0; i < 15 && i < len(stats); i++ {
 		if y > 180 {
 			pdf.AddPage()
 			y = 40
@@ -636,7 +643,7 @@ func drawUnifiedCountryTable(pdf *gofpdf.Fpdf, stats []CountryStats, startY floa
 }
 
 // drawUnifiedServiceTable draws a single table with all 20 services
-func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY float64) {
+func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY, tableX, tableWidth float64) {
 	if len(stats) == 0 {
 		pdf.SetFont("Helvetica", "", 10)
 		pdf.SetXY(10, startY)
@@ -644,16 +651,15 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY floa
 		return
 	}
 
-	// Column widths
 	const (
 		colRankW     = 15.0
-		colServiceW  = 70.0
-		colRequestsW = 25.0
-		colShareW    = 20.0
-		colChange1W  = 20.0
-		colChange3W  = 20.0
-		colChange6W  = 20.0
-		rowH         = 6.0
+		colServiceW  = 80.0
+		colRequestsW = 35.0
+		colShareW    = 25.0
+		colChange1W  = 25.0
+		colChange3W  = 25.0
+		colChange6W  = 25.0
+		rowH         = 8.0
 	)
 
 	// Table header
@@ -679,7 +685,7 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY floa
 	pdf.SetFont("Helvetica", "", 8)
 	fillToggle := false
 
-	for i := 0; i < 20 && i < len(stats); i++ {
+	for i := 0; i < 15 && i < len(stats); i++ {
 		if y > 180 {
 			pdf.AddPage()
 			y = 40
@@ -688,7 +694,16 @@ func drawUnifiedServiceTable(pdf *gofpdf.Fpdf, stats []ServiceStats, startY floa
 			pdf.SetFillColor(50, 50, 50)
 			pdf.SetTextColor(255, 255, 255)
 			pdf.SetFont("Helvetica", "B", 9)
+
+			// Convert domain to service name
+			serviceName := domainToServiceName(stats[i].Service)
+			if len(serviceName) > 40 {
+				serviceName = serviceName[:37] + "..."
+			}
+
 			pdf.SetXY(x, y)
+			pdf.CellFormat(colRankW, rowH, fmt.Sprintf("%d", i+1), "1", 0, "C", fillToggle, 0, "")
+			pdf.CellFormat(colServiceW, rowH, serviceName, "1", 0, "L", fillToggle, 0, "")
 			pdf.CellFormat(colRankW, rowH, "#", "1", 0, "C", true, 0, "")
 			pdf.CellFormat(colServiceW, rowH, "Service/Chain", "1", 0, "L", true, 0, "")
 			pdf.CellFormat(colRequestsW, rowH, "Requests", "1", 0, "R", true, 0, "")

@@ -392,19 +392,3 @@ func resolveTempDir(conf interface{}) string {
 	c := cfg.GetConfig()
 	return filepath.Join(c.Local.System.WorkDir, "tmp")
 }
-
-// ensureDir verifies that path exists (creates it) and returns canonical version.
-func ensureDir(p string) string {
-	if p == "" {
-		return ""
-	}
-	if err := os.MkdirAll(p, 0o755); err != nil {
-		log.Log(log.Warn, "[billing] unable to create tmp dir %s: %v", p, err)
-		return ""
-	}
-	abs, err := filepath.Abs(p)
-	if err != nil {
-		return p
-	}
-	return abs
-}
