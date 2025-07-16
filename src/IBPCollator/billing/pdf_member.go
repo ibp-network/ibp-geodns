@@ -75,7 +75,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	totalRequests := calculateTotalRequests(month)
 
 	// Member details card
-	drawCard(pdf, 10, 35, 190, 40)
+	drawMemberCard(pdf, 10, 35, 190, 40)
 
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(15, 40)
@@ -87,7 +87,8 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	if hasMemberConfig {
 		if memberConfig.Details.Website != "" {
 			pdf.SetXY(15, y)
-			pdf.CellFormat(40, 5, "Website:", "", 0, "L", false, 0, "")
+			pdf.CellFormat(30, 5, "Website:", "", 0, "L", false, 0, "")
+			pdf.SetX(45)
 			pdf.SetFont("Helvetica", "B", 10)
 			pdf.CellFormat(140, 5, memberConfig.Details.Website, "", 1, "L", false, 0, "")
 			pdf.SetFont("Helvetica", "", 10)
@@ -95,13 +96,15 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		}
 
 		pdf.SetXY(15, y)
-		pdf.CellFormat(40, 5, "Member Level:", "", 0, "L", false, 0, "")
+		pdf.CellFormat(30, 5, "Member Level:", "", 0, "L", false, 0, "")
+		pdf.SetX(45)
 		pdf.SetFont("Helvetica", "B", 10)
 		pdf.CellFormat(40, 5, fmt.Sprintf("%d", memberConfig.Membership.Level), "", 0, "L", false, 0, "")
 		pdf.SetFont("Helvetica", "", 10)
 
 		pdf.SetXY(105, y)
-		pdf.CellFormat(40, 5, "Member Since:", "", 0, "L", false, 0, "")
+		pdf.CellFormat(30, 5, "Member Since:", "", 0, "L", false, 0, "")
+		pdf.SetX(135)
 		pdf.SetFont("Helvetica", "B", 10)
 		joinedTime := time.Unix(int64(memberConfig.Membership.Joined), 0)
 		pdf.CellFormat(40, 5, joinedTime.Format("January 2006"), "", 1, "L", false, 0, "")
@@ -111,7 +114,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 
 	// Usage statistics card
 	y = 85
-	drawCard(pdf, 10, y, 190, 35)
+	drawMemberCard(pdf, 10, y, 190, 35)
 
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(15, y+5)
@@ -119,13 +122,15 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 
 	pdf.SetFont("Helvetica", "", 10)
 	pdf.SetXY(15, y+15)
-	pdf.CellFormat(40, 5, "DNS Requests:", "", 0, "L", false, 0, "")
+	pdf.CellFormat(30, 5, "DNS Requests:", "", 0, "L", false, 0, "")
+	pdf.SetX(45)
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.CellFormat(40, 5, fmt.Sprintf("%d", stats.RequestCount), "", 0, "L", false, 0, "")
 
 	pdf.SetFont("Helvetica", "", 10)
 	pdf.SetXY(105, y+15)
-	pdf.CellFormat(40, 5, "% of Network:", "", 0, "L", false, 0, "")
+	pdf.CellFormat(30, 5, "% of Network:", "", 0, "L", false, 0, "")
+	pdf.SetX(135)
 	pdf.SetFont("Helvetica", "B", 10)
 	percentage := 0.0
 	if totalRequests > 0 {
@@ -156,7 +161,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		}
 
 		// Service card
-		drawCard(pdf, 10, y, 190, 45)
+		drawMemberCard(pdf, 10, y, 190, 45)
 
 		// Service header
 		pdf.SetFillColor(240, 240, 240)
@@ -190,15 +195,17 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 			y += 5
 		}
 
-		// Cost breakdown
+		// Cost breakdown - improved alignment
 		pdf.SetXY(15, y)
-		pdf.CellFormat(40, 5, "Base Cost:", "", 0, "L", false, 0, "")
+		pdf.CellFormat(25, 5, "Base Cost:", "", 0, "L", false, 0, "")
+		pdf.SetX(40)
 		pdf.SetFont("Helvetica", "B", 9)
-		pdf.CellFormat(30, 5, fmt.Sprintf("$%.2f", baseCost), "", 0, "R", false, 0, "")
+		pdf.CellFormat(20, 5, fmt.Sprintf("$%.2f", baseCost), "", 0, "R", false, 0, "")
 
 		pdf.SetFont("Helvetica", "", 9)
-		pdf.SetXY(85, y)
-		pdf.CellFormat(40, 5, "Uptime:", "", 0, "L", false, 0, "")
+		pdf.SetX(70)
+		pdf.CellFormat(20, 5, "Uptime:", "", 0, "L", false, 0, "")
+		pdf.SetX(90)
 
 		if breakdown.Uptime < DefaultSLAPercentage {
 			pdf.SetTextColor(255, 0, 0)
@@ -206,12 +213,13 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 			pdf.SetTextColor(0, 128, 0)
 		}
 		pdf.SetFont("Helvetica", "B", 9)
-		pdf.CellFormat(30, 5, fmt.Sprintf("%.2f%%", breakdown.Uptime), "", 0, "R", false, 0, "")
+		pdf.CellFormat(25, 5, fmt.Sprintf("%.2f%%", breakdown.Uptime), "", 0, "R", false, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 
 		pdf.SetFont("Helvetica", "", 9)
-		pdf.SetXY(155, y)
-		pdf.CellFormat(25, 5, "Billed:", "", 0, "L", false, 0, "")
+		pdf.SetX(125)
+		pdf.CellFormat(20, 5, "Billed:", "", 0, "L", false, 0, "")
+		pdf.SetX(145)
 		pdf.SetFont("Helvetica", "B", 9)
 		pdf.CellFormat(25, 5, fmt.Sprintf("$%.2f", billed), "", 0, "R", false, 0, "")
 		y += 7
@@ -221,10 +229,10 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		pdf.SetXY(15, y)
 		if breakdown.MeetsSLA {
 			pdf.SetTextColor(0, 128, 0)
-			pdf.CellFormat(180, 4, fmt.Sprintf("✓ Meets SLA requirement of %.2f%%", DefaultSLAPercentage), "", 1, "L", false, 0, "")
+			pdf.CellFormat(180, 4, fmt.Sprintf("[OK] Meets SLA requirement of %.2f%%", DefaultSLAPercentage), "", 1, "L", false, 0, "")
 		} else {
 			pdf.SetTextColor(255, 0, 0)
-			pdf.CellFormat(180, 4, fmt.Sprintf("✗ Below SLA: %.2f hours downtime (%.2f%% uptime required)",
+			pdf.CellFormat(180, 4, fmt.Sprintf("[FAIL] Below SLA: %.2f hours downtime (%.2f%% uptime required)",
 				breakdown.HoursDown, DefaultSLAPercentage), "", 1, "L", false, 0, "")
 		}
 		pdf.SetTextColor(0, 0, 0)
@@ -238,7 +246,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		y = 35
 	}
 
-	drawCard(pdf, 10, y, 190, 20)
+	drawMemberCard(pdf, 10, y, 190, 20)
 	pdf.SetFillColor(30, 30, 30)
 	pdf.Rect(10, y, 190, 20, "F")
 
@@ -246,7 +254,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetFont("Helvetica", "B", 12)
 	pdf.SetXY(15, y+7)
 	pdf.CellFormat(140, 6, "Total Amount Due", "", 0, "L", false, 0, "")
-	pdf.CellFormat(40, 6, fmt.Sprintf("$%.2f", memberTotal), "", 0, "R", false, 0, "")
+	pdf.CellFormat(35, 6, fmt.Sprintf("$%.2f", memberTotal), "", 0, "R", false, 0, "")
 	pdf.SetTextColor(0, 0, 0)
 
 	// Downtime events section
@@ -254,30 +262,43 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	y = 35
 
 	pdf.SetFont("Helvetica", "B", 14)
-	pdf.CellFormat(190, 8, "Downtime Events", "", 1, "L", false, 0, "")
+	pdf.CellFormat(190, 8, "Downtime Events (5+ minutes)", "", 1, "L", false, 0, "")
 	y += 10
 
 	events := getMemberDowntimeEvents(memberName, month)
-	if len(events) == 0 {
-		drawCard(pdf, 10, y, 190, 20)
+
+	// Filter events to only show those longer than 5 minutes
+	filteredEvents := []DowntimeEvent{}
+	for _, event := range events {
+		duration := event.EndTime.Sub(event.StartTime)
+		if duration.Minutes() >= 5 {
+			filteredEvents = append(filteredEvents, event)
+		}
+	}
+
+	if len(filteredEvents) == 0 {
+		drawMemberCard(pdf, 10, y, 190, 20)
 		pdf.SetFont("Helvetica", "", 10)
 		pdf.SetXY(15, y+7)
 		pdf.SetTextColor(0, 128, 0)
-		pdf.CellFormat(180, 6, "No downtime events recorded this month", "", 0, "C", false, 0, "")
+		pdf.CellFormat(180, 6, "No significant downtime events (5+ minutes) recorded this month", "", 0, "C", false, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 	} else {
-		for _, event := range events {
+		for _, event := range filteredEvents {
 			if y > 250 {
 				pdf.AddPage()
 				y = 35
+				pdf.SetFont("Helvetica", "B", 14)
+				pdf.CellFormat(190, 8, "Downtime Events (continued)", "", 1, "L", false, 0, "")
+				y += 10
 			}
 
 			// Event card
 			cardHeight := 35.0
 			if event.VoteData != "" {
-				cardHeight += 10
+				cardHeight += 5
 			}
-			drawCard(pdf, 10, y, 190, cardHeight)
+			drawMemberCard(pdf, 10, y, 190, cardHeight)
 
 			// Event type and service
 			pdf.SetFont("Helvetica", "B", 10)
@@ -302,25 +323,58 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 				event.EndTime.Format("Jan 2, 2006 15:04 UTC")), "", 1, "L", false, 0, "")
 			pdf.SetTextColor(0, 0, 0)
 
-			// Error and vote data
+			// Error
 			if event.ErrorText != "" {
 				pdf.SetXY(15, y+29)
 				pdf.SetTextColor(200, 0, 0)
 				pdf.SetFont("Helvetica", "", 8)
-				pdf.CellFormat(180, 4, fmt.Sprintf("Error: %s", event.ErrorText), "", 1, "L", false, 0, "")
+				// Truncate error text if too long
+				errorText := event.ErrorText
+				if len(errorText) > 80 {
+					errorText = errorText[:77] + "..."
+				}
+				pdf.CellFormat(180, 4, fmt.Sprintf("Error: %s", errorText), "", 1, "L", false, 0, "")
 				pdf.SetTextColor(0, 0, 0)
 			}
 
-			if event.VoteData != "" {
+			// Vote data if present
+			if event.VoteData != "" && event.VoteData != "{}" {
 				pdf.SetXY(15, y+34)
 				pdf.SetFont("Helvetica", "", 8)
 				pdf.SetTextColor(100, 100, 100)
-				pdf.CellFormat(180, 4, fmt.Sprintf("Monitor votes: %s", event.VoteData), "", 1, "L", false, 0, "")
+				// Parse and format vote data if possible
+				voteText := formatVoteData(event.VoteData)
+				pdf.CellFormat(180, 4, voteText, "", 1, "L", false, 0, "")
 				pdf.SetTextColor(0, 0, 0)
 			}
 
 			y += cardHeight + 5
 		}
+
+		// Summary of downtime
+		if y > 230 {
+			pdf.AddPage()
+			y = 35
+		}
+
+		y += 10
+		pdf.SetFont("Helvetica", "B", 11)
+		pdf.SetXY(10, y)
+		pdf.CellFormat(190, 6, "Downtime Summary", "", 1, "L", false, 0, "")
+
+		pdf.SetFont("Helvetica", "", 10)
+		y += 8
+		pdf.SetXY(15, y)
+		pdf.CellFormat(190, 5, fmt.Sprintf("Total downtime events (5+ minutes): %d", len(filteredEvents)), "", 1, "L", false, 0, "")
+
+		// Calculate total downtime
+		totalDowntime := time.Duration(0)
+		for _, event := range filteredEvents {
+			totalDowntime += event.EndTime.Sub(event.StartTime)
+		}
+		y += 5
+		pdf.SetXY(15, y)
+		pdf.CellFormat(190, 5, fmt.Sprintf("Total downtime duration: %s", formatDuration(totalDowntime)), "", 1, "L", false, 0, "")
 	}
 
 	if err := pdf.OutputFileAndClose(filename); err != nil {
@@ -331,8 +385,28 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	return nil
 }
 
-// Helper functions
-func drawCard(pdf *gofpdf.Fpdf, x, y, w, h float64) {
+// formatVoteData attempts to parse and format vote data JSON
+func formatVoteData(voteData string) string {
+	// Simple formatting - could be enhanced to parse JSON
+	if voteData == "" || voteData == "{}" {
+		return ""
+	}
+
+	// Remove JSON brackets and format
+	cleaned := strings.Trim(voteData, "{}")
+	cleaned = strings.ReplaceAll(cleaned, "\"", "")
+	cleaned = strings.ReplaceAll(cleaned, ":", ": ")
+	cleaned = strings.ReplaceAll(cleaned, ",", ", ")
+
+	if len(cleaned) > 100 {
+		cleaned = cleaned[:97] + "..."
+	}
+
+	return "Votes: " + cleaned
+}
+
+// Helper functions remain the same...
+func drawMemberCard(pdf *gofpdf.Fpdf, x, y, w, h float64) {
 	pdf.SetDrawColor(200, 200, 200)
 	pdf.SetLineWidth(0.3)
 	pdf.Rect(x, y, w, h, "D")

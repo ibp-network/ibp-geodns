@@ -20,10 +20,23 @@ import (
 --------------------------------------------------------------------- */
 
 func findLogo(baseDir string) string {
-	p := filepath.Join(baseDir, "assets", "ibp.png")
-	if _, err := os.Stat(p); err == nil {
-		return p
+	// Try multiple possible locations for the logo
+	possiblePaths := []string{
+		filepath.Join(baseDir, "assets", "ibp.png"),
+		filepath.Join(baseDir, "ibp.png"),
+		filepath.Join(baseDir, "..", "assets", "ibp.png"),
+		filepath.Join(baseDir, "..", "ibp.png"),
+		"/opt/ibp-geodns/assets/ibp.png",
 	}
+
+	for _, p := range possiblePaths {
+		if _, err := os.Stat(p); err == nil {
+			log.Log(log.Debug, "[billing] Found logo at: %s", p)
+			return p
+		}
+	}
+
+	log.Log(log.Warn, "[billing] Logo not found in any of the expected locations")
 	return ""
 }
 
