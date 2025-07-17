@@ -11,7 +11,6 @@ const EarthView = () => {
   const [downtime, setDowntime] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hoveredMember, setHoveredMember] = useState(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     loadMembersData();
@@ -51,6 +50,30 @@ const EarthView = () => {
   // Get member outages
   const getMemberOutages = (memberName) => {
     return downtime.filter(dt => dt.member_name === memberName);
+  };
+
+  // Check if a specific service is down for a member
+  const isServiceDown = (memberName, serviceName) => {
+    return downtime.some(dt => 
+      dt.member_name === memberName && 
+      (dt.domain_name?.includes(serviceName.toLowerCase()) || 
+       dt.endpoint?.includes(serviceName.toLowerCase()))
+    );
+  };
+
+  // Get service status
+  const getServiceStatus = (memberName, serviceName) => {
+    const hasOutage = isServiceDown(memberName, serviceName);
+    if (hasOutage) return 'offline';
+    
+    // Check if there are any domain/endpoint issues that might indicate degraded service
+    const serviceOutages = downtime.filter(dt => 
+      dt.member_name === memberName && 
+      dt.check_type !== 'site'
+    );
+    
+    if (serviceOutages.length > 0 && serviceOutages.length < 3) return 'degraded';
+    return 'online';
   };
 
   useEffect(() => {
@@ -111,13 +134,8 @@ const EarthView = () => {
         el.style.cursor = 'pointer';
         
         // Handle mouse events
-        el.onmouseenter = (e) => {
+        el.onmouseenter = () => {
           setHoveredMember(d);
-          setTooltipPosition({ x: e.clientX, y: e.clientY });
-        };
-        
-        el.onmousemove = (e) => {
-          setTooltipPosition({ x: e.clientX, y: e.clientY });
         };
         
         el.onmouseleave = () => {
@@ -239,98 +257,127 @@ const EarthView = () => {
 
   return (
     <div className="earth-view fade-in">
-      <div className="earth-header">
-        <h1>Global Infrastructure Map</h1>
-        <div className="status-summary enhanced-glass">
-          <div className="status-item">
-            <span className="status-indicator status-online"></span>
-            <span className="status-label">{stats.operational} Operational</span>
-          </div>
-          <div className="status-item">
-            <span className="status-indicator status-warning"></span>
-            <span className="status-label">{stats.degraded} Degraded</span>
-          </div>
-          <div className="status-item">
-            <span className="status-indicator status-offline"></span>
-            <span className="status-label">{stats.offline} Offline</span>
-          </div>
-        </div>
-      </div>
-                     
       <div className="globe-container" ref={containerRef}>
         <div className="globe-wrapper">
           <div ref={globeRef} className="globe"></div>
         </div>
         
-        {/* Tooltip */}
-        {hoveredMember && (
-          <div 
-            className="member-tooltip visible enhanced-glass"
-            style={{
-              left: `${Math.min(tooltipPosition.x + 20, window.innerWidth - 420)}px`,
-              top: `${Math.min(tooltipPosition.y - 100, window.innerHeight - 300)}px`
-            }}
-          >
-            <div className="tooltip-header">
-              {hoveredMember.logo ? (
-                <img src={hoveredMember.logo} alt={hoveredMember.name} className="tooltip-logo" />
-              ) : (
-                <div className="tooltip-logo logo-placeholder">
-                  {hoveredMember.name.substring(0, 2).toUpperCase()}
-                </div>
-              )}
-              <div className="tooltip-title">
-                <div className="tooltip-name">{hoveredMember.name}</div>
-                <div className="tooltip-region">{hoveredMember.region}</div>
-              </div>
+        {/* Header overlaid on top of globe */}
+        <div className="earth-header">
+          <h1>Global Infrastructure Map</h1>
+          <div className="status-summary enhanced-glass">
+            <div className="status-item">
+              <span className="status-indicator status-online"></span>
+              <span className="status-label">{stats.operational} Operational</span>
             </div>
-            
-            <div className="tooltip-info">
-              <div className="tooltip-row">
-                <span className="tooltip-label">Health:</span>
-                <span className="tooltip-value">{getMemberHealth(hoveredMember.name)}%</span>
-              </div>
-              <div className="tooltip-row">
-                <span className="tooltip-label">Level:</span>
-                <span className="tooltip-value">{hoveredMember.level}</span>
-              </div>
-              <div className="tooltip-row">
-                <span className="tooltip-label">IPv4:</span>
-                <span className="tooltip-value">{hoveredMember.service_ipv4 || 'Not configured'}</span>
-              </div>
-              <div className="tooltip-row">
-                <span className="tooltip-label">IPv6:</span>
-                <span className="tooltip-value">{hoveredMember.service_ipv6 || 'Not configured'}</span>
-              </div>
+            <div className="status-item">
+              <span className="status-indicator status-warning"></span>
+              <span className="status-label">{stats.degraded} Degraded</span>
             </div>
-            
-            {hoveredMember.services && hoveredMember.services.length > 0 && (
-              <div className="tooltip-services">
-                <h4>Active Services</h4>
-                <div className="service-list">
-                  {hoveredMember.services.map((service, idx) => (
-                    <span key={idx} className="service-tag">{service}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {getMemberOutages(hoveredMember.name).length > 0 ? (
-              <div className="tooltip-outages">
-                <h4>Current Issues</h4>
-                {getMemberOutages(hoveredMember.name).map((outage, idx) => (
-                  <div key={idx} className="outage-item">
-                    • {outage.check_type} - {outage.domain_name || 'Site level'}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="tooltip-no-issues">
-                ✓ No current issues
-              </div>
-            )}
+            <div className="status-item">
+              <span className="status-indicator status-offline"></span>
+              <span className="status-label">{stats.offline} Offline</span>
+            </div>
           </div>
-        )}
+        </div>
+        
+        {/* Fixed member info panel */}
+        <div className={`member-info-panel enhanced-glass ${hoveredMember ? 'visible' : ''}`}>
+          {hoveredMember && (
+            <>
+              <div className="panel-header">
+                {hoveredMember.logo ? (
+                  <img src={hoveredMember.logo} alt={hoveredMember.name} className="panel-logo" />
+                ) : (
+                  <div className="panel-logo logo-placeholder">
+                    {hoveredMember.name.substring(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div className="panel-title">
+                  <div className="panel-name">{hoveredMember.name}</div>
+                  <div className="panel-region">{hoveredMember.region}</div>
+                </div>
+              </div>
+              
+              <div className="panel-content">
+                <div className="info-section">
+                  <h3 className="section-title">Member Information</h3>
+                  <div className="info-grid">
+                    <div className="info-row">
+                      <span className="info-label">Health:</span>
+                      <span className="info-value">{getMemberHealth(hoveredMember.name)}%</span>
+                    </div>
+                    <div className="info-row">
+                      <span className="info-label">Level:</span>
+                      <span className="info-value">{hoveredMember.level}</span>
+                    </div>
+                    <div className="info-row">
+                      <span className="info-label">IPv4:</span>
+                      <span className="info-value">{hoveredMember.service_ipv4 || 'Not configured'}</span>
+                    </div>
+                    <div className="info-row">
+                      <span className="info-label">IPv6:</span>
+                      <span className="info-value">{hoveredMember.service_ipv6 || 'Not configured'}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {hoveredMember.services && hoveredMember.services.length > 0 && (
+                  <div className="info-section">
+                    <h3 className="section-title">Active Services</h3>
+                    <table className="services-table">
+                      <thead>
+                        <tr>
+                          <th>Service</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hoveredMember.services.map((service, idx) => {
+                          const status = getServiceStatus(hoveredMember.name, service);
+                          return (
+                            <tr key={idx}>
+                              <td>{service}</td>
+                              <td>
+                                <div className="service-status">
+                                  <span className={`status-dot ${status}`}></span>
+                                  <span>{status.charAt(0).toUpperCase() + status.slice(1)}</span>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                
+                <div className="info-section">
+                  <h3 className="section-title">Current Status</h3>
+                  {getMemberOutages(hoveredMember.name).length > 0 ? (
+                    <div className="outages-list">
+                      {getMemberOutages(hoveredMember.name).map((outage, idx) => (
+                        <div key={idx} className="outage-item">
+                          <div className="outage-type">
+                            {outage.check_type} Issue
+                          </div>
+                          <div className="outage-detail">
+                            {outage.domain_name || outage.endpoint || 'Site level issue'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="no-issues">
+                      <div className="no-issues-icon">✓</div>
+                      <div>All systems operational</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
                           
         <div className="globe-controls enhanced-glass">
           <h3>Controls</h3>
@@ -395,7 +442,7 @@ const EarthView = () => {
               <span className="health-light active"></span>
               <span className="health-light inactive"></span>
               <span className="health-light inactive"></span>
-              <span class="health-light inactive"></span>
+              <span className="health-light inactive"></span>
               <span className="health-light inactive"></span>
             </div>
             <span>20% Health (1 light)</span>
