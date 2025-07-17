@@ -5,6 +5,7 @@ import './EarthView.css';
 
 const EarthView = () => {
   const globeRef = useRef();
+  const containerRef = useRef();
   const globeInstance = useRef(null);
   const [members, setMembers] = useState([]);
   const [downtime, setDowntime] = useState([]);
@@ -53,32 +54,13 @@ const EarthView = () => {
   };
 
   useEffect(() => {
-    if (!globeRef.current || members.length === 0) return;
+    if (!containerRef.current || !globeRef.current || members.length === 0) return;
 
     // Clean up previous instance
     if (globeInstance.current) {
-      // Properly dispose of the previous globe
-      globeInstance.current.scene().children.forEach(child => {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) {
-          if (child.material.map) child.material.map.dispose();
-          child.material.dispose();
-        }
-      });
-      
-      if (globeInstance.current.renderer) {
-        globeInstance.current.renderer().dispose();
-      }
-      
       if (globeInstance.current._destructor) {
         globeInstance.current._destructor();
       }
-      
-      // Clear the container
-      while (globeRef.current.firstChild) {
-        globeRef.current.removeChild(globeRef.current.firstChild);
-      }
-      
       globeInstance.current = null;
     }
 
@@ -206,14 +188,21 @@ const EarthView = () => {
 
     // Handle window resize
     const handleResize = () => {
-      if (globeRef.current) {
-        globe.width(globeRef.current.offsetWidth);
-        globe.height(globeRef.current.offsetHeight);
+      if (containerRef.current && globeRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect();
+        globe.width(width);
+        globe.height(height);
       }
     };
     
+    // Initial size
+    handleResize();
+    
+    // Add resize listener
     window.addEventListener('resize', handleResize);
-    handleResize(); // Initial size
+    
+    // Add a small delay to ensure proper initial sizing
+    setTimeout(handleResize, 100);
 
     // Store the instance
     globeInstance.current = globe;
@@ -222,33 +211,10 @@ const EarthView = () => {
     return () => {
       window.removeEventListener('resize', handleResize);
       
-      if (globeInstance.current) {
-        // Dispose of globe resources
-        if (globeInstance.current.scene) {
-          globeInstance.current.scene().children.forEach(child => {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-              if (child.material.map) child.material.map.dispose();
-              child.material.dispose();
-            }
-          });
-        }
-        
-        if (globeInstance.current.renderer) {
-          globeInstance.current.renderer().dispose();
-        }
-        
-        if (globeInstance.current._destructor) {
-          globeInstance.current._destructor();
-        }
-        
-        // Clear the container
-        while (globeRef.current && globeRef.current.firstChild) {
-          globeRef.current.removeChild(globeRef.current.firstChild);
-        }
-        
-        globeInstance.current = null;
+      if (globeInstance.current && globeInstance.current._destructor) {
+        globeInstance.current._destructor();
       }
+      globeInstance.current = null;
     };
   }, [members, downtime]);
 
@@ -291,16 +257,18 @@ const EarthView = () => {
         </div>
       </div>
                      
-      <div className="globe-container">
-        <div ref={globeRef} className="globe"></div>
+      <div className="globe-container" ref={containerRef}>
+        <div className="globe-wrapper">
+          <div ref={globeRef} className="globe"></div>
+        </div>
         
         {/* Tooltip */}
         {hoveredMember && (
           <div 
             className="member-tooltip visible enhanced-glass"
             style={{
-              left: `${tooltipPosition.x + 20}px`,
-              top: `${tooltipPosition.y - 100}px`
+              left: `${Math.min(tooltipPosition.x + 20, window.innerWidth - 420)}px`,
+              top: `${Math.min(tooltipPosition.y - 100, window.innerHeight - 300)}px`
             }}
           >
             <div className="tooltip-header">
@@ -427,7 +395,7 @@ const EarthView = () => {
               <span className="health-light active"></span>
               <span className="health-light inactive"></span>
               <span className="health-light inactive"></span>
-              <span className="health-light inactive"></span>
+              <span class="health-light inactive"></span>
               <span className="health-light inactive"></span>
             </div>
             <span>20% Health (1 light)</span>
