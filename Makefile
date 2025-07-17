@@ -51,17 +51,17 @@ run-collator:
 
 # React Dashboard commands
 dashboard-install:
-	cd $(REACT_DIR) && npm install
+	npm install
 
 dashboard-build:
-	mkdir -p public/static/imgs
+	mkdir public/static/imgs
 	cp assets/ibp.png public/static/imgs/
-	cd $(REACT_DIR) && npm run build
+	npm run build
 
 dashboard-dev:
-	mkdir -p public/static/imgs
+	mkdir public/static/imgs
 	cp assets/ibp.png public/static/imgs/
-    npm start
+	npm start
 
 # Combined commands
 install: dashboard-install
