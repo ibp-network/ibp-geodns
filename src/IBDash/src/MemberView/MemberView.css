@@ -1,6 +1,10 @@
 .member-view {
   max-width: 1400px;
   margin: 0 auto;
+  padding: 32px;
+  min-height: 100vh;
+  /* Match EarthView background */
+  background: transparent;
 }
 
 .members-loading {

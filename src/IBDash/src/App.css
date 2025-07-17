@@ -15,7 +15,8 @@
   flex: 1;
   padding: 0;
   overflow-y: auto;
-  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+  /* Use pure black background for all views to match EarthView */
+  background: #000000;
 }
 
 .glass {

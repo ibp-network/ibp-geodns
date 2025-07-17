@@ -32,10 +32,10 @@
   object-fit: contain;
 }
 
-/* Smaller size for page-level loading */
+/* Keep same size for page-level loading as main loading */
 .loading-animation.page-level {
-  width: 300px;
-  height: 300px;
+  width: 500px;  /* Same size as main loading */
+  height: 500px; /* Same size as main loading */
 }
 
 /* Fallback logo animation if gif fails */
@@ -121,14 +121,14 @@
   transition: width 0.3s ease;
 }
 
-/* Page-level loading container */
+/* Page-level loading container with pure black background */
 .page-loading-container {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--bg-primary);
+  background: #000000; /* Pure black to match EarthView */
   display: flex;
   align-items: center;
   justify-content: center;
