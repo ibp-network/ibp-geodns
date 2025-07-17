@@ -25,3 +25,9 @@ go.sum
 
 # Ignore files in maxmind directory but keep structure
 /tmp/maxmind/*
+/.github/*
+/.github
+/bin
+/bin/*
+/tmp
+/tmp/*

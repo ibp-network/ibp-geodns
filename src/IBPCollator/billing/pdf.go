@@ -23,7 +23,7 @@ import (
 func findLogo(baseDir string) string {
 	// Try multiple possible locations for the logo
 	possiblePaths := []string{
-		filepath.Join(baseDir, "assets", "ibp.png"),
+		filepath.Join(baseDir, "public", "static", "imgs", "ibp.png"),
 		filepath.Join(baseDir, "ibp.png"),
 		filepath.Join(baseDir, "..", "assets", "ibp.png"),
 		filepath.Join(baseDir, "..", "ibp.png"),

@@ -54,13 +54,15 @@ dashboard-install:
 	npm install
 
 dashboard-build:
-	mkdir public/static/imgs
-	cp assets/ibp.png public/static/imgs/
+	mkdir ./public/static/imgs
+	cp assets/ibp.png ./public/static/imgs/
+	cd ./src/IBDash/
 	npm run build
 
 dashboard-dev:
-	mkdir public/static/imgs
-	cp assets/ibp.png public/static/imgs/
+	mkdir ./public/static/imgs
+	cp assets/ibp.png ./public/static/imgs/
+	cd ./src/IBDash/
 	npm start
 
 # Combined commands
