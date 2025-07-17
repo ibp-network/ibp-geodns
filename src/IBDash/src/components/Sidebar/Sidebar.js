@@ -28,7 +28,7 @@ const Sidebar = () => {
       description: 'Global infrastructure map'
     },
     {
-      title: 'Members',
+      title: 'Member View',
       path: '/members',
       icon: '👥',
       description: 'Member information and stats'
