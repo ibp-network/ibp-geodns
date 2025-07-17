@@ -29,7 +29,7 @@ const Sidebar = () => {
       <div className="sidebar-header">
         <div className="logo-container">
           <img src="/static/imgs/ibp.png" alt="IBP" className="logo" />
-          <h1 className="logo-text">IBP Dashboard</h1>
+          <h1 className="logo-text"> Dashboard</h1>
         </div>
       </div>
                      
