@@ -54,14 +54,14 @@ dashboard-install:
 	cd $(REACT_DIR) && npm install
 
 dashboard-build:
-	mkdir -p $(REACT_DIR)/public/static/imgs
-	cp assets/ibp.png $(REACT_DIR)/public/static/imgs/
+	mkdir -p public/static/imgs
+	cp assets/ibp.png public/static/imgs/
 	cd $(REACT_DIR) && npm run build
 
 dashboard-dev:
-	mkdir -p $(REACT_DIR)/public/static/imgs
-	cp assets/ibp.png $(REACT_DIR)/public/static/imgs/
-	cd $(REACT_DIR) && npm start
+	mkdir -p public/static/imgs
+	cp assets/ibp.png public/static/imgs/
+    npm start
 
 # Combined commands
 install: dashboard-install
