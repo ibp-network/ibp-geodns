@@ -35,6 +35,7 @@ go.sum
 /tmp/*
 /src/IBDash/node_modules
 /src/IBDash/node_modules/*
+/src/IBDash/package-lock.json
 /public
 /public/*
 
