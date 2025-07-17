@@ -50,9 +50,28 @@ const EarthView = () => {
 
     // Clean up previous instance
     if (globeInstance.current) {
+      // Properly dispose of the previous globe
+      globeInstance.current.scene().children.forEach(child => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (child.material.map) child.material.map.dispose();
+          child.material.dispose();
+        }
+      });
+      
+      if (globeInstance.current.renderer) {
+        globeInstance.current.renderer().dispose();
+      }
+      
       if (globeInstance.current._destructor) {
         globeInstance.current._destructor();
       }
+      
+      // Clear the container
+      while (globeRef.current.firstChild) {
+        globeRef.current.removeChild(globeRef.current.firstChild);
+      }
+      
       globeInstance.current = null;
     }
 
@@ -63,32 +82,37 @@ const EarthView = () => {
       .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
       .showAtmosphere(true)
       .atmosphereColor('lightskyblue')
-      .atmosphereAltitude(0.25)
+      .atmosphereAltitude(0.15)
       .pointsData(members)
       .pointLat(d => d.latitude)
       .pointLng(d => d.longitude)
-      .pointColor(() => 'transparent') // Make points transparent as we'll use custom HTML
-      .pointRadius(0.1)
-      .pointAltitude(0.01)
+      .pointRadius(0) // Hide the default points
+      .pointAltitude(0)
       .htmlElementsData(members)
+      .htmlLat(d => d.latitude)
+      .htmlLng(d => d.longitude)
+      .htmlAltitude(0.01)
       .htmlElement(d => {
         const el = document.createElement('div');
         el.className = 'member-marker';
                  
         const health = getMemberHealth(d.name);
         const status = health === 100 ? 'operational' : health > 50 ? 'degraded' : 'offline';
+        
+        // Calculate number of active lights (1-5)
+        const activeLights = Math.ceil(health / 20);
                  
         // Create member marker with logo
         el.innerHTML = `
           <div class="marker-container ${status}">
             ${d.logo ? 
-               `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" />` :
+               `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'member-logo-placeholder\\'>${d.name.substring(0, 2).toUpperCase()}</div>'" />` :
                `<div class="member-logo-placeholder">${d.name.substring(0, 2).toUpperCase()}</div>`
             }
             <div class="member-name-label">${d.name}</div>
             <div class="health-lights">
               ${Array.from({ length: 5 }, (_, i) => 
-                 `<span class="health-light ${i < Math.ceil(health / 20) ? 'active' : 'inactive'}"></span>`
+                 `<span class="health-light ${i < activeLights ? 'active' : 'inactive'}"></span>`
               ).join('')}
             </div>
           </div>
@@ -102,23 +126,27 @@ const EarthView = () => {
       })
       .htmlTransitionDuration(1000);
 
-    // Add enhanced connection arcs based on member health
+    // Add connection arcs based on member health
     const arcs = [];
     for (let i = 0; i < members.length; i++) {
       for (let j = i + 1; j < members.length; j++) {
         const health1 = getMemberHealth(members[i].name);
         const health2 = getMemberHealth(members[j].name);
                  
-        // More connections for healthy nodes
+        // Calculate connection probability based on combined health
         const connectionProbability = (health1 + health2) / 200;
                  
         if (Math.random() < connectionProbability * 0.8) {
-          // Determine arc color based on health
-          let color = ['rgba(16, 185, 129, 0.6)', 'rgba(16, 185, 129, 0.4)']; // Green
-          if (health1 < 50 || health2 < 50) {
-            color = ['rgba(239, 68, 68, 0.6)', 'rgba(239, 68, 68, 0.4)']; // Red
-          } else if (health1 < 100 || health2 < 100) {
-            color = ['rgba(245, 158, 11, 0.6)', 'rgba(245, 158, 11, 0.4)']; // Orange
+          // Determine arc color based on average health
+          const avgHealth = (health1 + health2) / 2;
+          let color;
+          
+          if (avgHealth >= 80) {
+            color = ['rgba(16, 185, 129, 0.6)', 'rgba(16, 185, 129, 0.3)']; // Green
+          } else if (avgHealth >= 50) {
+            color = ['rgba(245, 158, 11, 0.6)', 'rgba(245, 158, 11, 0.3)']; // Orange
+          } else {
+            color = ['rgba(239, 68, 68, 0.6)', 'rgba(239, 68, 68, 0.3)']; // Red
           }
                      
           arcs.push({
@@ -141,28 +169,30 @@ const EarthView = () => {
       .arcStroke(0.5)
       .arcAltitudeAutoScale(0.3);
 
-    // Set controls
+    // Set up controls
     const controls = globe.controls();
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.5;
     controls.enableDamping = true;
     controls.dampingFactor = 0.75;
-    controls.minDistance = 100;
+    controls.enableZoom = true;
+    controls.zoomSpeed = 0.75;
+    controls.minDistance = 150;
     controls.maxDistance = 400;
 
-    // Set initial position with better zoom
-    globe.pointOfView({ lat: 20, lng: 0, altitude: 2.2 }, 0);
+    // Set initial camera position
+    globe.pointOfView({ lat: 20, lng: 0, altitude: 2.5 }, 0);
 
-    // Set scene size
-    globe.width(globeRef.current.clientWidth);
-    globe.height(globeRef.current.clientHeight);
-
-    // Handle resize
+    // Handle window resize
     const handleResize = () => {
-      globe.width(globeRef.current.clientWidth);
-      globe.height(globeRef.current.clientHeight);
+      if (globeRef.current) {
+        globe.width(globeRef.current.offsetWidth);
+        globe.height(globeRef.current.offsetHeight);
+      }
     };
+    
     window.addEventListener('resize', handleResize);
+    handleResize(); // Initial size
 
     // Store the instance
     globeInstance.current = globe;
@@ -170,10 +200,34 @@ const EarthView = () => {
     // Cleanup function
     return () => {
       window.removeEventListener('resize', handleResize);
-      if (globeInstance.current && globeInstance.current._destructor) {
-        globeInstance.current._destructor();
+      
+      if (globeInstance.current) {
+        // Dispose of globe resources
+        if (globeInstance.current.scene) {
+          globeInstance.current.scene().children.forEach(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              if (child.material.map) child.material.map.dispose();
+              child.material.dispose();
+            }
+          });
+        }
+        
+        if (globeInstance.current.renderer) {
+          globeInstance.current.renderer().dispose();
+        }
+        
+        if (globeInstance.current._destructor) {
+          globeInstance.current._destructor();
+        }
+        
+        // Clear the container
+        while (globeRef.current && globeRef.current.firstChild) {
+          globeRef.current.removeChild(globeRef.current.firstChild);
+        }
+        
+        globeInstance.current = null;
       }
-      globeInstance.current = null;
     };
   }, [members, downtime]);
 
@@ -245,7 +299,17 @@ const EarthView = () => {
               <span className="health-light active"></span>
               <span className="health-light active"></span>
             </div>
-            <span>100% Operational</span>
+            <span>100% Health (5 lights)</span>
+          </div>
+          <div className="legend-item">
+            <div className="legend-health-lights">
+              <span className="health-light active"></span>
+              <span className="health-light active"></span>
+              <span className="health-light active"></span>
+              <span className="health-light active"></span>
+              <span className="health-light inactive"></span>
+            </div>
+            <span>80% Health (4 lights)</span>
           </div>
           <div className="legend-item">
             <div className="legend-health-lights">
@@ -255,17 +319,27 @@ const EarthView = () => {
               <span className="health-light inactive"></span>
               <span className="health-light inactive"></span>
             </div>
-            <span>Degraded Performance</span>
+            <span>60% Health (3 lights)</span>
           </div>
           <div className="legend-item">
             <div className="legend-health-lights">
+              <span className="health-light active"></span>
+              <span className="health-light active"></span>
               <span className="health-light inactive"></span>
+              <span className="health-light inactive"></span>
+              <span className="health-light inactive"></span>
+            </div>
+            <span>40% Health (2 lights)</span>
+          </div>
+          <div className="legend-item">
+            <div className="legend-health-lights">
+              <span className="health-light active"></span>
               <span className="health-light inactive"></span>
               <span className="health-light inactive"></span>
               <span className="health-light inactive"></span>
               <span className="health-light inactive"></span>
             </div>
-            <span>Major Outage</span>
+            <span>20% Health (1 light)</span>
           </div>
         </div>
       </div>
