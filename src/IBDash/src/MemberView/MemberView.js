@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ApiHelper from '../components/ApiHelper/ApiHelper';
+import Loading from '../components/Loading/Loading';
 import './MemberView.css';
 
 const MemberView = () => {
@@ -23,10 +24,11 @@ const MemberView = () => {
       ]);
       setMembers(membersRes.data);
       setDowntime(downtimeRes.data);
-      setLoading(false);
+      // Add delay to ensure smooth animation
+      setTimeout(() => setLoading(false), 1500);
     } catch (error) {
       console.error('Error loading data:', error);
-      setLoading(false);
+      setTimeout(() => setLoading(false), 1500);
     }
   };
 
@@ -52,12 +54,7 @@ const MemberView = () => {
   }, {});
 
   if (loading) {
-    return (
-      <div className="members-loading">
-        <div className="loading-spinner"></div>
-        <p>Loading members...</p>
-      </div>
-    );
+    return <Loading pageLevel={true} dataReady={true} />;
   }
 
   return (
@@ -167,8 +164,8 @@ const MemberView = () => {
                     )}
 
                     <div className="member-footer">
-                      <a href={member.website} target="_blank" rel="noopener noreferrer" 
-                         onClick={(e) => e.stopPropagation()} className="member-website">
+                      <a href={member.website} target="_blank" rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()} className="member-website">
                         🌐 Visit Website
                       </a>
                     </div>

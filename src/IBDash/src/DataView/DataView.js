@@ -3,6 +3,7 @@ import ApiHelper from '../components/ApiHelper/ApiHelper';
 import DataTable from '../components/DataTable/DataTable';
 import StatsCard from '../components/Cards/StatsCard';
 import Charts from '../components/Charts/Charts';
+import Loading from '../components/Loading/Loading';
 import './DataView.css';
 
 const DataView = () => {
@@ -14,11 +15,31 @@ const DataView = () => {
   const [data, setData] = useState(null);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   useEffect(() => {
-    loadData();
-    loadSummary();
-  }, [dateRange, activeTab]);
+    loadInitialData();
+  }, []);
+
+  useEffect(() => {
+    if (!initialLoading) {
+      loadData();
+      loadSummary();
+    }
+  }, [dateRange, activeTab, initialLoading]);
+
+  const loadInitialData = async () => {
+    setInitialLoading(true);
+    try {
+      await Promise.all([
+        loadData(),
+        loadSummary()
+      ]);
+    } finally {
+      // Wait for animation to complete
+      setTimeout(() => setInitialLoading(false), 1500);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -27,7 +48,6 @@ const DataView = () => {
         start: dateRange.start.toISOString().split('T')[0],
         end: dateRange.end.toISOString().split('T')[0]
       };
-
       let response;
       switch (activeTab) {
         case 'country':
@@ -66,11 +86,15 @@ const DataView = () => {
   };
 
   const tabs = [
-    { id: 'country', label: 'By Country', icon: '🌍' },
+    { id: 'country', label: 'By Country', icon: '🌎' },
     { id: 'asn', label: 'By ASN', icon: '🌐' },
     { id: 'service', label: 'By Service', icon: '⚡' },
     { id: 'member', label: 'By Member', icon: '👥' }
   ];
+
+  if (initialLoading) {
+    return <Loading pageLevel={true} dataReady={true} />;
+  }
 
   return (
     <div className="data-view fade-in">
@@ -131,7 +155,6 @@ const DataView = () => {
             </button>
           ))}
         </div>
-
         <div className="tab-content">
           {loading ? (
             <div className="loading-container">
