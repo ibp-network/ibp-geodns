@@ -40,7 +40,7 @@ const Sidebar = () => {
       <div className="sidebar-header">
         <div className="logo-container">
           <img src="/static/imgs/ibp.png" alt="IBP" className="logo" />
-          <h1 className="logo-text">IBP Dashboard</h1>
+          <h1 className="logo-text"> Dashboard</h1>
         </div>
       </div>
                      
@@ -66,9 +66,7 @@ const Sidebar = () => {
           <div className="time">{format(currentTime, 'HH:mm:ss')} UTC</div>
         </div>
         <div className="version">
-          Infrastructure Builders Program
-          <br />
-          <small>v0.4.0</small>
+          <small>IBP GeoDNS v0.4.0</small>
         </div>
       </div>
     </div>
