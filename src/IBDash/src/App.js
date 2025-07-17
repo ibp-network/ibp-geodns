@@ -10,13 +10,27 @@ import MemberDetail from './MemberView/MemberDetail';
 
 function App() {
   const [loading, setLoading] = useState(true);
+  const [dataReady, setDataReady] = useState(false);
 
   useEffect(() => {
-    setTimeout(() => setLoading(false), 1500);
+    // Simulate data loading - in real app, this would be your API calls
+    const loadData = async () => {
+      // Your actual data loading logic here
+      await new Promise(resolve => setTimeout(resolve, 500)); // Simulated API call
+      setDataReady(true);
+    };
+
+    loadData();
   }, []);
 
+  const handleLoadingComplete = () => {
+    if (dataReady) {
+      setLoading(false);
+    }
+  };
+
   if (loading) {
-    return <Loading />;
+    return <Loading onAnimationComplete={handleLoadingComplete} dataReady={dataReady} />;
   }
 
   return (
