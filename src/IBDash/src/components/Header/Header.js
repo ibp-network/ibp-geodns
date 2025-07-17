@@ -21,9 +21,9 @@ const Header = () => {
           <div className="time">{format(currentTime, 'HH:mm:ss')} UTC</div>
         </div>
       </div>
-              
+                     
       <div className="header-right">
-        <img src="/ibp.png" alt="IBP" className="header-logo" />
+        <img src="/static/imgs/ibp.png" alt="IBP" className="header-logo" />
       </div>
     </header>
   );

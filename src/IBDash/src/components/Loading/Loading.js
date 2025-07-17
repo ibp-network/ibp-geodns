@@ -5,7 +5,7 @@ const Loading = () => {
   return (
     <div className="loading-screen">
       <div className="loading-content">
-        <img src="/ibp-logo.png" alt="IBP" className="loading-logo" />
+        <img src="/static/imgs/ibp.png" alt="IBP" className="loading-logo" />
         <div className="loading-spinner"></div>
         <h2>Infrastructure Builders Program</h2>
         <p>Loading dashboard...</p>

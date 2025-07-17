@@ -28,11 +28,11 @@ const Sidebar = () => {
     <div className="sidebar">
       <div className="sidebar-header">
         <div className="logo-container">
-          <img src="/ibp-logo.png" alt="IBP" className="logo" />
+          <img src="/static/imgs/ibp.png" alt="IBP" className="logo" />
           <h1 className="logo-text">IBP Dashboard</h1>
         </div>
       </div>
-              
+                     
       <nav className="sidebar-nav">
         {menuItems.map((item) => (
           <NavLink
