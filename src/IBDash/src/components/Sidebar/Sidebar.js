@@ -1,8 +1,19 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
+import { format } from 'date-fns';
 import './Sidebar.css';
 
 const Sidebar = () => {
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
   const menuItems = [
     {
       title: 'Data View',
@@ -29,7 +40,7 @@ const Sidebar = () => {
       <div className="sidebar-header">
         <div className="logo-container">
           <img src="/static/imgs/ibp.png" alt="IBP" className="logo" />
-          <h1 className="logo-text"> Dashboard</h1>
+          <h1 className="logo-text">IBP Dashboard</h1>
         </div>
       </div>
                      
@@ -50,6 +61,10 @@ const Sidebar = () => {
       </nav>
 
       <div className="sidebar-footer">
+        <div className="time-display">
+          <div className="date">{format(currentTime, 'EEEE, MMMM d, yyyy')}</div>
+          <div className="time">{format(currentTime, 'HH:mm:ss')} UTC</div>
+        </div>
         <div className="version">
           Infrastructure Builders Program
           <br />

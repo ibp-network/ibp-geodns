@@ -9,6 +9,8 @@ const EarthView = () => {
   const [members, setMembers] = useState([]);
   const [downtime, setDowntime] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [hoveredMember, setHoveredMember] = useState(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     loadMembersData();
@@ -45,6 +47,11 @@ const EarthView = () => {
     return Math.max(0, 100 - (memberDowntime.length * 10));
   };
 
+  // Get member outages
+  const getMemberOutages = (memberName) => {
+    return downtime.filter(dt => dt.member_name === memberName);
+  };
+
   useEffect(() => {
     if (!globeRef.current || members.length === 0) return;
 
@@ -77,7 +84,7 @@ const EarthView = () => {
 
     // Create new globe instance
     const globe = Globe()(globeRef.current)
-      .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
+      .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
       .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
       .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
       .showAtmosphere(true)
@@ -120,6 +127,21 @@ const EarthView = () => {
                  
         el.style.pointerEvents = 'auto';
         el.style.cursor = 'pointer';
+        
+        // Handle mouse events
+        el.onmouseenter = (e) => {
+          setHoveredMember(d);
+          setTooltipPosition({ x: e.clientX, y: e.clientY });
+        };
+        
+        el.onmousemove = (e) => {
+          setTooltipPosition({ x: e.clientX, y: e.clientY });
+        };
+        
+        el.onmouseleave = () => {
+          setHoveredMember(null);
+        };
+        
         el.onclick = () => window.location.href = `/members/${d.name}`;
                  
         return el;
@@ -169,10 +191,9 @@ const EarthView = () => {
       .arcStroke(0.5)
       .arcAltitudeAutoScale(0.3);
 
-    // Set up controls
+    // Set up controls (disable auto-rotate)
     const controls = globe.controls();
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 0.5;
+    controls.autoRotate = false; // Disable auto-rotation
     controls.enableDamping = true;
     controls.dampingFactor = 0.75;
     controls.enableZoom = true;
@@ -270,8 +291,78 @@ const EarthView = () => {
         </div>
       </div>
                      
-      <div className="globe-container card">
+      <div className="globe-container">
         <div ref={globeRef} className="globe"></div>
+        
+        {/* Tooltip */}
+        {hoveredMember && (
+          <div 
+            className="member-tooltip visible enhanced-glass"
+            style={{
+              left: `${tooltipPosition.x + 20}px`,
+              top: `${tooltipPosition.y - 100}px`
+            }}
+          >
+            <div className="tooltip-header">
+              {hoveredMember.logo ? (
+                <img src={hoveredMember.logo} alt={hoveredMember.name} className="tooltip-logo" />
+              ) : (
+                <div className="tooltip-logo logo-placeholder">
+                  {hoveredMember.name.substring(0, 2).toUpperCase()}
+                </div>
+              )}
+              <div className="tooltip-title">
+                <div className="tooltip-name">{hoveredMember.name}</div>
+                <div className="tooltip-region">{hoveredMember.region}</div>
+              </div>
+            </div>
+            
+            <div className="tooltip-info">
+              <div className="tooltip-row">
+                <span className="tooltip-label">Health:</span>
+                <span className="tooltip-value">{getMemberHealth(hoveredMember.name)}%</span>
+              </div>
+              <div className="tooltip-row">
+                <span className="tooltip-label">Level:</span>
+                <span className="tooltip-value">{hoveredMember.level}</span>
+              </div>
+              <div className="tooltip-row">
+                <span className="tooltip-label">IPv4:</span>
+                <span className="tooltip-value">{hoveredMember.service_ipv4 || 'Not configured'}</span>
+              </div>
+              <div className="tooltip-row">
+                <span className="tooltip-label">IPv6:</span>
+                <span className="tooltip-value">{hoveredMember.service_ipv6 || 'Not configured'}</span>
+              </div>
+            </div>
+            
+            {hoveredMember.services && hoveredMember.services.length > 0 && (
+              <div className="tooltip-services">
+                <h4>Active Services</h4>
+                <div className="service-list">
+                  {hoveredMember.services.map((service, idx) => (
+                    <span key={idx} className="service-tag">{service}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {getMemberOutages(hoveredMember.name).length > 0 ? (
+              <div className="tooltip-outages">
+                <h4>Current Issues</h4>
+                {getMemberOutages(hoveredMember.name).map((outage, idx) => (
+                  <div key={idx} className="outage-item">
+                    • {outage.check_type} - {outage.domain_name || 'Site level'}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="tooltip-no-issues">
+                ✓ No current issues
+              </div>
+            )}
+          </div>
+        )}
                           
         <div className="globe-controls enhanced-glass">
           <h3>Controls</h3>

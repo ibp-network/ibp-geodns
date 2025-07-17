@@ -109,11 +109,36 @@
   color: var(--text-secondary);
 }
 
+.time-display {
+  text-align: center;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+}
+
+.date {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.time {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.version {
+  margin-top: 8px;
+}
+
 @media (max-width: 768px) {
   .sidebar {
     width: 240px;
   }
-  
+     
   .nav-description {
     display: none;
   }
@@ -123,7 +148,7 @@
   .sidebar {
     width: 200px;
   }
-  
+     
   .logo-text {
     font-size: 16px;
   }

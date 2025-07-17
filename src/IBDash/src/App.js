@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 import Sidebar from './components/Sidebar/Sidebar';
-import Header from './components/Header/Header';
 import Loading from './components/Loading/Loading';
 import DataView from './DataView/DataView';
 import EarthView from './EarthView/EarthView';
@@ -25,7 +24,6 @@ function App() {
       <div className="app">
         <Sidebar />
         <div className="main-content">
-          <Header />
           <div className="content-area">
             <Routes>
               <Route path="/" element={<Navigate to="/data" replace />} />
