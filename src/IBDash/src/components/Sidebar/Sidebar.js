@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import './Sidebar.css';
 
-const Sidebar = ({ open, onToggle }) => {
+const Sidebar = () => {
   const menuItems = [
     {
       title: 'Data View',
@@ -25,17 +25,14 @@ const Sidebar = ({ open, onToggle }) => {
   ];
 
   return (
-    <div className={`sidebar ${open ? '' : 'closed'}`}>
+    <div className="sidebar">
       <div className="sidebar-header">
         <div className="logo-container">
           <img src="/ibp-logo.png" alt="IBP" className="logo" />
-          {open && <h1 className="logo-text">IBP Dashboard</h1>}
+          <h1 className="logo-text">IBP Dashboard</h1>
         </div>
-        <button className="toggle-btn" onClick={onToggle}>
-          {open ? '◀' : '▶'}
-        </button>
       </div>
-      
+              
       <nav className="sidebar-nav">
         {menuItems.map((item) => (
           <NavLink
@@ -44,25 +41,21 @@ const Sidebar = ({ open, onToggle }) => {
             className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
           >
             <span className="nav-icon">{item.icon}</span>
-            {open && (
-              <div className="nav-content">
-                <span className="nav-title">{item.title}</span>
-                <span className="nav-description">{item.description}</span>
-              </div>
-            )}
+            <div className="nav-content">
+              <span className="nav-title">{item.title}</span>
+              <span className="nav-description">{item.description}</span>
+            </div>
           </NavLink>
         ))}
       </nav>
 
-      {open && (
-        <div className="sidebar-footer">
-          <div className="version">
-            Infrastructure Builders Program
-            <br />
-            <small>v0.4.0</small>
-          </div>
+      <div className="sidebar-footer">
+        <div className="version">
+          Infrastructure Builders Program
+          <br />
+          <small>v0.4.0</small>
         </div>
-      )}
+      </div>
     </div>
   );
 };

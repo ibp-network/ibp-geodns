@@ -11,7 +11,6 @@ import MemberDetail from './MemberView/MemberDetail';
 
 function App() {
   const [loading, setLoading] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     setTimeout(() => setLoading(false), 1500);
@@ -24,8 +23,8 @@ function App() {
   return (
     <Router>
       <div className="app">
-        <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
-        <div className={`main-content ${sidebarOpen ? '' : 'sidebar-closed'}`}>
+        <Sidebar />
+        <div className="main-content">
           <Header />
           <div className="content-area">
             <Routes>

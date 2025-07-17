@@ -7,18 +7,13 @@
 .main-content {
   flex: 1;
   margin-left: 280px;
-  transition: margin-left 0.3s ease;
   display: flex;
   flex-direction: column;
 }
 
-.main-content.sidebar-closed {
-  margin-left: 80px;
-}
-
 .content-area {
   flex: 1;
-  padding: 24px;
+  padding: 0;
   overflow-y: auto;
   background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
 }
@@ -102,4 +97,16 @@
 
 .fade-in {
   animation: fadeIn 0.3s ease-out;
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 240px;
+  }
+}
+
+@media (max-width: 600px) {
+  .main-content {
+    margin-left: 200px;
+  }
 }

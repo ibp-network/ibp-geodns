@@ -37,13 +37,19 @@ const EarthView = () => {
     }
   };
 
+  // Calculate member health percentage
+  const getMemberHealth = (memberName) => {
+    const memberDowntime = downtime.filter(dt => dt.member_name === memberName);
+    if (memberDowntime.length === 0) return 100;
+    if (memberDowntime.length > 10) return 0;
+    return Math.max(0, 100 - (memberDowntime.length * 10));
+  };
+
   useEffect(() => {
-    // Ensure we have a container and members data
     if (!globeRef.current || members.length === 0) return;
 
     // Clean up previous instance
     if (globeInstance.current) {
-      // Properly dispose of the previous globe
       if (globeInstance.current._destructor) {
         globeInstance.current._destructor();
       }
@@ -57,59 +63,66 @@ const EarthView = () => {
       .pointsData(members)
       .pointLat(d => d.latitude)
       .pointLng(d => d.longitude)
-      .pointColor(d => {
-        const memberDowntime = downtime.filter(dt => dt.member_name === d.name);
-        if (memberDowntime.length > 5) return '#ef4444'; // Red - major issues
-        if (memberDowntime.length > 0) return '#f59e0b'; // Orange - some issues
-        return '#10b981'; // Green - all good
-      })
-      .pointRadius(d => {
-        const memberDowntime = downtime.filter(dt => dt.member_name === d.name);
-        return memberDowntime.length > 0 ? 0.8 : 0.6;
-      })
+      .pointColor(() => 'transparent') // Make points transparent as we'll use custom HTML
+      .pointRadius(0.1)
       .pointAltitude(0.01)
-      .pointLabel(d => {
-        const memberDowntime = downtime.filter(dt => dt.member_name === d.name);
-        const status = memberDowntime.length === 0 ? 'Operational' : 
-                       memberDowntime.length > 5 ? 'Major Outage' : 'Degraded';
-        return `
-          <div style="text-align: center; padding: 8px; background: rgba(0,0,0,0.8); border-radius: 8px;">
-            <div style="font-weight: bold; font-size: 14px; color: #fff;">${d.name}</div>
-            <div style="font-size: 12px; color: #888; margin: 4px 0;">${d.region}</div>
-            <div style="font-size: 12px; margin-top: 4px;">
-              Status: <span style="color: ${
-                status === 'Operational' ? '#10b981' : 
-                status === 'Major Outage' ? '#ef4444' : '#f59e0b'
-              }; font-weight: bold;">${status}</span>
-            </div>
-            ${memberDowntime.length > 0 ? 
-               `<div style="font-size: 11px; color: #f59e0b; margin-top: 4px;">
-                ${memberDowntime.length} service(s) affected
-              </div>` : ''
+      .htmlElementsData(members)
+      .htmlElement(d => {
+        const el = document.createElement('div');
+        el.className = 'member-marker';
+        
+        const health = getMemberHealth(d.name);
+        const status = health === 100 ? 'operational' : health > 50 ? 'degraded' : 'offline';
+        
+        // Create member marker with logo
+        el.innerHTML = `
+          <div class="marker-container ${status}">
+            ${d.logo ? 
+              `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" />` : 
+              `<div class="member-logo-placeholder">${d.name.substring(0, 2).toUpperCase()}</div>`
             }
-            ${d.service_ipv4 ? `<div style="font-size: 10px; color: #666; margin-top: 4px;">IPv4: ${d.service_ipv4}</div>` : ''}
-            ${d.service_ipv6 ? `<div style="font-size: 10px; color: #666;">IPv6: ${d.service_ipv6}</div>` : ''}
+            <div class="member-name-label">${d.name}</div>
+            <div class="health-lights">
+              ${Array.from({ length: 5 }, (_, i) => 
+                `<span class="health-light ${i < Math.ceil(health / 20) ? 'active' : 'inactive'}"></span>`
+              ).join('')}
+            </div>
           </div>
         `;
+        
+        el.style.pointerEvents = 'auto';
+        el.style.cursor = 'pointer';
+        el.onclick = () => window.location.href = `/members/${d.name}`;
+        
+        return el;
       })
-      .onPointClick(point => {
-        window.location.href = `/members/${point.name}`;
-      })
-      .onPointHover(point => {
-        document.body.style.cursor = point ? 'pointer' : 'default';
-      });
+      .htmlTransitionDuration(1000);
 
-    // Add connection arcs
+    // Add enhanced connection arcs based on member health
     const arcs = [];
     for (let i = 0; i < members.length; i++) {
       for (let j = i + 1; j < members.length; j++) {
-        if (Math.random() > 0.85) { // Show only some connections
+        const health1 = getMemberHealth(members[i].name);
+        const health2 = getMemberHealth(members[j].name);
+        
+        // More connections for healthy nodes
+        const connectionProbability = (health1 + health2) / 200;
+        
+        if (Math.random() < connectionProbability * 0.8) {
+          // Determine arc color based on health
+          let color = ['rgba(16, 185, 129, 0.6)', 'rgba(16, 185, 129, 0.4)']; // Green
+          if (health1 < 50 || health2 < 50) {
+            color = ['rgba(239, 68, 68, 0.6)', 'rgba(239, 68, 68, 0.4)']; // Red
+          } else if (health1 < 100 || health2 < 100) {
+            color = ['rgba(245, 158, 11, 0.6)', 'rgba(245, 158, 11, 0.4)']; // Orange
+          }
+          
           arcs.push({
             startLat: members[i].latitude,
             startLng: members[i].longitude,
             endLat: members[j].latitude,
             endLng: members[j].longitude,
-            color: ['rgba(59, 130, 246, 0.5)', 'rgba(139, 92, 246, 0.5)']
+            color: color
           });
         }
       }
@@ -121,25 +134,24 @@ const EarthView = () => {
       .arcDashLength(0.4)
       .arcDashGap(0.2)
       .arcDashAnimateTime(2000)
-      .arcStroke(0.3)
+      .arcStroke(0.5)
       .arcAltitudeAutoScale(0.3);
 
-    // Check if globe has controls before accessing them
+    // Set controls
     if (globe.controls && typeof globe.controls === 'function') {
       const controls = globe.controls();
       if (controls) {
         controls.autoRotate = true;
         controls.autoRotateSpeed = 0.5;
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.75;
+        controls.minDistance = 1.2;
+        controls.maxDistance = 3;
       }
     }
 
-    // Set initial position
-    globe.pointOfView({ lat: 20, lng: 0, altitude: 2.5 });
-
-    // Add atmosphere effect only if domElement exists
-    if (globe.domElement) {
-      globe.domElement.style.background = 'radial-gradient(circle at 50% 50%, #1a1a2e 0%, #0a0a0a 100%)';
-    }
+    // Set initial position with better zoom
+    globe.pointOfView({ lat: 20, lng: 0, altitude: 2.2 });
 
     // Store the instance
     globeInstance.current = globe;
@@ -155,15 +167,12 @@ const EarthView = () => {
 
   const stats = {
     total: members.length,
-    operational: members.filter(m => !downtime.find(d => d.member_name === m.name)).length,
+    operational: members.filter(m => getMemberHealth(m.name) === 100).length,
     degraded: members.filter(m => {
-      const dt = downtime.filter(d => d.member_name === m.name);
-      return dt.length > 0 && dt.length <= 5;
+      const health = getMemberHealth(m.name);
+      return health > 0 && health < 100;
     }).length,
-    offline: members.filter(m => {
-      const dt = downtime.filter(d => d.member_name === m.name);
-      return dt.length > 5;
-    }).length
+    offline: members.filter(m => getMemberHealth(m.name) === 0).length
   };
 
   if (loading) {
@@ -179,7 +188,7 @@ const EarthView = () => {
     <div className="earth-view fade-in">
       <div className="earth-header">
         <h1>Global Infrastructure Map</h1>
-        <div className="status-summary glass">
+        <div className="status-summary enhanced-glass">
           <div className="status-item">
             <span className="status-indicator status-online"></span>
             <span className="status-label">{stats.operational} Operational</span>
@@ -194,18 +203,18 @@ const EarthView = () => {
           </div>
         </div>
       </div>
-      
+              
       <div className="globe-container card">
         <div ref={globeRef} className="globe"></div>
-        
-        <div className="globe-controls glass">
+                 
+        <div className="globe-controls enhanced-glass">
           <h3>Controls</h3>
           <div className="control-item">
             <span className="control-icon">🖱️</span>
             <span>Drag to rotate</span>
           </div>
           <div className="control-item">
-            <span className="control-icon">📍</span>
+            <span className="control-icon">👆</span>
             <span>Click member for details</span>
           </div>
           <div className="control-item">
@@ -214,18 +223,36 @@ const EarthView = () => {
           </div>
         </div>
 
-        <div className="globe-legend glass">
+        <div className="globe-legend enhanced-glass">
           <h3>Member Status</h3>
           <div className="legend-item">
-            <span className="legend-dot operational"></span>
-            <span>Fully Operational</span>
+            <div className="legend-health-lights">
+              <span className="health-light active"></span>
+              <span className="health-light active"></span>
+              <span className="health-light active"></span>
+              <span className="health-light active"></span>
+              <span className="health-light active"></span>
+            </div>
+            <span>100% Operational</span>
           </div>
           <div className="legend-item">
-            <span className="legend-dot degraded"></span>
+            <div className="legend-health-lights">
+              <span className="health-light active"></span>
+              <span className="health-light active"></span>
+              <span className="health-light active"></span>
+              <span className="health-light inactive"></span>
+              <span className="health-light inactive"></span>
+            </div>
             <span>Degraded Performance</span>
           </div>
           <div className="legend-item">
-            <span className="legend-dot offline"></span>
+            <div className="legend-health-lights">
+              <span className="health-light inactive"></span>
+              <span className="health-light inactive"></span>
+              <span className="health-light inactive"></span>
+              <span className="health-light inactive"></span>
+              <span className="health-light inactive"></span>
+            </div>
             <span>Major Outage</span>
           </div>
         </div>
