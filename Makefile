@@ -31,6 +31,7 @@ GOGET := $(GOCMD) get
 BINARY_DIR := $(DIR)/bin
 REACT_DIR := $(DIR)/src/IBDash
 PUBLIC_DIR := $(DIR)/public
+HTACCESS := $(PUBLIC_DIR)/.htaccess
 
 # Binary names
 BINARY_DNS := ibpdns$(EXE_EXT)
@@ -87,6 +88,20 @@ else
 	$(MV_CMD) $(REACT_DIR)/build $(PUBLIC_DIR)
 	$(MKDIR_CMD) $(PUBLIC_DIR)/static/imgs
 	$(CP_CMD) $(DIR)/assets/ibp.png $(PUBLIC_DIR)/static/imgs/
+endif
+	@echo "Creating .htaccess file..."
+ifeq ($(DETECTED_OS),Windows)
+	@echo RewriteEngine On > $(call fixpath,$(HTACCESS))
+	@echo RewriteBase / >> $(call fixpath,$(HTACCESS))
+	@echo RewriteCond %%{REQUEST_FILENAME} !-f >> $(call fixpath,$(HTACCESS))
+	@echo RewriteCond %%{REQUEST_FILENAME} !-d >> $(call fixpath,$(HTACCESS))
+	@echo RewriteRule . /index.html [L] >> $(call fixpath,$(HTACCESS))
+else
+	@echo "RewriteEngine On" > $(HTACCESS)
+	@echo "RewriteBase /" >> $(HTACCESS)
+	@echo "RewriteCond %{REQUEST_FILENAME} !-f" >> $(HTACCESS)
+	@echo "RewriteCond %{REQUEST_FILENAME} !-d" >> $(HTACCESS)
+	@echo "RewriteRule . /index.html [L]" >> $(HTACCESS)
 endif
 
 dashboard-dev:

@@ -58,8 +58,12 @@ const EarthView = () => {
 
     // Create new globe instance
     const globe = Globe()(globeRef.current)
-      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-      .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+      .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
+      .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+      .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
+      .showAtmosphere(true)
+      .atmosphereColor('lightskyblue')
+      .atmosphereAltitude(0.25)
       .pointsData(members)
       .pointLat(d => d.latitude)
       .pointLng(d => d.longitude)
@@ -70,30 +74,30 @@ const EarthView = () => {
       .htmlElement(d => {
         const el = document.createElement('div');
         el.className = 'member-marker';
-        
+                 
         const health = getMemberHealth(d.name);
         const status = health === 100 ? 'operational' : health > 50 ? 'degraded' : 'offline';
-        
+                 
         // Create member marker with logo
         el.innerHTML = `
           <div class="marker-container ${status}">
             ${d.logo ? 
-              `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" />` : 
-              `<div class="member-logo-placeholder">${d.name.substring(0, 2).toUpperCase()}</div>`
+               `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" />` :
+               `<div class="member-logo-placeholder">${d.name.substring(0, 2).toUpperCase()}</div>`
             }
             <div class="member-name-label">${d.name}</div>
             <div class="health-lights">
               ${Array.from({ length: 5 }, (_, i) => 
-                `<span class="health-light ${i < Math.ceil(health / 20) ? 'active' : 'inactive'}"></span>`
+                 `<span class="health-light ${i < Math.ceil(health / 20) ? 'active' : 'inactive'}"></span>`
               ).join('')}
             </div>
           </div>
         `;
-        
+                 
         el.style.pointerEvents = 'auto';
         el.style.cursor = 'pointer';
         el.onclick = () => window.location.href = `/members/${d.name}`;
-        
+                 
         return el;
       })
       .htmlTransitionDuration(1000);
@@ -104,10 +108,10 @@ const EarthView = () => {
       for (let j = i + 1; j < members.length; j++) {
         const health1 = getMemberHealth(members[i].name);
         const health2 = getMemberHealth(members[j].name);
-        
+                 
         // More connections for healthy nodes
         const connectionProbability = (health1 + health2) / 200;
-        
+                 
         if (Math.random() < connectionProbability * 0.8) {
           // Determine arc color based on health
           let color = ['rgba(16, 185, 129, 0.6)', 'rgba(16, 185, 129, 0.4)']; // Green
@@ -116,7 +120,7 @@ const EarthView = () => {
           } else if (health1 < 100 || health2 < 100) {
             color = ['rgba(245, 158, 11, 0.6)', 'rgba(245, 158, 11, 0.4)']; // Orange
           }
-          
+                     
           arcs.push({
             startLat: members[i].latitude,
             startLng: members[i].longitude,
@@ -138,26 +142,34 @@ const EarthView = () => {
       .arcAltitudeAutoScale(0.3);
 
     // Set controls
-    if (globe.controls && typeof globe.controls === 'function') {
-      const controls = globe.controls();
-      if (controls) {
-        controls.autoRotate = true;
-        controls.autoRotateSpeed = 0.5;
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.75;
-        controls.minDistance = 1.2;
-        controls.maxDistance = 3;
-      }
-    }
+    const controls = globe.controls();
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.5;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.75;
+    controls.minDistance = 100;
+    controls.maxDistance = 400;
 
     // Set initial position with better zoom
-    globe.pointOfView({ lat: 20, lng: 0, altitude: 2.2 });
+    globe.pointOfView({ lat: 20, lng: 0, altitude: 2.2 }, 0);
+
+    // Set scene size
+    globe.width(globeRef.current.clientWidth);
+    globe.height(globeRef.current.clientHeight);
+
+    // Handle resize
+    const handleResize = () => {
+      globe.width(globeRef.current.clientWidth);
+      globe.height(globeRef.current.clientHeight);
+    };
+    window.addEventListener('resize', handleResize);
 
     // Store the instance
     globeInstance.current = globe;
 
     // Cleanup function
     return () => {
+      window.removeEventListener('resize', handleResize);
       if (globeInstance.current && globeInstance.current._destructor) {
         globeInstance.current._destructor();
       }
@@ -203,10 +215,10 @@ const EarthView = () => {
           </div>
         </div>
       </div>
-              
+                     
       <div className="globe-container card">
         <div ref={globeRef} className="globe"></div>
-                 
+                          
         <div className="globe-controls enhanced-glass">
           <h3>Controls</h3>
           <div className="control-item">
