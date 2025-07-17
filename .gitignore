@@ -27,14 +27,14 @@ go.sum
 /tmp/maxmind/*
 /.github
 /.github/*
+/.github/workflows
+/.github/workflows/*
 /bin
 /bin/*
 /tmp
 /tmp/*
-.github
-.github/*
 /src/IBDash/node_modules
 /src/IBDash/node_modules/*
-/public_html
-/public_html/*
+/public
+/public/*
 
