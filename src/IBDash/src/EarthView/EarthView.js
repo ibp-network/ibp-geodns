@@ -11,11 +11,36 @@ const EarthView = () => {
   const [downtime, setDowntime] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hoveredMember, setHoveredMember] = useState(null);
+  const [pinnedMember, setPinnedMember] = useState(null);
+  const panelRef = useRef(null);
 
   useEffect(() => {
     loadMembersData();
     loadDowntimeData();
   }, []);
+
+  // Handle ESC key to close pinned panel
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (e.key === 'Escape' && pinnedMember) {
+        setPinnedMember(null);
+        setHoveredMember(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [pinnedMember]);
+
+  // Handle scrolling detection
+  useEffect(() => {
+    if (panelRef.current && hoveredMember) {
+      const hasScroll = panelRef.current.scrollHeight > panelRef.current.clientHeight;
+      if (hasScroll && !pinnedMember) {
+        setPinnedMember(hoveredMember);
+      }
+    }
+  }, [hoveredMember, pinnedMember]);
 
   const loadMembersData = async () => {
     try {
@@ -56,7 +81,7 @@ const EarthView = () => {
   const isServiceDown = (memberName, serviceName) => {
     return downtime.some(dt => 
       dt.member_name === memberName && 
-      (dt.domain_name?.includes(serviceName.toLowerCase()) || 
+      (dt.domain_name?.includes(serviceName.toLowerCase()) ||
        dt.endpoint?.includes(serviceName.toLowerCase()))
     );
   };
@@ -114,43 +139,47 @@ const EarthView = () => {
       .htmlElement(d => {
         const el = document.createElement('div');
         el.className = 'member-marker';
-                 
+        
         const health = getMemberHealth(d.name);
         const status = health === 100 ? 'operational' : health > 50 ? 'degraded' : 'offline';
         
         // Calculate number of active lights (1-5)
         const activeLights = Math.ceil(health / 20);
-                 
+        
         // Create member marker with logo
         el.innerHTML = `
           <div class="marker-container ${status}">
             ${d.logo ? 
-               `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'member-logo-placeholder\\'>${d.name.substring(0, 2).toUpperCase()}</div>'" />` :
-               `<div class="member-logo-placeholder">${d.name.substring(0, 2).toUpperCase()}</div>`
+              `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'member-logo-placeholder\\'>${d.name.substring(0, 2).toUpperCase()}</div>'" />` : 
+              `<div class="member-logo-placeholder">${d.name.substring(0, 2).toUpperCase()}</div>`
             }
             <div class="member-name-label">${d.name}</div>
             <div class="health-lights">
               ${Array.from({ length: 5 }, (_, i) => 
-                 `<span class="health-light ${i < activeLights ? 'active' : 'inactive'}"></span>`
+                `<span class="health-light ${i < activeLights ? 'active' : 'inactive'}"></span>`
               ).join('')}
             </div>
           </div>
         `;
-                 
+        
         el.style.pointerEvents = 'auto';
         el.style.cursor = 'pointer';
         
         // Handle mouse events
         el.onmouseenter = () => {
-          setHoveredMember(d);
+          if (!pinnedMember || pinnedMember.name !== d.name) {
+            setHoveredMember(d);
+          }
         };
         
         el.onmouseleave = () => {
-          setHoveredMember(null);
+          if (!pinnedMember) {
+            setHoveredMember(null);
+          }
         };
         
         el.onclick = () => window.location.href = `/members/${d.name}`;
-                 
+        
         return el;
       })
       .htmlTransitionDuration(1000);
@@ -161,10 +190,10 @@ const EarthView = () => {
       for (let j = i + 1; j < members.length; j++) {
         const health1 = getMemberHealth(members[i].name);
         const health2 = getMemberHealth(members[j].name);
-                 
+        
         // Calculate connection probability based on combined health
         const connectionProbability = (health1 + health2) / 200;
-                 
+        
         if (Math.random() < connectionProbability * 0.8) {
           // Determine arc color based on average health
           const avgHealth = (health1 + health2) / 2;
@@ -177,7 +206,7 @@ const EarthView = () => {
           } else {
             color = ['rgba(239, 68, 68, 0.6)', 'rgba(239, 68, 68, 0.3)']; // Red
           }
-                     
+          
           arcs.push({
             startLat: members[i].latitude,
             startLng: members[i].longitude,
@@ -253,6 +282,9 @@ const EarthView = () => {
     offline: members.filter(m => getMemberHealth(m.name) === 0).length
   };
 
+  // Determine which member to show in panel
+  const displayMember = pinnedMember || hoveredMember;
+
   if (loading) {
     return (
       <div className="earth-view-loading">
@@ -289,20 +321,26 @@ const EarthView = () => {
         </div>
         
         {/* Fixed member info panel */}
-        <div className={`member-info-panel enhanced-glass ${hoveredMember ? 'visible' : ''}`}>
-          {hoveredMember && (
+        <div 
+          ref={panelRef}
+          className={`member-info-panel enhanced-glass ${displayMember ? 'visible' : ''} ${pinnedMember ? 'pinned' : ''}`}
+        >
+          {displayMember && (
             <>
+              {pinnedMember && (
+                <div className="panel-hint">ESC TO CLOSE</div>
+              )}
               <div className="panel-header">
-                {hoveredMember.logo ? (
-                  <img src={hoveredMember.logo} alt={hoveredMember.name} className="panel-logo" />
+                {displayMember.logo ? (
+                  <img src={displayMember.logo} alt={displayMember.name} className="panel-logo" />
                 ) : (
                   <div className="panel-logo logo-placeholder">
-                    {hoveredMember.name.substring(0, 2).toUpperCase()}
+                    {displayMember.name.substring(0, 2).toUpperCase()}
                   </div>
                 )}
                 <div className="panel-title">
-                  <div className="panel-name">{hoveredMember.name}</div>
-                  <div className="panel-region">{hoveredMember.region}</div>
+                  <div className="panel-name">{displayMember.name}</div>
+                  <div className="panel-region">{displayMember.region}</div>
                 </div>
               </div>
               
@@ -312,61 +350,61 @@ const EarthView = () => {
                   <div className="info-grid">
                     <div className="info-row">
                       <span className="info-label">Health:</span>
-                      <span className="info-value">{getMemberHealth(hoveredMember.name)}%</span>
+                      <span className="info-value">{getMemberHealth(displayMember.name)}%</span>
                     </div>
                     <div className="info-row">
                       <span className="info-label">Level:</span>
-                      <span className="info-value">{hoveredMember.level}</span>
+                      <span className="info-value">{displayMember.level}</span>
                     </div>
                     <div className="info-row">
                       <span className="info-label">IPv4:</span>
-                      <span className="info-value">{hoveredMember.service_ipv4 || 'N/A'}</span>
+                      <span className="info-value">{displayMember.service_ipv4 || 'N/A'}</span>
                     </div>
                     <div className="info-row">
                       <span className="info-label">IPv6:</span>
-                      <span className="info-value">{hoveredMember.service_ipv6 || 'N/A'}</span>
+                      <span className="info-value">{displayMember.service_ipv6 || 'N/A'}</span>
                     </div>
                     <div className="info-row">
                       <span className="info-label">Location:</span>
-                      <span className="info-value">{hoveredMember.latitude?.toFixed(2)}, {hoveredMember.longitude?.toFixed(2)}</span>
+                      <span className="info-value">{displayMember.latitude?.toFixed(2)}, {displayMember.longitude?.toFixed(2)}</span>
                     </div>
                     <div className="info-row">
                       <span className="info-label">Downtime:</span>
-                      <span className="info-value">{getTotalDowntimeHours(hoveredMember.name)}h</span>
+                      <span className="info-value">{getTotalDowntimeHours(displayMember.name)}h</span>
                     </div>
                     <div className="info-row full-width">
                       <span className="info-label">Website:</span>
-                      <a href={hoveredMember.website} target="_blank" rel="noopener noreferrer" className="info-value link">
-                        {hoveredMember.website?.replace(/^https?:\/\//, '')}
+                      <a href={displayMember.website} target="_blank" rel="noopener noreferrer" className="info-value link">
+                        {displayMember.website?.replace(/^https?:\/\//, '')}
                       </a>
                     </div>
                   </div>
                 </div>
                 
                 {/* Active Events Alert */}
-                {getMemberOutages(hoveredMember.name).length > 0 && (
+                {getMemberOutages(displayMember.name).length > 0 && (
                   <div className="active-events">
                     <div className="active-events-title">Active Events</div>
-                    {getMemberOutages(hoveredMember.name).slice(0, 3).map((outage, idx) => (
+                    {getMemberOutages(displayMember.name).slice(0, 3).map((outage, idx) => (
                       <div key={idx} className="event-item">
                         <span className="event-type">{outage.check_type}:</span>
                         <span>{outage.domain_name || outage.endpoint || 'Site level issue'}</span>
                       </div>
                     ))}
-                    {getMemberOutages(hoveredMember.name).length > 3 && (
+                    {getMemberOutages(displayMember.name).length > 3 && (
                       <div className="event-item">
-                        <span>...and {getMemberOutages(hoveredMember.name).length - 3} more</span>
+                        <span>...and {getMemberOutages(displayMember.name).length - 3} more</span>
                       </div>
                     )}
                   </div>
                 )}
                 
-                {hoveredMember.services && hoveredMember.services.length > 0 && (
+                {displayMember.services && displayMember.services.length > 0 && (
                   <div className="info-section">
                     <h3 className="section-title">Active Services</h3>
                     <div className="services-grid">
-                      {hoveredMember.services.map((service, idx) => {
-                        const status = getServiceStatus(hoveredMember.name, service);
+                      {displayMember.services.map((service, idx) => {
+                        const status = getServiceStatus(displayMember.name, service);
                         return (
                           <div key={idx} className="service-item">
                             <span className="service-name">{service}</span>
@@ -381,10 +419,10 @@ const EarthView = () => {
                   </div>
                 )}
                 
-                {getMemberOutages(hoveredMember.name).length === 0 && (
+                {getMemberOutages(displayMember.name).length === 0 && (
                   <div className="info-section">
                     <div className="no-issues">
-                      <div className="no-issues-icon">✓</div>
+                      <div className="no-issues-icon">✔</div>
                       <div>All systems operational</div>
                     </div>
                   </div>

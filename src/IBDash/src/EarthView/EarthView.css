@@ -96,23 +96,26 @@
   cursor: grabbing;
 }
 
-/* Member Info Panel - Fixed between sidebar and globe */
+/* Member Info Panel - Enhanced styling */
 .member-info-panel {
   position: fixed;
   left: 300px; /* Right after sidebar (280px + 20px gap) */
   top: 80px; /* Below the header */
-  width: 380px;
+  width: 420px; /* Increased width by ~10% */
   max-height: calc(100vh - 100px);
-  background: rgba(20, 20, 20, 0.98);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
-  z-index: 90; /* Below header but above globe */
+  background: linear-gradient(135deg, rgba(26, 26, 26, 0.98) 0%, rgba(18, 18, 18, 0.98) 100%);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  z-index: 90;
   overflow-y: auto;
   transition: opacity 0.2s ease;
   opacity: 0;
   pointer-events: none;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 .member-info-panel.visible {
@@ -120,31 +123,58 @@
   pointer-events: auto;
 }
 
+.member-info-panel.pinned {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Custom scrollbar for panel */
+.member-info-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.member-info-panel::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.member-info-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.member-info-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
 .panel-header {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 14px;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .panel-logo {
-  width: 50px;
-  height: 50px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   object-fit: contain;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 8px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
+  padding: 6px;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .panel-logo.logo-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: bold;
-  font-size: 20px;
+  font-weight: 700;
+  font-size: 18px;
   color: var(--accent-primary);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%);
 }
 
 .panel-title {
@@ -152,22 +182,24 @@
 }
 
 .panel-name {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   margin-bottom: 2px;
+  letter-spacing: -0.3px;
 }
 
 .panel-region {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary);
+  font-weight: 400;
 }
 
 .panel-content {
-  padding: 20px;
+  padding: 18px 20px;
 }
 
 .info-section {
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .info-section:last-child {
@@ -175,26 +207,28 @@
 }
 
 .section-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   color: var(--text-secondary);
   margin-bottom: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
 }
 
-/* Compact info grid */
+/* Enhanced info grid */
 .info-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px 12px;
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
-  padding: 4px 0;
-  font-size: 12px;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 11px;
+  min-height: 20px;
 }
 
 .info-row.full-width {
@@ -202,123 +236,149 @@
 }
 
 .info-label {
-  color: var(--text-secondary);
-  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
 }
 
 .info-value {
-  font-weight: 500;
+  font-weight: 600;
   text-align: right;
-  font-size: 12px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.9);
+  font-variant-numeric: tabular-nums;
 }
 
 .info-value.link {
   color: var(--accent-primary);
   text-decoration: none;
   cursor: pointer;
+  font-weight: 500;
 }
 
 .info-value.link:hover {
   text-decoration: underline;
+  color: #5b9aff;
 }
 
-/* Active Events Alert */
+/* Active Events Alert - Refined */
 .active-events {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 16px;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(239, 68, 68, 0.08) 100%);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
 }
 
 .active-events-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #ef4444;
-  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #f56565;
+  margin-bottom: 6px;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .event-item {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin: 4px 0;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 3px 0;
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  line-height: 1.4;
 }
 
 .event-type {
-  color: #ef4444;
-  font-weight: 500;
+  color: #fc8181;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 9px;
 }
 
-/* Services Table - Two columns */
-.services-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
+/* Services Grid - Enhanced two-column layout */
 .services-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 8px 12px;
 }
 
 .service-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.service-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .service-name {
-  font-size: 12px;
-  color: var(--text-primary);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 500;
+  letter-spacing: -0.1px;
 }
 
 .service-status {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
+  gap: 4px;
+  font-size: 9px;
 }
 
 .status-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
 .status-dot.online {
-  background: #10b981;
-  box-shadow: 0 0 4px rgba(16, 185, 129, 0.6);
+  background: #34d399;
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.6);
 }
 
 .status-dot.degraded {
-  background: #f59e0b;
-  box-shadow: 0 0 4px rgba(245, 158, 11, 0.6);
+  background: #fbbf24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.6);
 }
 
 .status-dot.offline {
-  background: #ef4444;
-  box-shadow: 0 0 4px rgba(239, 68, 68, 0.6);
+  background: #f87171;
+  box-shadow: 0 0 6px rgba(248, 113, 113, 0.6);
 }
 
-/* No issues state */
+/* No issues state - Refined */
 .no-issues {
   text-align: center;
-  padding: 30px 20px;
+  padding: 24px 16px;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .no-issues-icon {
-  font-size: 28px;
-  margin-bottom: 8px;
+  font-size: 24px;
+  margin-bottom: 6px;
   color: var(--success);
+  opacity: 0.8;
+}
+
+/* ESC to close hint */
+.panel-hint {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.3);
+  font-weight: 500;
+  letter-spacing: 0.5px;
 }
 
 /* Member markers */
@@ -487,12 +547,12 @@
   .earth-header h1 {
     font-size: 24px;
   }
-     
+    
   .status-summary {
     gap: 16px;
     padding: 12px 20px;
   }
-     
+    
   .globe-controls,
   .globe-legend {
     min-width: 220px;
@@ -500,7 +560,7 @@
   }
 
   .member-info-panel {
-    width: 340px;
+    width: 380px;
   }
 }
 
@@ -510,7 +570,7 @@
     gap: 16px;
     align-items: flex-start;
   }
-     
+    
   .globe-legend {
     top: auto;
     bottom: 24px;
@@ -519,7 +579,7 @@
   }
 
   .member-info-panel {
-    width: 320px;
+    width: 340px;
     left: 290px;
   }
 }
@@ -528,29 +588,29 @@
   .earth-header {
     padding: 16px;
   }
-     
+    
   .earth-header h1 {
     font-size: 20px;
   }
-     
+    
   .status-summary {
     flex-direction: column;
     gap: 8px;
     padding: 12px 16px;
   }
-     
+    
   .globe-controls,
   .globe-legend,
   .member-info-panel {
     display: none;
   }
-     
+    
   .member-logo-marker,
   .member-logo-placeholder {
     width: 30px;
     height: 30px;
   }
-     
+    
   .member-name-label {
     font-size: 10px;
   }
