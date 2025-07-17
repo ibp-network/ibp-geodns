@@ -76,6 +76,13 @@ const EarthView = () => {
     return 'online';
   };
 
+  // Calculate total downtime hours
+  const getTotalDowntimeHours = (memberName) => {
+    const outages = getMemberOutages(memberName);
+    // Simplified calculation - assuming each outage is approximately 1 hour
+    return outages.length;
+  };
+
   useEffect(() => {
     if (!containerRef.current || !globeRef.current || members.length === 0) return;
 
@@ -313,67 +320,75 @@ const EarthView = () => {
                     </div>
                     <div className="info-row">
                       <span className="info-label">IPv4:</span>
-                      <span className="info-value">{hoveredMember.service_ipv4 || 'Not configured'}</span>
+                      <span className="info-value">{hoveredMember.service_ipv4 || 'N/A'}</span>
                     </div>
                     <div className="info-row">
                       <span className="info-label">IPv6:</span>
-                      <span className="info-value">{hoveredMember.service_ipv6 || 'Not configured'}</span>
+                      <span className="info-value">{hoveredMember.service_ipv6 || 'N/A'}</span>
+                    </div>
+                    <div className="info-row">
+                      <span className="info-label">Location:</span>
+                      <span className="info-value">{hoveredMember.latitude?.toFixed(2)}, {hoveredMember.longitude?.toFixed(2)}</span>
+                    </div>
+                    <div className="info-row">
+                      <span className="info-label">Downtime:</span>
+                      <span className="info-value">{getTotalDowntimeHours(hoveredMember.name)}h</span>
+                    </div>
+                    <div className="info-row full-width">
+                      <span className="info-label">Website:</span>
+                      <a href={hoveredMember.website} target="_blank" rel="noopener noreferrer" className="info-value link">
+                        {hoveredMember.website?.replace(/^https?:\/\//, '')}
+                      </a>
                     </div>
                   </div>
                 </div>
+                
+                {/* Active Events Alert */}
+                {getMemberOutages(hoveredMember.name).length > 0 && (
+                  <div className="active-events">
+                    <div className="active-events-title">Active Events</div>
+                    {getMemberOutages(hoveredMember.name).slice(0, 3).map((outage, idx) => (
+                      <div key={idx} className="event-item">
+                        <span className="event-type">{outage.check_type}:</span>
+                        <span>{outage.domain_name || outage.endpoint || 'Site level issue'}</span>
+                      </div>
+                    ))}
+                    {getMemberOutages(hoveredMember.name).length > 3 && (
+                      <div className="event-item">
+                        <span>...and {getMemberOutages(hoveredMember.name).length - 3} more</span>
+                      </div>
+                    )}
+                  </div>
+                )}
                 
                 {hoveredMember.services && hoveredMember.services.length > 0 && (
                   <div className="info-section">
                     <h3 className="section-title">Active Services</h3>
-                    <table className="services-table">
-                      <thead>
-                        <tr>
-                          <th>Service</th>
-                          <th>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {hoveredMember.services.map((service, idx) => {
-                          const status = getServiceStatus(hoveredMember.name, service);
-                          return (
-                            <tr key={idx}>
-                              <td>{service}</td>
-                              <td>
-                                <div className="service-status">
-                                  <span className={`status-dot ${status}`}></span>
-                                  <span>{status.charAt(0).toUpperCase() + status.slice(1)}</span>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                    <div className="services-grid">
+                      {hoveredMember.services.map((service, idx) => {
+                        const status = getServiceStatus(hoveredMember.name, service);
+                        return (
+                          <div key={idx} className="service-item">
+                            <span className="service-name">{service}</span>
+                            <div className="service-status">
+                              <span className={`status-dot ${status}`}></span>
+                              <span>{status.charAt(0).toUpperCase() + status.slice(1)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
                 
-                <div className="info-section">
-                  <h3 className="section-title">Current Status</h3>
-                  {getMemberOutages(hoveredMember.name).length > 0 ? (
-                    <div className="outages-list">
-                      {getMemberOutages(hoveredMember.name).map((outage, idx) => (
-                        <div key={idx} className="outage-item">
-                          <div className="outage-type">
-                            {outage.check_type} Issue
-                          </div>
-                          <div className="outage-detail">
-                            {outage.domain_name || outage.endpoint || 'Site level issue'}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
+                {getMemberOutages(hoveredMember.name).length === 0 && (
+                  <div className="info-section">
                     <div className="no-issues">
                       <div className="no-issues-icon">✓</div>
                       <div>All systems operational</div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </>
           )}
