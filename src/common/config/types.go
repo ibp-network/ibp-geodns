@@ -147,6 +147,7 @@ type ServiceConfiguration struct {
 	Active        int    `json:"Active"`
 	LevelRequired int    `json:"LevelRequired"`
 	NetworkName   string `json:"NetworkName"`
+	StateRootHash string `json:"StateRootHash"`
 }
 
 type Resources struct {
