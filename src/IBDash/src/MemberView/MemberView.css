@@ -190,7 +190,7 @@
 .member-status {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 6px 12px;
   border-radius: 20px;
   font-size: 12px;
@@ -212,6 +212,10 @@
   color: var(--error);
 }
 
+.status-icon {
+  font-size: 16px;
+}
+
 .member-details {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -231,6 +235,15 @@
   font-size: 12px;
   color: var(--text-secondary);
   margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.detail-icon {
+  font-size: 14px;
+  opacity: 0.7;
 }
 
 .detail-value {
@@ -243,12 +256,20 @@
   background: rgba(245, 158, 11, 0.1);
   border-radius: 8px;
   margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.issues-icon {
+  font-size: 16px;
+  color: var(--warning);
 }
 
 .issues-text {
   font-size: 13px;
   color: var(--warning);
-  text-align: center;
+  flex: 1;
 }
 
 .member-footer {

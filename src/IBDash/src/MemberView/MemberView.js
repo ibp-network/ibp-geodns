@@ -39,6 +39,19 @@ const MemberView = () => {
     return 'degraded';
   };
 
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'operational':
+        return '✅';
+      case 'degraded':
+        return '⚠️';
+      case 'offline':
+        return '❌';
+      default:
+        return '❓';
+    }
+  };
+
   const filteredMembers = members.filter(member => {
     const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          member.region.toLowerCase().includes(searchTerm.toLowerCase());
@@ -132,7 +145,7 @@ const MemberView = () => {
                         <p className="member-region">{member.region}</p>
                       </div>
                       <div className={`member-status status-${status}`}>
-                        <span className="status-indicator"></span>
+                        <span className="status-icon">{getStatusIcon(status)}</span>
                         <span className="status-text">
                           {status === 'operational' ? 'Operational' :
                            status === 'degraded' ? 'Degraded' : 'Offline'}
@@ -142,21 +155,31 @@ const MemberView = () => {
 
                     <div className="member-details">
                       <div className="detail-item">
-                        <span className="detail-label">Services</span>
+                        <span className="detail-label">
+                          <span className="detail-icon">⚡</span>
+                          Services
+                        </span>
                         <span className="detail-value">{member.services?.length || 0}</span>
                       </div>
                       <div className="detail-item">
-                        <span className="detail-label">Joined</span>
+                        <span className="detail-label">
+                          <span className="detail-icon">📅</span>
+                          Joined
+                        </span>
                         <span className="detail-value">{member.joined_date}</span>
                       </div>
                       <div className="detail-item">
-                        <span className="detail-label">Location</span>
+                        <span className="detail-label">
+                          <span className="detail-icon">📍</span>
+                          Location
+                        </span>
                         <span className="detail-value">{member.latitude?.toFixed(2)}, {member.longitude?.toFixed(2)}</span>
                       </div>
                     </div>
 
                     {memberDowntime.length > 0 && (
                       <div className="member-issues">
+                        <span className="issues-icon">⚠️</span>
                         <p className="issues-text">
                           {memberDowntime.length} service{memberDowntime.length > 1 ? 's' : ''} affected
                         </p>
