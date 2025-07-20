@@ -164,6 +164,9 @@
 
 .info-content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px; /* Added gap between label and value */
 }
 
 .info-label {
@@ -171,12 +174,12 @@
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 4px;
 }
 
 .info-value {
   font-size: 14px;
   font-weight: 500;
+  word-break: break-word; /* Allow long URLs to wrap */
 }
 
 .info-value.link {
@@ -256,21 +259,22 @@
   color: var(--error);
 }
 
-/* Monthly Uptime Calendar */
+/* Monthly Uptime Calendar - Fixed to wrap and fit */
 .uptime-calendar {
   display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 12px;
   margin-top: 16px;
 }
 
 .month-item {
   text-align: center;
-  padding: 16px 8px;
+  padding: 12px 6px;
   background: var(--bg-secondary);
   border-radius: 8px;
   border: 1px solid var(--border-color);
   transition: all 0.2s ease;
+  min-width: 80px;
 }
 
 .month-item:hover {
@@ -279,17 +283,17 @@
 }
 
 .month-name {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 
 .month-uptime {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .month-uptime.excellent {
@@ -309,8 +313,9 @@
 }
 
 .month-status {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-secondary);
+  line-height: 1.2;
 }
 
 /* Countries section */
@@ -687,4 +692,21 @@
   font-size: 24px;
   font-weight: 600;
   color: var(--accent-primary);
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 768px) {
+  .uptime-calendar {
+    grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+    gap: 8px;
+  }
+  
+  .month-item {
+    padding: 10px 4px;
+    min-width: 70px;
+  }
+  
+  .month-uptime {
+    font-size: 16px;
+  }
 }

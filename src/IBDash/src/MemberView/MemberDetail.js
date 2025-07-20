@@ -23,6 +23,61 @@ const MemberDetail = () => {
     loadMemberData();
   }, [memberName, dateRange]);
 
+  const calculateSiteUptime = (downtimeEvents, startDate, endDate) => {
+    // Filter for site-level downtime only
+    const siteDowntime = downtimeEvents.filter(event => event.check_type === 'site');
+    
+    if (siteDowntime.length === 0) {
+      return 100; // No downtime means 100% uptime
+    }
+
+    // Calculate total hours in period
+    const totalHours = (endDate - startDate) / (1000 * 60 * 60);
+    
+    // Calculate total downtime hours
+    let totalDowntimeHours = 0;
+    
+    // Sort events by start time to handle overlaps
+    const sortedEvents = siteDowntime.sort((a, b) => 
+      new Date(a.start_time) - new Date(b.start_time)
+    );
+    
+    // Merge overlapping downtime periods
+    const mergedPeriods = [];
+    
+    sortedEvents.forEach(event => {
+      const eventStart = new Date(event.start_time);
+      const eventEnd = event.end_time ? new Date(event.end_time) : new Date();
+      
+      // Clamp to date range
+      const start = eventStart < startDate ? startDate : eventStart;
+      const end = eventEnd > endDate ? endDate : eventEnd;
+      
+      if (start < end) {
+        if (mergedPeriods.length === 0 || start > mergedPeriods[mergedPeriods.length - 1].end) {
+          // No overlap with previous period
+          mergedPeriods.push({ start, end });
+        } else {
+          // Overlap with previous period, merge them
+          const lastPeriod = mergedPeriods[mergedPeriods.length - 1];
+          lastPeriod.end = end > lastPeriod.end ? end : lastPeriod.end;
+        }
+      }
+    });
+    
+    // Calculate total downtime from merged periods
+    mergedPeriods.forEach(period => {
+      totalDowntimeHours += (period.end - period.start) / (1000 * 60 * 60);
+    });
+    
+    // Calculate uptime percentage
+    const uptimeHours = totalHours - totalDowntimeHours;
+    const uptimePercentage = (uptimeHours / totalHours) * 100;
+    
+    // Ensure percentage is between 0 and 100
+    return Math.max(0, Math.min(100, uptimePercentage));
+  };
+
   const loadMemberData = async () => {
     try {
       const params = {
@@ -39,9 +94,22 @@ const MemberDetail = () => {
 
       const memberData = membersRes.data.find(m => m.name === memberName);
       setMember(memberData);
-      setStats(statsRes.data);
+      
+      // Calculate proper site uptime from downtime events
+      const downtimeData = Array.isArray(downtimeRes.data) ? downtimeRes.data : [];
+      setDowntime(downtimeData);
+      
+      // Calculate site uptime based on actual downtime
+      const siteUptime = calculateSiteUptime(downtimeData, dateRange.start, dateRange.end);
+      
+      // Update stats with calculated uptime
+      const updatedStats = {
+        ...statsRes.data,
+        uptime_percentage: siteUptime
+      };
+      setStats(updatedStats);
+      
       setBilling(billingRes.data);
-      setDowntime(Array.isArray(downtimeRes.data) ? downtimeRes.data : []);
       
       // Calculate monthly uptime for the past 12 months
       calculateMonthlyUptime(memberName);
@@ -60,7 +128,7 @@ const MemberDetail = () => {
     
     for (let i = 11; i >= 0; i--) {
       const monthStart = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const monthEnd = new Date(today.getFullYear(), today.getMonth() - i + 1, 0);
+      const monthEnd = new Date(today.getFullYear(), today.getMonth() - i + 1, 0, 23, 59, 59, 999);
       
       try {
         const params = {
@@ -68,36 +136,53 @@ const MemberDetail = () => {
           end: monthEnd.toISOString().split('T')[0]
         };
         
+        // Get all downtime for the month
         const downtimeRes = await ApiHelper.fetchDowntimeEvents({ 
-          member: memberName, 
-          check_type: 'site',
+          member: memberName,
           ...params 
         });
         
-        const siteDowntime = Array.isArray(downtimeRes.data) ? downtimeRes.data : [];
+        const allDowntime = Array.isArray(downtimeRes.data) ? downtimeRes.data : [];
         
-        // Calculate total downtime hours for the month (site checks only)
+        // Calculate site uptime for the month
+        const uptime = calculateSiteUptime(allDowntime, monthStart, monthEnd);
+        
+        // Calculate total site downtime hours
+        const siteDowntime = allDowntime.filter(event => event.check_type === 'site');
         let totalDowntimeHours = 0;
-        siteDowntime.forEach(event => {
-          const start = new Date(event.start_time);
-          const end = event.end_time ? new Date(event.end_time) : new Date();
+        
+        // Calculate downtime hours with overlap handling
+        const sortedEvents = siteDowntime.sort((a, b) => 
+          new Date(a.start_time) - new Date(b.start_time)
+        );
+        
+        const mergedPeriods = [];
+        
+        sortedEvents.forEach(event => {
+          const eventStart = new Date(event.start_time);
+          const eventEnd = event.end_time ? new Date(event.end_time) : new Date();
           
-          // Ensure we only count time within the month
-          const eventStart = start < monthStart ? monthStart : start;
-          const eventEnd = end > monthEnd ? monthEnd : end;
+          const start = eventStart < monthStart ? monthStart : eventStart;
+          const end = eventEnd > monthEnd ? monthEnd : eventEnd;
           
-          if (eventEnd > eventStart) {
-            totalDowntimeHours += (eventEnd - eventStart) / (1000 * 60 * 60);
+          if (start < end) {
+            if (mergedPeriods.length === 0 || start > mergedPeriods[mergedPeriods.length - 1].end) {
+              mergedPeriods.push({ start, end });
+            } else {
+              const lastPeriod = mergedPeriods[mergedPeriods.length - 1];
+              lastPeriod.end = end > lastPeriod.end ? end : lastPeriod.end;
+            }
           }
         });
         
-        const totalHoursInMonth = (monthEnd - monthStart) / (1000 * 60 * 60);
-        const uptime = ((totalHoursInMonth - totalDowntimeHours) / totalHoursInMonth) * 100;
+        mergedPeriods.forEach(period => {
+          totalDowntimeHours += (period.end - period.start) / (1000 * 60 * 60);
+        });
         
         months.push({
           month: monthStart.toLocaleDateString('en-US', { month: 'short' }),
           year: monthStart.getFullYear(),
-          uptime: Math.max(0, Math.min(100, uptime)),
+          uptime: uptime,
           downtime: totalDowntimeHours
         });
       } catch (error) {
@@ -257,7 +342,7 @@ const MemberDetail = () => {
         <div className="stat-card glass">
           <div className="stat-icon">✅</div>
           <div className="stat-content">
-            <div className="stat-value">{stats?.uptime_percentage?.toFixed(2) || '100'}%</div>
+            <div className="stat-value">{stats?.uptime_percentage?.toFixed(2) || '100.00'}%</div>
             <div className="stat-label">Site Uptime</div>
           </div>
         </div>
@@ -374,7 +459,7 @@ const MemberDetail = () => {
                 <div className="uptime-calendar">
                   {monthlyUptime.map((month, index) => (
                     <div key={index} className="month-item">
-                      <div className="month-name">{month.month}</div>
+                      <div className="month-name">{month.month} {month.year}</div>
                       <div className={`month-uptime ${getUptimeClass(month.uptime)}`}>
                         {month.uptime.toFixed(2)}%
                       </div>
