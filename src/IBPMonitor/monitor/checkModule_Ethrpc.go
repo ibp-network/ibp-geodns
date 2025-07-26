@@ -75,9 +75,9 @@ func runEthrpcSingle(check cfg.Check, endpoint string, service cfg.Service, memb
 
 	// Build URL - convert WSS to HTTPS, WS to HTTP
 	if strings.HasPrefix(u.Protocol, "wss") || strings.HasPrefix(u.Protocol, "https") {
-		reconstructedURL = fmt.Sprintf("https://%s:%s/%s", ip, port, u.Directory)
+		reconstructedURL = fmt.Sprintf("https://%s:%s%s", ip, port, u.Directory)
 	} else {
-		reconstructedURL = fmt.Sprintf("http://%s:%s/%s", ip, port, u.Directory)
+		reconstructedURL = fmt.Sprintf("http://%s:%s%s", ip, port, u.Directory)
 	}
 
 	log.Log(log.Debug, "ETHRPC check: original=%s reconstructed=%s for %s", endpoint, reconstructedURL, member.Details.Name)
@@ -100,6 +100,18 @@ func runEthrpcSingle(check cfg.Check, endpoint string, service cfg.Service, memb
 				return d.DialContext(ctx, network, net.JoinHostPort(ip, port))
 			},
 		},
+	}
+
+	// For non-HTTPS, use regular transport
+	if !strings.HasPrefix(reconstructedURL, "https") {
+		client.Transport = &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				d := net.Dialer{
+					Timeout: time.Duration(timeoutSec) * time.Second,
+				}
+				return d.DialContext(ctx, network, net.JoinHostPort(ip, port))
+			},
+		}
 	}
 
 	// Test 1: Check eth_chainId
