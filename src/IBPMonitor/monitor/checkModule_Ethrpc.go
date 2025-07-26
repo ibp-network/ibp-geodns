@@ -60,64 +60,46 @@ func EthrpcCheck(check cfg.Check, endpoint string, service cfg.Service, member c
 func runEthrpcSingle(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member, ip string, isIPv6 bool) {
 	u := max.ParseUrl(endpoint)
 
-	// Convert WSS/WS to HTTPS/HTTP for ETH RPC endpoints
-	var reconstructedURL string
-	var port string
-
-	// Determine port - use from URL or default based on original protocol
-	if u.Port != "" {
-		port = u.Port
-	} else if strings.HasPrefix(u.Protocol, "wss") || strings.HasPrefix(u.Protocol, "https") {
-		port = "443"
-	} else {
-		port = "80"
+	// Convert WSS to HTTPS for ETH RPC
+	protocol := u.Protocol
+	if strings.HasPrefix(protocol, "wss://") {
+		protocol = "https://"
+	} else if strings.HasPrefix(protocol, "ws://") {
+		protocol = "http://"
 	}
 
-	// Build URL - convert WSS to HTTPS, WS to HTTP
-	if strings.HasPrefix(u.Protocol, "wss") || strings.HasPrefix(u.Protocol, "https") {
-		reconstructedURL = fmt.Sprintf("https://%s:%s%s", ip, port, u.Directory)
-	} else {
-		reconstructedURL = fmt.Sprintf("http://%s:%s%s", ip, port, u.Directory)
-	}
+	// Reconstruct URL - using domain name, not IP
+	reconstructedURL := fmt.Sprintf("%s%s%s", protocol, u.Domain, u.Directory)
 
-	log.Log(log.Debug, "ETHRPC check: original=%s reconstructed=%s for %s", endpoint, reconstructedURL, member.Details.Name)
+	log.Log(log.Debug, "ETHRPC check: endpoint=%s => url=%s (connecting via %s) for %s",
+		endpoint, reconstructedURL, ip, member.Details.Name)
 
-	// Create custom HTTP client with IP-based dialer
+	// Create HTTP client with custom transport that redirects to IP
 	timeoutSec := getIntOption(check.ExtraOptions, "ConnectTimeout", 10)
-	client := &http.Client{
-		Timeout: time.Duration(timeoutSec) * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				ServerName:         u.Domain,
-				InsecureSkipVerify: false,
-			},
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				// Create a dialer with timeout
-				d := net.Dialer{
-					Timeout: time.Duration(timeoutSec) * time.Second,
-				}
-				// addr comes in as "domain:port", we need to replace domain with IP
-				_, _, err := net.SplitHostPort(addr)
-				if err != nil {
-					// If no port in addr, use our default port
-					return d.DialContext(ctx, network, net.JoinHostPort(ip, port))
-				}
-				// Replace the host part with our IP
-				return d.DialContext(ctx, network, net.JoinHostPort(ip, port))
-			},
+
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			ServerName: u.Domain,
+		},
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			// addr will be "domain:port", we replace with "ip:port"
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+
+			log.Log(log.Debug, "ETHRPC dial: intercepting %s:%s => %s:%s", host, port, ip, port)
+
+			dialer := &net.Dialer{
+				Timeout: time.Duration(timeoutSec) * time.Second,
+			}
+			return dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
 		},
 	}
 
-	// For non-HTTPS, use regular transport
-	if !strings.HasPrefix(reconstructedURL, "https") {
-		client.Transport = &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				d := net.Dialer{
-					Timeout: time.Duration(timeoutSec) * time.Second,
-				}
-				return d.DialContext(ctx, network, net.JoinHostPort(ip, port))
-			},
-		}
+	client := &http.Client{
+		Timeout:   time.Duration(timeoutSec) * time.Second,
+		Transport: transport,
 	}
 
 	// Test 1: Check eth_chainId
@@ -182,8 +164,10 @@ func runEthrpcSingle(check cfg.Check, endpoint string, service cfg.Service, memb
 	// Parse responses
 	var chainIdStr string
 	json.Unmarshal(chainId, &chainIdStr)
+
 	var blockNumberStr string
 	json.Unmarshal(blockNumber, &blockNumberStr)
+
 	var netVersionStr string
 	json.Unmarshal(netVersion, &netVersionStr)
 
@@ -196,19 +180,18 @@ func runEthrpcSingle(check cfg.Check, endpoint string, service cfg.Service, memb
 		chainIdDecimal, _ = strconv.ParseInt(chainIdStr[2:], 16, 64)
 	}
 
-	// Log what we're comparing
-	log.Log(log.Debug, "ETHRPC network check: expected=%s, chainId=%s, chainIdDec=%d, netVersion=%s",
-		expectedNetwork, chainIdStr, chainIdDecimal, netVersionStr)
-
-	// Check if network matches - compare all formats
+	// Check if network matches - compare both net_version and chainId
 	networkMatches := false
-	if strings.EqualFold(expectedNetwork, netVersionStr) {
+	if strings.EqualFold(netVersionStr, expectedNetwork) {
 		networkMatches = true
-	} else if strings.EqualFold(expectedNetwork, chainIdStr) {
+	} else if strings.EqualFold(chainIdStr, expectedNetwork) {
 		networkMatches = true
-	} else if expectedNetwork == fmt.Sprintf("%d", chainIdDecimal) {
+	} else if fmt.Sprintf("%d", chainIdDecimal) == expectedNetwork {
 		networkMatches = true
 	}
+
+	log.Log(log.Debug, "ETHRPC network check for %s: expected=%s, chainId=%s, chainIdDec=%d, netVersion=%s, matches=%v",
+		member.Details.Name, expectedNetwork, chainIdStr, chainIdDecimal, netVersionStr, networkMatches)
 
 	if !networkMatches {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false,
