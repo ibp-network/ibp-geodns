@@ -43,10 +43,12 @@ func init() {
 func EthrpcCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member) {
 	ip4 := member.Service.ServiceIPv4
 	ip6 := member.Service.ServiceIPv6
+
 	if ip4 == "" && ip6 == "" {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, "No IPv4 or IPv6 configured", nil, false)
 		return
 	}
+
 	if ip4 != "" {
 		runEthrpcSingle(check, endpoint, service, member, ip4, false)
 	}
@@ -58,25 +60,27 @@ func EthrpcCheck(check cfg.Check, endpoint string, service cfg.Service, member c
 func runEthrpcSingle(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member, ip string, isIPv6 bool) {
 	u := max.ParseUrl(endpoint)
 
-	// Construct the URL with the specific IP
+	// Convert WSS/WS to HTTPS/HTTP for ETH RPC endpoints
 	var reconstructedURL string
 	var port string
 
-	// Determine port - use from URL or default to 443 for HTTPS
+	// Determine port - use from URL or default based on original protocol
 	if u.Port != "" {
 		port = u.Port
-	} else if strings.HasPrefix(u.Protocol, "https") {
+	} else if strings.HasPrefix(u.Protocol, "wss") || strings.HasPrefix(u.Protocol, "https") {
 		port = "443"
 	} else {
 		port = "80"
 	}
 
-	// Build URL based on protocol
-	if strings.HasPrefix(u.Protocol, "https") {
+	// Build URL - convert WSS to HTTPS, WS to HTTP
+	if strings.HasPrefix(u.Protocol, "wss") || strings.HasPrefix(u.Protocol, "https") {
 		reconstructedURL = fmt.Sprintf("https://%s:%s%s", ip, port, u.Directory)
 	} else {
 		reconstructedURL = fmt.Sprintf("http://%s:%s%s", ip, port, u.Directory)
 	}
+
+	log.Log(log.Debug, "ETHRPC check: original=%s reconstructed=%s for %s", endpoint, reconstructedURL, member.Details.Name)
 
 	// Create custom HTTP client with IP-based dialer
 	timeoutSec := getIntOption(check.ExtraOptions, "ConnectTimeout", 10)
@@ -99,7 +103,7 @@ func runEthrpcSingle(check cfg.Check, endpoint string, service cfg.Service, memb
 	}
 
 	// For non-HTTPS, use regular transport
-	if !strings.HasPrefix(u.Protocol, "https") {
+	if !strings.HasPrefix(reconstructedURL, "https") {
 		client.Transport = &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				d := net.Dialer{
@@ -115,8 +119,8 @@ func runEthrpcSingle(check cfg.Check, endpoint string, service cfg.Service, memb
 	if err != nil {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false,
 			fmt.Sprintf("eth_chainId failed: %v", err), nil, isIPv6)
-		log.Log(log.Debug, "ETHRPC check failed for %s %s isIPv6=%v - eth_chainId error",
-			member.Details.Name, endpoint, isIPv6)
+		log.Log(log.Debug, "ETHRPC check failed for %s %s isIPv6=%v - eth_chainId error: %v",
+			member.Details.Name, endpoint, isIPv6, err)
 		return
 	}
 
@@ -172,16 +176,13 @@ func runEthrpcSingle(check cfg.Check, endpoint string, service cfg.Service, memb
 	// Parse responses
 	var chainIdStr string
 	json.Unmarshal(chainId, &chainIdStr)
-
 	var blockNumberStr string
 	json.Unmarshal(blockNumber, &blockNumberStr)
-
 	var netVersionStr string
 	json.Unmarshal(netVersion, &netVersionStr)
 
 	// Verify chain matches expected network
 	expectedNetwork := strings.ToLower(service.Configuration.NetworkName)
-	actualNetVersion := strings.ToLower(netVersionStr)
 
 	// Convert hex chainId to decimal for comparison if needed
 	var chainIdDecimal int64
@@ -189,20 +190,24 @@ func runEthrpcSingle(check cfg.Check, endpoint string, service cfg.Service, memb
 		chainIdDecimal, _ = strconv.ParseInt(chainIdStr[2:], 16, 64)
 	}
 
-	// Check if network matches - compare both net_version and chainId
+	// Log what we're comparing
+	log.Log(log.Debug, "ETHRPC network check: expected=%s, chainId=%s, chainIdDec=%d, netVersion=%s",
+		expectedNetwork, chainIdStr, chainIdDecimal, netVersionStr)
+
+	// Check if network matches - compare all formats
 	networkMatches := false
-	if actualNetVersion == expectedNetwork {
+	if strings.EqualFold(expectedNetwork, netVersionStr) {
 		networkMatches = true
-	} else if chainIdStr == expectedNetwork {
+	} else if strings.EqualFold(expectedNetwork, chainIdStr) {
 		networkMatches = true
-	} else if fmt.Sprintf("%d", chainIdDecimal) == expectedNetwork {
+	} else if expectedNetwork == fmt.Sprintf("%d", chainIdDecimal) {
 		networkMatches = true
 	}
 
 	if !networkMatches {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false,
-			fmt.Sprintf("Wrong network: expected %s, got net_version=%s chainId=%s",
-				expectedNetwork, netVersionStr, chainIdStr), nil, isIPv6)
+			fmt.Sprintf("Wrong network: expected %s, got net_version=%s chainId=%s (decimal=%d)",
+				expectedNetwork, netVersionStr, chainIdStr, chainIdDecimal), nil, isIPv6)
 		log.Log(log.Debug, "ETHRPC check failed for %s %s isIPv6=%v - Wrong network",
 			member.Details.Name, endpoint, isIPv6)
 		return
