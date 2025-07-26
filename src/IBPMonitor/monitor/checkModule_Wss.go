@@ -23,22 +23,20 @@ type JSONRPCRequest struct {
 }
 
 func init() {
-	RegisterEndpointCheck("wss", WssCheck)
+	// WSS check is only valid for RPC service type
+	RegisterEndpointCheckWithTypes("wss", WssCheck, []string{"RPC"})
 }
 
 func WssCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member) {
 	ip4 := member.Service.ServiceIPv4
 	ip6 := member.Service.ServiceIPv6
-
 	if ip4 == "" && ip6 == "" {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, "No IPv4 or IPv6 configured", nil, false)
 		return
 	}
-
 	if ip4 != "" {
 		runWssSingle(check, endpoint, service, member, ip4, false)
 	}
-
 	if ip6 != "" {
 		runWssSingle(check, endpoint, service, member, ip6, true)
 	}
@@ -47,7 +45,6 @@ func WssCheck(check cfg.Check, endpoint string, service cfg.Service, member cfg.
 func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member cfg.Member, ip string, isIPv6 bool) {
 	u := max.ParseUrl(endpoint)
 	reconstructedURL := fmt.Sprintf("%s%s%s", u.Protocol, u.Domain, u.Directory)
-
 	dialer := websocket.Dialer{
 		TLSClientConfig: &tls.Config{
 			ServerName:         u.Domain,
@@ -59,7 +56,6 @@ func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member 
 		},
 		HandshakeTimeout: time.Duration(getIntOption(check.ExtraOptions, "ConnectTimeout", 10)) * time.Second,
 	}
-
 	c, _, err := dialer.Dial(reconstructedURL, nil)
 	if err != nil {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, fmt.Sprintf("Failed to connect on IP=%s => %v", ip, err), nil, isIPv6)
@@ -74,7 +70,6 @@ func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member 
 		Params:  []interface{}{"latest"},
 		ID:      1,
 	}
-
 	if !sendJSONRPCRequest(c, request) {
 		UpdateEndpointResultLocal(check, member, service, endpoint, false, "Failed to send JSON RPC", nil, isIPv6)
 		log.Log(log.Debug, "WSS check failed for %s %s isIPv6=%v success=%v", member.Details.Name, endpoint, isIPv6, false)
@@ -125,7 +120,6 @@ func runWssSingle(check cfg.Check, endpoint string, service cfg.Service, member 
 	}
 
 	log.Log(log.Debug, "WSS check completed for %s %s isIPv6=%v success=%v", member.Details.Name, endpoint, isIPv6, true)
-
 	UpdateEndpointResultLocal(check, member, service, endpoint, true, "",
 		map[string]interface{}{
 			"Syncing": isSyncing,
@@ -146,14 +140,17 @@ func checkFullArchive(c *websocket.Conn) (bool, error) {
 	if !sendJSONRPCRequest(c, req) {
 		return false, fmt.Errorf("failed to send blockHash(0) request")
 	}
+
 	_, message, err := c.ReadMessage()
 	if err != nil {
 		return false, fmt.Errorf("failed to read blockHash(0) response: %v", err)
 	}
+
 	var resp map[string]interface{}
 	if err := json.Unmarshal(message, &resp); err != nil {
 		return false, err
 	}
+
 	result, ok := resp["result"].(string)
 	if !ok || result == "" {
 		return false, fmt.Errorf("invalid chain_getBlockHash(0) response")
@@ -170,14 +167,17 @@ func checkNetwork(c *websocket.Conn, expectedNetwork string) (bool, error) {
 	if !sendJSONRPCRequest(c, req) {
 		return false, fmt.Errorf("failed to send system_chain request")
 	}
+
 	_, message, err := c.ReadMessage()
 	if err != nil {
 		return false, fmt.Errorf("failed to read system_chain response: %v", err)
 	}
+
 	var resp map[string]interface{}
 	if err := json.Unmarshal(message, &resp); err != nil {
 		return false, err
 	}
+
 	chain, ok := resp["result"].(string)
 	if !ok {
 		return false, fmt.Errorf("invalid system_chain result")
@@ -197,18 +197,22 @@ func checkPeers(c *websocket.Conn) (bool, bool, error) {
 	if !sendJSONRPCRequest(c, req) {
 		return false, false, fmt.Errorf("failed to send system_health request")
 	}
+
 	_, message, err := c.ReadMessage()
 	if err != nil {
 		return false, false, err
 	}
+
 	var resp map[string]interface{}
 	if err := json.Unmarshal(message, &resp); err != nil {
 		return false, false, err
 	}
+
 	result, ok := resp["result"].(map[string]interface{})
 	if !ok {
 		return false, false, fmt.Errorf("invalid system_health result")
 	}
+
 	peersF, ok := result["peers"].(float64)
 	if !ok {
 		return false, false, fmt.Errorf("invalid peers field")
@@ -217,6 +221,7 @@ func checkPeers(c *websocket.Conn) (bool, bool, error) {
 	if !ok {
 		return false, false, fmt.Errorf("invalid isSyncing field")
 	}
+
 	hasEnoughPeers := peersF > 5
 	return hasEnoughPeers, syncing, nil
 }
