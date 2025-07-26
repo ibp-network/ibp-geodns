@@ -96,7 +96,13 @@ func runEthrpcSingle(check cfg.Check, endpoint string, service cfg.Service, memb
 				d := net.Dialer{
 					Timeout: time.Duration(timeoutSec) * time.Second,
 				}
-				// Force connection to specific IP
+				// addr comes in as "domain:port", we need to replace domain with IP
+				_, _, err := net.SplitHostPort(addr)
+				if err != nil {
+					// If no port in addr, use our default port
+					return d.DialContext(ctx, network, net.JoinHostPort(ip, port))
+				}
+				// Replace the host part with our IP
 				return d.DialContext(ctx, network, net.JoinHostPort(ip, port))
 			},
 		},
