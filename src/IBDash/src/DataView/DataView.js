@@ -156,17 +156,18 @@ const DataView = () => {
         end: dateRange.end.toISOString().split('T')[0]
       };
 
+      // Only apply one filter at a time as the API doesn't support multiple values
       if (selectedCountries.length > 0) {
-        params.country = selectedCountries.join(',');
+        params.country = selectedCountries[0];
       }
       if (selectedServices.length > 0) {
-        params.service = selectedServices.join(',');
+        params.service = selectedServices[0];
       }
       if (selectedMembers.length > 0) {
-        params.member = selectedMembers.join(',');
+        params.member = selectedMembers[0];
       }
       if (selectedNetworks.length > 0) {
-        params.asn = selectedNetworks.map(n => n.asn).join(',');
+        params.asn = selectedNetworks[0].asn;
       }
 
       let response;
@@ -186,7 +187,36 @@ const DataView = () => {
         default:
           response = { data: [] };
       }
-      setData(response.data);
+      
+      // Client-side filtering for multiple selections
+      let filteredData = response.data;
+      
+      if (selectedCountries.length > 1) {
+        filteredData = filteredData.filter(item => 
+          selectedCountries.includes(item.country)
+        );
+      }
+      
+      if (selectedServices.length > 0) {
+        filteredData = filteredData.filter(item => 
+          selectedServices.includes(item.service || item.domain)
+        );
+      }
+      
+      if (selectedMembers.length > 1) {
+        filteredData = filteredData.filter(item => 
+          selectedMembers.includes(item.member)
+        );
+      }
+      
+      if (selectedNetworks.length > 1) {
+        const selectedASNs = selectedNetworks.map(n => n.asn);
+        filteredData = filteredData.filter(item => 
+          selectedASNs.includes(item.asn)
+        );
+      }
+      
+      setData(filteredData);
     } catch (error) {
       console.error('Error loading data:', error);
     }
