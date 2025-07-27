@@ -32,11 +32,76 @@ const MemberView = () => {
     }
   };
 
+  // Convert domain name to service name
+  const domainToServiceName = (domainName) => {
+    if (!domainName) return null;
+    
+    // Remove common suffixes
+    let serviceName = domainName
+      .replace('.ibp.network', '')
+      .replace('.dotters.network', '');
+    
+    // Convert to title case with hyphens
+    serviceName = serviceName.split('-').map(part => 
+      part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+    ).join('-');
+    
+    return serviceName;
+  };
+
+  // Get unique services that are down for a member
+  const getDownServices = (memberName, memberServices) => {
+    const memberDowntime = downtime.filter(dt => dt.member_name === memberName);
+    const downServices = new Set();
+    
+    memberDowntime.forEach(dt => {
+      // For site-level downtime, all services are affected
+      if (dt.check_type === 'site') {
+        // Add all services as down
+        memberServices.forEach(service => downServices.add(service));
+      } else if (dt.domain_name) {
+        // Convert domain to service name
+        const serviceName = domainToServiceName(dt.domain_name);
+        
+        // Find matching service in member's service list
+        const matchingService = memberServices.find(s => 
+          s.toLowerCase() === serviceName.toLowerCase()
+        );
+        
+        if (matchingService) {
+          downServices.add(matchingService);
+        }
+      }
+    });
+    
+    return downServices;
+  };
+
+  // Calculate member health percentage
+  const getMemberHealth = (member) => {
+    if (!member.services || member.services.length === 0) return 100;
+    
+    const totalServices = member.services.length;
+    const downServices = getDownServices(member.name, member.services);
+    const servicesOnline = totalServices - downServices.size;
+    
+    return (servicesOnline / totalServices) * 100;
+  };
+
+  // Get member status based on health percentage
   const getMemberStatus = (member) => {
-    const memberDowntime = downtime.filter(dt => dt.member_name === member.name);
-    if (memberDowntime.length === 0) return 'operational';
-    if (memberDowntime.length > 5) return 'offline';
-    return 'degraded';
+    const health = getMemberHealth(member);
+    
+    // Check for active site-level downtime
+    const hasSiteDowntime = downtime.some(dt => 
+      dt.member_name === member.name && 
+      dt.check_type === 'site' && 
+      !dt.end_time
+    );
+    
+    if (health === 0 || hasSiteDowntime) return 'offline';
+    if (health < 100) return 'degraded';
+    return 'operational';
   };
 
   const getStatusIcon = (status) => {
@@ -122,7 +187,9 @@ const MemberView = () => {
             <div className="members-list">
               {levelMembers.map(member => {
                 const status = getMemberStatus(member);
+                const health = getMemberHealth(member);
                 const memberDowntime = downtime.filter(dt => dt.member_name === member.name);
+                const downServices = getDownServices(member.name, member.services || []);
                 
                 return (
                   <div
@@ -148,7 +215,7 @@ const MemberView = () => {
                         <span className="status-icon">{getStatusIcon(status)}</span>
                         <span className="status-text">
                           {status === 'operational' ? 'Operational' :
-                           status === 'degraded' ? 'Degraded' : 'Offline'}
+                           status === 'degraded' ? `${health.toFixed(0)}% Online` : 'Offline'}
                         </span>
                       </div>
                     </div>
@@ -177,11 +244,11 @@ const MemberView = () => {
                       </div>
                     </div>
 
-                    {memberDowntime.length > 0 && (
+                    {downServices.size > 0 && (
                       <div className="member-issues">
                         <span className="issues-icon">⚠️</span>
                         <p className="issues-text">
-                          {memberDowntime.length} service{memberDowntime.length > 1 ? 's' : ''} affected
+                          {downServices.size} of {member.services?.length || 0} services affected
                         </p>
                       </div>
                     )}
