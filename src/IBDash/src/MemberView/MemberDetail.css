@@ -165,8 +165,9 @@
 .info-content {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  gap: 6px; /* Added gap between label and value */
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .info-label {
@@ -174,12 +175,15 @@
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  min-width: 80px;
 }
 
 .info-value {
   font-size: 14px;
   font-weight: 500;
-  word-break: break-word; /* Allow long URLs to wrap */
+  word-break: break-word;
+  text-align: right;
+  max-width: 60%;
 }
 
 .info-value.link {
@@ -700,12 +704,12 @@
     grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
     gap: 8px;
   }
-  
+     
   .month-item {
     padding: 10px 4px;
     min-width: 70px;
   }
-  
+     
   .month-uptime {
     font-size: 16px;
   }

@@ -138,7 +138,7 @@ const MemberDetail = () => {
         
         // Get all downtime for the month
         const downtimeRes = await ApiHelper.fetchDowntimeEvents({ 
-          member: memberName,
+          member: memberName, 
           ...params 
         });
         
@@ -306,7 +306,7 @@ const MemberDetail = () => {
       'CN': '🇨🇳', 'IN': '🇮🇳', 'BR': '🇧🇷', 'CA': '🇨🇦', 'AU': '🇦🇺',
       'NL': '🇳🇱', 'SG': '🇸🇬', 'KR': '🇰🇷', 'ES': '🇪🇸', 'IT': '🇮🇹'
     };
-    return flags[countryCode] || '🌍';
+    return flags[countryCode] || '🌐';
   };
 
   if (loading) {
@@ -360,7 +360,7 @@ const MemberDetail = () => {
           <div className="stat-icon">📡</div>
           <div className="stat-content">
             <div className="stat-value">{stats?.total_requests?.toLocaleString() || '0'}</div>
-            <div className="stat-label">Total Requests</div>
+            <div className="stat-label">Total DNS Requests</div>
           </div>
         </div>
         <div className="stat-card glass">
@@ -506,7 +506,7 @@ const MemberDetail = () => {
                 <div className="info-section">
                   <h3>
                     <span className="section-icon">🌍</span>
-                    Top Countries by Requests
+                    Top Countries by DNS Requests
                   </h3>
                   <div className="countries-grid">
                     {stats.top_countries.map(country => (

@@ -120,7 +120,7 @@ const DataView = () => {
       {summary && (
         <div className="stats-grid">
           <StatsCard
-            title="Total Requests"
+            title="Total DNS Requests"
             value={summary.total_requests?.toLocaleString() || '0'}
             icon="📊"
           />
