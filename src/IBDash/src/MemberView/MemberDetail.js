@@ -44,10 +44,12 @@ const MemberDetail = () => {
     
     // Merge overlapping downtime periods
     const mergedPeriods = [];
+    const currentTime = new Date();
     
     sortedEvents.forEach(event => {
       const eventStart = new Date(event.start_time);
-      const eventEnd = event.end_time ? new Date(event.end_time) : new Date();
+      // For ongoing events (no end_time), use current time as end
+      const eventEnd = event.end_time ? new Date(event.end_time) : currentTime;
       
       // Clamp to date range
       const start = eventStart < startDate ? startDate : eventStart;
@@ -125,6 +127,7 @@ const MemberDetail = () => {
   const calculateMonthlyUptime = async (memberName) => {
     const months = [];
     const today = new Date();
+    const currentTime = new Date();
     
     for (let i = 11; i >= 0; i--) {
       const monthStart = new Date(today.getFullYear(), today.getMonth() - i, 1);
@@ -160,7 +163,8 @@ const MemberDetail = () => {
         
         sortedEvents.forEach(event => {
           const eventStart = new Date(event.start_time);
-          const eventEnd = event.end_time ? new Date(event.end_time) : new Date();
+          // For ongoing events, use current time as end
+          const eventEnd = event.end_time ? new Date(event.end_time) : currentTime;
           
           const start = eventStart < monthStart ? monthStart : eventStart;
           const end = eventEnd > monthEnd ? monthEnd : eventEnd;
@@ -223,13 +227,56 @@ const MemberDetail = () => {
   };
 
   const getServiceUptime = (serviceName) => {
-    if (!billing || !billing.members || billing.members.length === 0) return 100;
+    // Calculate service-specific uptime based on downtime events
+    const serviceDowntime = downtime.filter(dt => {
+      const eventService = getServiceFromEvent(dt);
+      return eventService === serviceName;
+    });
     
-    const memberBilling = billing.members.find(m => m.name === memberName);
-    if (!memberBilling || !memberBilling.services) return 100;
+    // Also include site-level downtime as it affects all services
+    const siteDowntime = downtime.filter(dt => dt.check_type === 'site');
     
-    const service = memberBilling.services.find(s => s.name === serviceName);
-    return service ? service.uptime_percentage : 100;
+    const allRelevantDowntime = [...serviceDowntime, ...siteDowntime];
+    
+    if (allRelevantDowntime.length === 0) return 100;
+    
+    // Calculate total hours in period
+    const totalHours = (dateRange.end - dateRange.start) / (1000 * 60 * 60);
+    let totalDowntimeHours = 0;
+    const currentTime = new Date();
+    
+    // Sort and merge overlapping periods
+    const sortedEvents = allRelevantDowntime.sort((a, b) => 
+      new Date(a.start_time) - new Date(b.start_time)
+    );
+    
+    const mergedPeriods = [];
+    
+    sortedEvents.forEach(event => {
+      const eventStart = new Date(event.start_time);
+      const eventEnd = event.end_time ? new Date(event.end_time) : currentTime;
+      
+      const start = eventStart < dateRange.start ? dateRange.start : eventStart;
+      const end = eventEnd > dateRange.end ? dateRange.end : eventEnd;
+      
+      if (start < end) {
+        if (mergedPeriods.length === 0 || start > mergedPeriods[mergedPeriods.length - 1].end) {
+          mergedPeriods.push({ start, end });
+        } else {
+          const lastPeriod = mergedPeriods[mergedPeriods.length - 1];
+          lastPeriod.end = end > lastPeriod.end ? end : lastPeriod.end;
+        }
+      }
+    });
+    
+    mergedPeriods.forEach(period => {
+      totalDowntimeHours += (period.end - period.start) / (1000 * 60 * 60);
+    });
+    
+    const uptimeHours = totalHours - totalDowntimeHours;
+    const uptimePercentage = (uptimeHours / totalHours) * 100;
+    
+    return Math.max(0, Math.min(100, uptimePercentage));
   };
 
   const groupDowntimeEvents = () => {
@@ -360,7 +407,7 @@ const MemberDetail = () => {
           <div className="stat-icon">📡</div>
           <div className="stat-content">
             <div className="stat-value">{stats?.total_requests?.toLocaleString() || '0'}</div>
-            <div className="stat-label">Total DNS Requests</div>
+            <div className="stat-label">Total Requests</div>
           </div>
         </div>
         <div className="stat-card glass">
@@ -506,7 +553,7 @@ const MemberDetail = () => {
                 <div className="info-section">
                   <h3>
                     <span className="section-icon">🌍</span>
-                    Top Countries by DNS Requests
+                    Top Countries by Requests
                   </h3>
                   <div className="countries-grid">
                     {stats.top_countries.map(country => (
