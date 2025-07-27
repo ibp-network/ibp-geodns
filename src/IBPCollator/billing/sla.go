@@ -50,8 +50,6 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 	totalHours := endTime.Sub(startTime).Hours()
 	slaHours := totalHours * (DefaultSLAPercentage / 100.0)
 
-	log.Log(log.Debug, "[SLA] Calculating for month %s: %.2f total hours", month.Format("2006-01"), totalHours)
-
 	// Get configuration for member name mapping
 	c := cfg.GetConfig()
 
@@ -60,10 +58,8 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 	for id, member := range c.Members {
 		if member.Details.Name != "" {
 			memberIDToDBName[id] = member.Details.Name
-			log.Log(log.Debug, "[SLA] Member mapping: %s -> %s", id, member.Details.Name)
 		} else {
 			memberIDToDBName[id] = id
-			log.Log(log.Debug, "[SLA] Member mapping: %s -> %s (no Details.Name)", id, id)
 		}
 	}
 
@@ -79,7 +75,6 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 			}
 		}
 		serviceToDomains[svcName] = domains
-		log.Log(log.Debug, "[SLA] Service %s has domains: %v", svcName, domains)
 	}
 
 	// Calculate downtime for each member/service combination
@@ -89,7 +84,6 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 		}
 
 		dbMemberName := memberIDToDBName[memberID]
-		log.Log(log.Debug, "[SLA] Processing member %s (DB name: %s)", memberID, dbMemberName)
 
 		for svcKey := range m.ServiceCosts {
 			// Calculate downtime for this specific service
@@ -134,8 +128,6 @@ func calculateServiceDowntime(memberName, serviceName string, domains []string, 
 		return 0
 	}
 
-	log.Log(log.Debug, "[SLA] Calculating downtime for %s/%s", memberName, serviceName)
-
 	// Collect all downtime periods
 	allPeriods := []downtimePeriod{}
 
@@ -157,9 +149,6 @@ func calculateServiceDowntime(memberName, serviceName string, domains []string, 
 			(start_time >= ? AND start_time < ?)
 		)
 	`
-
-	log.Log(log.Debug, "[SLA] Querying site downtime for member: %s, period: %s to %s",
-		memberName, startTime.Format("2006-01-02 15:04:05"), endTime.Format("2006-01-02 15:04:05"))
 
 	rows, err := data2.DB.Query(siteQuery, memberName, endTime, startTime, startTime, endTime)
 	if err != nil {
@@ -186,14 +175,9 @@ func calculateServiceDowntime(memberName, serviceName string, domains []string, 
 				actualEnd = *eventEnd
 			}
 
-			downtime := actualEnd.Sub(eventStart).Hours()
 			allPeriods = append(allPeriods, downtimePeriod{start: eventStart, end: actualEnd})
 			siteCount++
-
-			log.Log(log.Debug, "[SLA] Site downtime for %s: %.2f hours (start: %s, end: %s)",
-				memberName, downtime, eventStart.Format("2006-01-02 15:04:05"), actualEnd.Format("2006-01-02 15:04:05"))
 		}
-		log.Log(log.Debug, "[SLA] Found %d site-level downtime events for %s", siteCount, memberName)
 	}
 
 	// Query for domain/endpoint checks specific to this service
@@ -231,8 +215,6 @@ func calculateServiceDowntime(memberName, serviceName string, domains []string, 
 			)
 		`, strings.Join(placeholders, ","))
 
-		log.Log(log.Debug, "[SLA] Querying service downtime for domains: %v", domains)
-
 		rows, err := data2.DB.Query(serviceQuery, args...)
 		if err != nil {
 			log.Log(log.Error, "[SLA] Failed to query service downtime: %v", err)
@@ -263,43 +245,22 @@ func calculateServiceDowntime(memberName, serviceName string, domains []string, 
 
 				allPeriods = append(allPeriods, downtimePeriod{start: eventStart, end: actualEnd})
 				serviceCount++
-
-				downtime := actualEnd.Sub(eventStart).Hours()
-				checkTypeStr := "unknown"
-				if checkType == 2 {
-					checkTypeStr = "domain"
-				} else if checkType == 3 {
-					checkTypeStr = "endpoint"
-				}
-
-				log.Log(log.Debug, "[SLA] %s downtime for %s/%s (domain: %s): %.2f hours (start: %s, end: %s)",
-					checkTypeStr, memberName, serviceName, domainName, downtime,
-					eventStart.Format("2006-01-02 15:04:05"), actualEnd.Format("2006-01-02 15:04:05"))
 			}
-			log.Log(log.Debug, "[SLA] Found %d service-level downtime events for %s/%s", serviceCount, memberName, serviceName)
 		}
 	}
 
 	// Merge overlapping periods to avoid double-counting
 	if len(allPeriods) == 0 {
-		log.Log(log.Debug, "[SLA] No downtime periods found for %s/%s", memberName, serviceName)
 		return 0
 	}
 
 	merged := mergeOverlappingPeriods(allPeriods)
 	totalDowntime := 0.0
 
-	log.Log(log.Debug, "[SLA] Merged %d periods into %d non-overlapping periods", len(allPeriods), len(merged))
-
 	for _, period := range merged {
 		hours := period.end.Sub(period.start).Hours()
 		totalDowntime += hours
-		log.Log(log.Debug, "[SLA] Merged period for %s/%s: %.2f hours (start: %s, end: %s)",
-			memberName, serviceName, hours,
-			period.start.Format("2006-01-02 15:04:05"), period.end.Format("2006-01-02 15:04:05"))
 	}
-
-	log.Log(log.Debug, "[SLA] Total downtime for %s/%s: %.2f hours", memberName, serviceName, totalDowntime)
 	return totalDowntime
 }
 
@@ -391,7 +352,5 @@ func mapDomainToService(domain, checkType string) string {
 		}
 	}
 
-	// If no match found, log it for debugging
-	log.Log(log.Debug, "[SLA] Could not map domain '%s' to any service", domain)
 	return ""
 }
