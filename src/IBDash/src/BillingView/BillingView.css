@@ -245,18 +245,19 @@
 
 .current-month-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
   margin-bottom: 24px;
 }
 
 .stat-card {
   background: var(--bg-tertiary);
-  padding: 20px;
+  padding: 16px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
   position: relative;
   overflow: hidden;
+  text-align: center;
 }
 
 .stat-card::before {
@@ -278,14 +279,16 @@
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
   text-transform: uppercase;
   margin-bottom: 8px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 
 .stat-value {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--text-primary);
 }

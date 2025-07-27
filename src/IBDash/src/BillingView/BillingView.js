@@ -256,87 +256,83 @@ const BillingView = () => {
                       Current Month Billing (Month-to-Date)
                     </h3>
                     
-                    {memberBilling.members?.filter(m => m.name === selectedMember.name).map(member => (
-                      <div key={member.name}>
-                        <div className="current-month-stats">
-                          <div className="stat-card">
-                            <div className="stat-label">Base Cost</div>
-                            <div className="stat-value">${member.total_base_cost?.toFixed(2)}</div>
-                          </div>
-                          <div className="stat-card">
-                            <div className="stat-label">Billed Amount</div>
-                            <div className="stat-value">${member.total_billed?.toFixed(2)}</div>
-                          </div>
-                          <div className="stat-card success">
-                            <div className="stat-label">SLA Credits</div>
-                            <div className="stat-value success">
-                              ${member.total_credits?.toFixed(2)}
+                    {memberBilling.members?.filter(m => m.name === selectedMember.name).map(member => {
+                      // Calculate site uptime
+                      const totalUptime = member.services?.reduce((sum, svc) => sum + (svc.uptime_percentage || 0), 0) || 0;
+                      const avgUptime = member.services?.length > 0 ? totalUptime / member.services.length : 100;
+                      
+                      return (
+                        <div key={member.name}>
+                          <div className="current-month-stats">
+                            <div className="stat-card">
+                              <div className="stat-label">Base Cost</div>
+                              <div className="stat-value">${member.total_base_cost?.toFixed(2)}</div>
                             </div>
-                          </div>
-                          <div className={`stat-card ${member.meets_sla ? 'success' : 'error'}`}>
-                            <div className="stat-label">SLA Status</div>
-                            <div className={`stat-value ${member.meets_sla ? 'success' : 'error'}`}>
-                              {member.meets_sla ? 'PASS' : 'FAIL'}
+                            <div className="stat-card">
+                              <div className="stat-label">Billed Amount</div>
+                              <div className="stat-value">${member.total_billed?.toFixed(2)}</div>
                             </div>
-                          </div>
-                        </div>
-                        
-                        {/* Calculate and display site uptime */}
-                        {member.services && member.services.length > 0 && (() => {
-                          const totalUptime = member.services.reduce((sum, svc) => sum + (svc.uptime_percentage || 0), 0);
-                          const avgUptime = totalUptime / member.services.length;
-                          return (
-                            <div style={{ marginBottom: '20px' }}>
-                              <div className="stat-card">
-                                <div className="stat-label">Site Uptime (Average)</div>
-                                <div className={`stat-value ${avgUptime >= 99.9 ? 'success' : avgUptime >= 99 ? 'warning' : 'error'}`}>
-                                  {avgUptime.toFixed(2)}%
-                                </div>
+                            <div className="stat-card success">
+                              <div className="stat-label">SLA Credits</div>
+                              <div className="stat-value success">
+                                ${member.total_credits?.toFixed(2)}
                               </div>
                             </div>
-                          );
-                        })()}
-
-                        {/* Service Breakdown */}
-                        {member.services && member.services.length > 0 && (
-                          <div className="services-breakdown">
-                            <h4 className="section-title">Service Breakdown</h4>
-                            <table className="service-table">
-                              <thead>
-                                <tr>
-                                  <th>Service</th>
-                                  <th>Base Cost</th>
-                                  <th>Uptime</th>
-                                  <th>Billed</th>
-                                  <th>Credits</th>
-                                  <th>SLA</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {member.services.map(service => (
-                                  <tr key={service.name}>
-                                    <td>{service.name}</td>
-                                    <td>${service.base_cost?.toFixed(2)}</td>
-                                    <td>
-                                      <span className={`uptime-badge ${getUptimeClass(service.uptime_percentage)}`}>
-                                        {service.uptime_percentage?.toFixed(2)}%
-                                      </span>
-                                    </td>
-                                    <td>${service.billed_cost?.toFixed(2)}</td>
-                                    <td>${service.credits?.toFixed(2)}</td>
-                                    <td>
-                                      <span className={`sla-status ${service.meets_sla ? 'pass' : 'fail'}`}>
-                                        {service.meets_sla ? '✓ PASS' : '✗ FAIL'}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                            <div className={`stat-card ${avgUptime >= 99.9 ? 'success' : 'error'}`}>
+                              <div className="stat-label">Site Uptime</div>
+                              <div className={`stat-value ${avgUptime >= 99.9 ? 'success' : avgUptime >= 99 ? 'warning' : 'error'}`}>
+                                {avgUptime.toFixed(2)}%
+                              </div>
+                            </div>
+                            <div className={`stat-card ${member.meets_sla ? 'success' : 'error'}`}>
+                              <div className="stat-label">SLA Status</div>
+                              <div className={`stat-value ${member.meets_sla ? 'success' : 'error'}`}>
+                                {member.meets_sla ? 'PASS' : 'FAIL'}
+                              </div>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    ))}
+
+                          {/* Service Breakdown */}
+                          {member.services && member.services.length > 0 && (
+                            <div className="services-breakdown">
+                              <h4 className="section-title">Service Breakdown</h4>
+                              <table className="service-table">
+                                <thead>
+                                  <tr>
+                                    <th>Service</th>
+                                    <th>Base Cost</th>
+                                    <th>Uptime</th>
+                                    <th>Billed</th>
+                                    <th>Credits</th>
+                                    <th>SLA</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {member.services.map(service => (
+                                    <tr key={service.name}>
+                                      <td>{service.name}</td>
+                                      <td>${service.base_cost?.toFixed(2)}</td>
+                                      <td>
+                                        <span className={`uptime-badge ${getUptimeClass(service.uptime_percentage)}`}>
+                                          {service.uptime_percentage?.toFixed(2)}%
+                                        </span>
+                                      </td>
+                                      <td>${service.billed_cost?.toFixed(2)}</td>
+                                      <td>${service.credits?.toFixed(2)}</td>
+                                      <td>
+                                        <span className={`sla-status ${service.meets_sla ? 'pass' : 'fail'}`}>
+                                          {service.meets_sla ? '✓ PASS' : '✗ FAIL'}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {/* Historical PDFs */}
