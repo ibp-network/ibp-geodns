@@ -156,14 +156,13 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	}
 
 	// Member information card - reduced height
-	drawMemberCard(pdf, 10, 35, 190, 63) // Reduced from 65 to 63 (about 3% reduction)
+	drawMemberCard(pdf, 10, 35, 190, 63)
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(15, 40)
 	pdf.CellFormat(120, 8, "Member Information", "", 1, "L", false, 0, "")
 
 	// Member logo on the right
 	if memberLogoPath != "" {
-		// Try to add the logo, constrain to 40x40 max
 		info := pdf.RegisterImageOptions(memberLogoPath,
 			gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: true})
 		if info != nil {
@@ -230,38 +229,41 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		pdf.SetFont("Helvetica", "", 10)
 		y += 6
 
-		// Service IPs
+		// Service IPs - Always show both IPv4 and IPv6
+		pdf.SetXY(15, y)
+		pdf.CellFormat(30, 5, "IPv4:", "", 0, "L", false, 0, "")
+		pdf.SetX(45)
+		pdf.SetFont("Helvetica", "B", 10)
 		if memberConfig.Service.ServiceIPv4 != "" {
-			pdf.SetXY(15, y)
-			pdf.CellFormat(30, 5, "IPv4:", "", 0, "L", false, 0, "")
-			pdf.SetX(45)
-			pdf.SetFont("Helvetica", "B", 10)
 			pdf.CellFormat(100, 5, memberConfig.Service.ServiceIPv4, "", 1, "L", false, 0, "")
-			pdf.SetFont("Helvetica", "", 10)
-			y += 6
+		} else {
+			pdf.CellFormat(100, 5, "", "", 1, "L", false, 0, "")
 		}
+		pdf.SetFont("Helvetica", "", 10)
+		y += 6
 
-		// Add IPv6
+		pdf.SetXY(15, y)
+		pdf.CellFormat(30, 5, "IPv6:", "", 0, "L", false, 0, "")
+		pdf.SetX(45)
+		pdf.SetFont("Helvetica", "B", 10)
 		if memberConfig.Service.ServiceIPv6 != "" {
-			pdf.SetXY(15, y)
-			pdf.CellFormat(30, 5, "IPv6:", "", 0, "L", false, 0, "")
-			pdf.SetX(45)
-			pdf.SetFont("Helvetica", "B", 10)
 			pdf.CellFormat(100, 5, memberConfig.Service.ServiceIPv6, "", 1, "L", false, 0, "")
-			pdf.SetFont("Helvetica", "", 10)
-			y += 6
+		} else {
+			pdf.CellFormat(100, 5, "", "", 1, "L", false, 0, "")
 		}
+		pdf.SetFont("Helvetica", "", 10)
+		y += 6
 	}
 
-	// DNS usage statistics - moved up to align with other text
-	pdf.SetXY(15, 88) // Changed from 90 to 88
+	// DNS usage statistics - moved up with consistent spacing
+	pdf.SetXY(15, y+6)
 	pdf.CellFormat(30, 5, "DNS Requests:", "", 0, "L", false, 0, "")
 	pdf.SetX(45)
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.CellFormat(30, 5, fmt.Sprintf("%d", stats.RequestCount), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
 
-	pdf.SetXY(80, 88) // Changed from 90 to 88
+	pdf.SetXY(80, y+6)
 	pdf.CellFormat(30, 5, "% of Network:", "", 0, "L", false, 0, "")
 	pdf.SetX(110)
 	pdf.SetFont("Helvetica", "B", 10)
@@ -273,8 +275,8 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetFont("Helvetica", "", 10)
 
 	// Create separate Overview box below member information - reduced height
-	y = 103                             // Adjusted from 105 due to member box reduction
-	drawMemberCard(pdf, 10, y, 190, 52) // Reduced from 55 to 52 (about 5% reduction)
+	y = 103
+	drawMemberCard(pdf, 10, y, 190, 52)
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(15, y+5)
 	pdf.CellFormat(100, 8, "Overview", "", 1, "L", false, 0, "")
@@ -282,7 +284,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetFont("Helvetica", "", 10)
 	y += 15
 
-	// Calculate totals for overview - FIXED calculation
+	// Calculate totals for overview
 	totalBilled := 0.0
 	totalServices := 0
 	totalDowntimeHours := 0.0
@@ -300,12 +302,12 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		totalDowntimeHours += breakdown.HoursDown
 		totalServiceHours += breakdown.HoursTotal
 
-		// Get resource totals - FIXED: no conversion needed for bandwidth
+		// Get resource totals
 		if svcConfig, exists := c.Services[svcName]; exists {
 			totalCores += svcConfig.Resources.Cores * float64(svcConfig.Resources.Nodes)
 			totalMemory += svcConfig.Resources.Memory * float64(svcConfig.Resources.Nodes)
 			totalDisk += svcConfig.Resources.Disk * float64(svcConfig.Resources.Nodes)
-			totalBandwidth += svcConfig.Resources.Bandwidth * float64(svcConfig.Resources.Nodes) // Already in GB
+			totalBandwidth += svcConfig.Resources.Bandwidth * float64(svcConfig.Resources.Nodes)
 		}
 	}
 
@@ -320,6 +322,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	for _, baseCost := range memberCost.ServiceCosts {
 		memberBaseTotal += baseCost
 	}
+
 	slaPenalty := memberBaseTotal - totalBilled
 
 	// First row - financial
@@ -406,7 +409,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetFont("Helvetica", "", 10)
 
 	// Service details grouped by level
-	y = 160 // Start after overview box which ends around 160
+	y = 160
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(10, y)
 	pdf.CellFormat(190, 8, "Service Details", "", 1, "L", false, 0, "")
@@ -483,13 +486,12 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 			if svcConfig, exists := c.Services[svcName]; exists {
 				pdf.SetXY(15, serviceY)
 				pdf.SetTextColor(100, 100, 100)
-				bandwidthGB := svcConfig.Resources.Bandwidth * 1024 // Convert TB to GB
 				resourceText := fmt.Sprintf("Resources: %d nodes, %.1f cores, %.1f GB RAM, %.1f GB disk, %.1f GB bandwidth",
 					svcConfig.Resources.Nodes,
 					svcConfig.Resources.Cores,
 					svcConfig.Resources.Memory,
 					svcConfig.Resources.Disk,
-					bandwidthGB)
+					svcConfig.Resources.Bandwidth)
 				pdf.CellFormat(180, 4, resourceText, "", 1, "L", false, 0, "")
 				pdf.SetTextColor(0, 0, 0)
 				serviceY += 5
@@ -521,6 +523,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 			pdf.SetX(145)
 			pdf.SetFont("Helvetica", "B", 9)
 			pdf.CellFormat(25, 5, fmt.Sprintf("$%.2f", billed), "", 0, "R", false, 0, "")
+
 			serviceY += 7
 
 			// SLA status
@@ -620,6 +623,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 // getServiceDowntimeEvents retrieves downtime events for a specific service
 func getServiceDowntimeEvents(memberName, serviceName string, month time.Time) []DowntimeEvent {
 	events := []DowntimeEvent{}
+
 	if data2.DB == nil {
 		return events
 	}
@@ -776,6 +780,7 @@ func formatDuration(d time.Duration) string {
 // getMemberDowntimeEvents retrieves downtime events for a member in the given month
 func getMemberDowntimeEvents(memberName string, month time.Time) []DowntimeEvent {
 	events := []DowntimeEvent{}
+
 	if data2.DB == nil {
 		return events
 	}
