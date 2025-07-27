@@ -262,7 +262,6 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.CellFormat(30, 5, fmt.Sprintf("%d", stats.RequestCount), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
-	y += 6
 
 	pdf.SetXY(80, y)
 	pdf.CellFormat(30, 5, "% of Network:", "", 0, "L", false, 0, "")
