@@ -256,14 +256,15 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	}
 
 	// DNS usage statistics - moved up with consistent spacing
-	pdf.SetXY(15, y+6)
+	pdf.SetXY(15, y)
 	pdf.CellFormat(30, 5, "DNS Requests:", "", 0, "L", false, 0, "")
 	pdf.SetX(45)
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.CellFormat(30, 5, fmt.Sprintf("%d", stats.RequestCount), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
+	y += 6
 
-	pdf.SetXY(80, y+6)
+	pdf.SetXY(80, y)
 	pdf.CellFormat(30, 5, "% of Network:", "", 0, "L", false, 0, "")
 	pdf.SetX(110)
 	pdf.SetFont("Helvetica", "B", 10)
@@ -273,6 +274,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	}
 	pdf.CellFormat(30, 5, fmt.Sprintf("%.2f%%", percentage), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
+	y += 6
 
 	// Create separate Overview box below member information - reduced height
 	y = 103
