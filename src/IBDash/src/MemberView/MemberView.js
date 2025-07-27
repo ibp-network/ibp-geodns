@@ -138,7 +138,7 @@ const MemberView = () => {
   return (
     <div className="member-view fade-in">
       <div className="view-header">
-        <h1>Network Members</h1>
+        <h1>IBP Members</h1>
         <div className="header-stats">
           <div className="stat-item">
             <span className="stat-value">{members.length}</span>

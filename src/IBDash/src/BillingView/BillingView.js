@@ -196,14 +196,7 @@ const BillingView = () => {
               >
                 {member.name.substring(0, 2).toUpperCase()}
               </div>
-              <div className="member-nav-info">
-                <div className="member-nav-name">{member.name}</div>
-                <div className="member-nav-meta">
-                  <span className="member-level-badge">Level {member.level}</span>
-                  <span>{member.services?.length || 0} services</span>
-                  <span>{member.region}</span>
-                </div>
-              </div>
+              <div className="member-nav-name">{member.name}</div>
             </div>
           ))}
         </div>
