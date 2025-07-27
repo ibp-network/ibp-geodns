@@ -51,6 +51,12 @@ const ApiHelper = {
   // Billing endpoints
   fetchBillingBreakdown: (params) => api.get('/billing/breakdown', { params }),
   fetchBillingSummary: () => api.get('/billing/summary'),
+    // Billing PDF endpoints
+  fetchBillingPDFs: (params) => api.get('/billing/pdfs', { params }),
+  downloadBillingPDF: (params) => api.get('/billing/pdfs/download', { 
+    params,
+    responseType: 'arraybuffer'
+  }),
 };
 
 export default ApiHelper;

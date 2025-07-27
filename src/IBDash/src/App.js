@@ -7,6 +7,7 @@ import DataView from './DataView/DataView';
 import EarthView from './EarthView/EarthView';
 import MemberView from './MemberView/MemberView';
 import MemberDetail from './MemberView/MemberDetail';
+import BillingView from './BillingView/BillingView';
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -45,6 +46,7 @@ function App() {
               <Route path="/earth" element={<EarthView />} />
               <Route path="/members" element={<MemberView />} />
               <Route path="/members/:memberName" element={<MemberDetail />} />
+              <Route path="/billing" element={<BillingView />} />
             </Routes>
           </div>
         </div>

@@ -32,6 +32,12 @@ const Sidebar = () => {
       path: '/members',
       icon: '👥',
       description: 'Member information and stats'
+    },
+    {
+      title: 'Billing View',
+      path: '/billing',
+      icon: '💰',
+      description: 'Billing management and PDFs'
     }
   ];
 
