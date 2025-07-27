@@ -156,7 +156,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	}
 
 	// Member information card - reduced height
-	drawMemberCard(pdf, 10, 35, 190, 63)
+	drawMemberCard(pdf, 10, 35, 190, 60)
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(15, 40)
 	pdf.CellFormat(120, 8, "Member Information", "", 1, "L", false, 0, "")
@@ -276,7 +276,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	y += 6
 
 	// Create separate Overview box below member information - reduced height
-	y = 103
+	y = 100
 	drawMemberCard(pdf, 10, y, 190, 46)
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(15, y+5)
@@ -410,7 +410,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetFont("Helvetica", "", 10)
 
 	// Service details grouped by level
-	y = 154
+	y = 151
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(10, y)
 	pdf.CellFormat(190, 8, "Service Details", "", 1, "L", false, 0, "")
