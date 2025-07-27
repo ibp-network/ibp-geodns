@@ -254,55 +254,41 @@ const MemberDetail = () => {
     return grouped;
   };
 
-  // Fixed service matching logic to avoid substring matching issues
+  // Convert domain name to service name
+  const domainToServiceName = (domainName) => {
+    if (!domainName) return null;
+    
+    // Remove common suffixes
+    let serviceName = domainName
+      .replace('.ibp.network', '')
+      .replace('.dotters.network', '');
+    
+    // Convert to title case with hyphens
+    serviceName = serviceName.split('-').map(part => 
+      part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+    ).join('-');
+    
+    return serviceName;
+  };
+
   const getServiceFromEvent = (event) => {
     if (!member || !member.services) return 'Unknown Service';
     
-    // Try to match domain or endpoint to a service
-    for (const service of member.services) {
-      const serviceLower = service.toLowerCase();
+    // Try to get service name from domain
+    if (event.domain_name) {
+      const serviceName = domainToServiceName(event.domain_name);
       
-      if (event.domain_name) {
-        const domainLower = event.domain_name.toLowerCase();
-        // Remove suffixes
-        const normalizedDomain = domainLower
-          .replace('.dotters.network', '')
-          .replace('.ibp.network', '');
-        
-        // Exact match
-        if (normalizedDomain === serviceLower) {
-          return service;
-        }
-        
-        // Check domain parts for exact match
-        const domainParts = normalizedDomain.split(/[-._]/);
-        if (domainParts.includes(serviceLower)) {
-          return service;
-        }
-      }
+      // Find matching service in member's service list (case-insensitive)
+      const matchingService = member.services.find(s => 
+        s.toLowerCase() === serviceName.toLowerCase()
+      );
       
-      if (event.endpoint) {
-        const endpointLower = event.endpoint.toLowerCase();
-        // Remove protocol and path
-        const normalizedEndpoint = endpointLower
-          .replace(/^(https?:\/\/)?(wss?:\/\/)?/, '')
-          .replace(/\/.*$/, '')
-          .replace('.dotters.network', '')
-          .replace('.ibp.network', '');
-        
-        // Exact match
-        if (normalizedEndpoint === serviceLower) {
-          return service;
-        }
-        
-        // Check endpoint parts for exact match
-        const endpointParts = normalizedEndpoint.split(/[-._]/);
-        if (endpointParts.includes(serviceLower)) {
-          return service;
-        }
+      if (matchingService) {
+        return matchingService;
       }
     }
     
+    // Fallback to domain name or endpoint
     return event.domain_name || event.endpoint || 'Unknown Service';
   };
 

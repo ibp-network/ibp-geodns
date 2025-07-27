@@ -56,6 +56,23 @@ const EarthView = () => {
     }
   };
 
+  // Convert domain name to service name
+  const domainToServiceName = (domainName) => {
+    if (!domainName) return null;
+    
+    // Remove common suffixes
+    let serviceName = domainName
+      .replace('.ibp.network', '')
+      .replace('.dotters.network', '');
+    
+    // Convert to title case with hyphens
+    serviceName = serviceName.split('-').map(part => 
+      part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+    ).join('-');
+    
+    return serviceName;
+  };
+
   // Get unique services that are down for a member
   const getDownServices = (memberName) => {
     const member = members.find(m => m.name === memberName);
@@ -65,75 +82,26 @@ const EarthView = () => {
     const downServices = new Set();
     
     memberDowntime.forEach(dt => {
-      // Normalize the domain/endpoint to service name
-      const serviceName = getServiceNameFromDowntime(dt, member.services);
-      if (serviceName) {
-        downServices.add(serviceName);
+      // For site-level downtime, all services are affected
+      if (dt.check_type === 'site') {
+        // Add all services as down
+        member.services.forEach(service => downServices.add(service));
+      } else if (dt.domain_name) {
+        // Convert domain to service name
+        const serviceName = domainToServiceName(dt.domain_name);
+        
+        // Find matching service in member's service list
+        const matchingService = member.services.find(s => 
+          s.toLowerCase() === serviceName.toLowerCase()
+        );
+        
+        if (matchingService) {
+          downServices.add(matchingService);
+        }
       }
     });
     
     return downServices;
-  };
-
-  // Extract service name from downtime event - FIXED to avoid substring matching issues
-  const getServiceNameFromDowntime = (dt, services) => {
-    if (!services || services.length === 0) return null;
-    
-    // For site-level downtime, all services are affected
-    if (dt.check_type === 'site') {
-      return null; // Don't match to a specific service
-    }
-    
-    // Check each service to see if the downtime matches
-    for (const service of services) {
-      // Exact match first (case-insensitive)
-      const serviceLower = service.toLowerCase();
-      
-      // Check domain name
-      if (dt.domain_name) {
-        const domainLower = dt.domain_name.toLowerCase();
-        // Remove common suffixes to normalize
-        const normalizedDomain = domainLower
-          .replace('.dotters.network', '')
-          .replace('.ibp.network', '');
-        
-        // Exact match after normalization
-        if (normalizedDomain === serviceLower) {
-          return service;
-        }
-        
-        // Check if domain contains service name with delimiters to avoid partial matches
-        // For example, "eth-passet-hub-paseo" should not match "paseo"
-        const domainParts = normalizedDomain.split(/[-._]/);
-        if (domainParts.includes(serviceLower)) {
-          return service;
-        }
-      }
-      
-      // Check endpoint
-      if (dt.endpoint) {
-        const endpointLower = dt.endpoint.toLowerCase();
-        // Remove protocol and path
-        const normalizedEndpoint = endpointLower
-          .replace(/^(https?:\/\/)?(wss?:\/\/)?/, '')
-          .replace(/\/.*$/, '')
-          .replace('.dotters.network', '')
-          .replace('.ibp.network', '');
-        
-        // Exact match after normalization
-        if (normalizedEndpoint === serviceLower) {
-          return service;
-        }
-        
-        // Check with delimiters
-        const endpointParts = normalizedEndpoint.split(/[-._]/);
-        if (endpointParts.includes(serviceLower)) {
-          return service;
-        }
-      }
-    }
-    
-    return null;
   };
 
   // Calculate member health percentage based on unique services online
