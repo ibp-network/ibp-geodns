@@ -442,7 +442,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 
 		// Level header
 		pdf.SetFont("Helvetica", "B", 12)
-		pdf.SetXY(10, y)
+		pdf.SetXY(10, y-2)
 		pdf.CellFormat(190, 7, fmt.Sprintf("Level %d Services", level), "", 1, "L", false, 0, "")
 		y += 8
 
