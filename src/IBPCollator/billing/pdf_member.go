@@ -603,15 +603,13 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		y = 35
 	}
 
-	y = y + 12
-
 	drawMemberCard(pdf, 10, y, 190, 20)
 	pdf.SetFillColor(30, 30, 30)
 	pdf.Rect(10, y, 190, 20, "F")
 	pdf.SetTextColor(255, 255, 255)
 	pdf.SetFont("Helvetica", "B", 12)
 	pdf.SetXY(15, y+7)
-	pdf.CellFormat(140, 6, "Total Amount Due", "", 0, "L", false, 0, "")
+	pdf.CellFormat(140, 6, "Total Amount Due (All Services)", "", 0, "L", false, 0, "")
 	pdf.CellFormat(35, 6, fmt.Sprintf("$%.2f", memberTotal), "", 0, "R", false, 0, "")
 	pdf.SetTextColor(0, 0, 0)
 
