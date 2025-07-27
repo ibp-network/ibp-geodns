@@ -58,8 +58,14 @@ const BillingView = () => {
     setDetailLoading(true);
     try {
       // Get current month billing
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
+      
       const billingRes = await ApiHelper.fetchBillingBreakdown({ 
         member: memberName,
+        month: currentMonth,
+        year: currentYear,
         include_downtime: true 
       });
       setMemberBilling(billingRes.data);
