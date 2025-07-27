@@ -45,7 +45,7 @@ const BillingView = () => {
           }
         });
       }
-      setOverviewPDFs(overviews.slice(0, 3)); // Show last 3 overview PDFs
+      setOverviewPDFs(overviews.slice(0, 6)); // Show last 6 overview PDFs
       
       setLoading(false);
     } catch (error) {
@@ -144,197 +144,237 @@ const BillingView = () => {
     <div className="billing-view fade-in">
       <div className="billing-header">
         <h1>Billing Management</h1>
-        <div className="overview-pdfs">
-          <span style={{ marginRight: '12px', color: 'var(--text-secondary)' }}>
-            Recent Overviews:
-          </span>
-          {overviewPDFs.map((pdf, index) => (
-            <button
-              key={index}
-              className="overview-pdf-button"
-              onClick={() => downloadPDF(pdf, true)}
+      </div>
+
+      {/* Overview PDFs Bar */}
+      <div className="overview-pdfs-bar">
+        <span className="overview-label">📊 Monthly Overviews:</span>
+        {overviewPDFs.map((pdf, index) => (
+          <button
+            key={index}
+            className="overview-pdf-button"
+            onClick={() => downloadPDF(pdf, true)}
+          >
+            📄 {formatMonth(pdf.year, pdf.month)}
+          </button>
+        ))}
+      </div>
+
+      {/* Members Navigation Bar */}
+      <div className="members-nav-bar">
+        <div className="members-nav-header">
+          <h2>Select Member</h2>
+          <input
+            type="text"
+            placeholder="Search members..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="member-search"
+          />
+        </div>
+        <div className="members-horizontal-list">
+          {filteredMembers.map(member => (
+            <div
+              key={member.name}
+              className={`member-nav-item ${selectedMember?.name === member.name ? 'active' : ''}`}
+              onClick={() => setSelectedMember(member)}
             >
-              📄 {formatMonth(pdf.year, pdf.month)}
-            </button>
+              {member.logo ? (
+                <img 
+                  src={member.logo} 
+                  alt={member.name} 
+                  className="member-logo-small"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div 
+                className="member-logo-placeholder" 
+                style={{ display: member.logo ? 'none' : 'flex' }}
+              >
+                {member.name.substring(0, 2).toUpperCase()}
+              </div>
+              <div className="member-nav-info">
+                <div className="member-nav-name">{member.name}</div>
+                <div className="member-nav-meta">
+                  <span className="member-level-badge">Level {member.level}</span>
+                  <span>{member.services?.length || 0} services</span>
+                  <span>{member.region}</span>
+                </div>
+              </div>
+            </div>
           ))}
         </div>
       </div>
 
-      <div className="billing-content">
-        <div className="members-panel">
-          <div className="members-panel-header">
-            <h2>Members</h2>
-            <input
-              type="text"
-              placeholder="Search members..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="member-search"
-            />
-          </div>
-          <div className="members-list">
-            {filteredMembers.map(member => (
-              <div
-                key={member.name}
-                className={`member-item ${selectedMember?.name === member.name ? 'active' : ''}`}
-                onClick={() => setSelectedMember(member)}
+      {/* Detail Panel */}
+      <div className="detail-panel">
+        {selectedMember ? (
+          <>
+            <div className="detail-header">
+              {selectedMember.logo ? (
+                <img 
+                  src={selectedMember.logo} 
+                  alt={selectedMember.name} 
+                  className="detail-header-logo"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div 
+                className="detail-header-logo-placeholder" 
+                style={{ display: selectedMember.logo ? 'none' : 'flex' }}
               >
-                <div className="member-info">
-                  <div className="member-name">{member.name}</div>
-                  <div className="member-stats">
-                    <span>Services: {member.services?.length || 0}</span>
-                    <span>Region: {member.region}</span>
-                  </div>
-                </div>
-                <div className="member-level">Level {member.level}</div>
+                {selectedMember.name.substring(0, 2).toUpperCase()}
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="detail-panel">
-          {selectedMember ? (
-            <>
-              <div className="detail-header">
+              <div className="detail-header-info">
                 <h2>{selectedMember.name}</h2>
                 <div className="detail-subtitle">
-                  Level {selectedMember.level} • {selectedMember.region}
+                  <span>Level {selectedMember.level}</span>
+                  <span>•</span>
+                  <span>{selectedMember.region}</span>
+                  <span>•</span>
+                  <span>{selectedMember.services?.length || 0} Active Services</span>
                 </div>
               </div>
-              <div className="detail-content">
-                {detailLoading ? (
-                  <div className="loading-container">
-                    <div className="loading-spinner"></div>
-                    <p>Loading billing details...</p>
-                  </div>
-                ) : memberBilling ? (
-                  <>
-                    {/* Current Month Section */}
-                    <div className="current-month-section">
-                      <h3 className="section-title">
-                        <span>💵</span>
-                        Current Month Billing
-                      </h3>
-                      
-                      {memberBilling.members?.map(member => (
-                        <div key={member.name}>
-                          <div className="current-month-stats">
-                            <div className="stat-card">
-                              <div className="stat-label">Base Cost</div>
-                              <div className="stat-value">${member.total_base_cost?.toFixed(2)}</div>
-                            </div>
-                            <div className="stat-card">
-                              <div className="stat-label">Billed Amount</div>
-                              <div className="stat-value">${member.total_billed?.toFixed(2)}</div>
-                            </div>
-                            <div className="stat-card">
-                              <div className="stat-label">SLA Credits</div>
-                              <div className="stat-value success">
-                                ${member.total_credits?.toFixed(2)}
-                              </div>
-                            </div>
-                            <div className="stat-card">
-                              <div className="stat-label">SLA Status</div>
-                              <div className={`stat-value ${member.meets_sla ? 'success' : 'error'}`}>
-                                {member.meets_sla ? 'PASS' : 'FAIL'}
-                              </div>
+            </div>
+            <div className="detail-content">
+              {detailLoading ? (
+                <div className="loading-container">
+                  <div className="loading-spinner"></div>
+                  <p>Loading billing details...</p>
+                </div>
+              ) : memberBilling ? (
+                <>
+                  {/* Current Month Section */}
+                  <div className="current-month-section">
+                    <h3 className="section-title">
+                      <span>💵</span>
+                      Current Month Billing
+                    </h3>
+                    
+                    {memberBilling.members?.map(member => (
+                      <div key={member.name}>
+                        <div className="current-month-stats">
+                          <div className="stat-card">
+                            <div className="stat-label">Base Cost</div>
+                            <div className="stat-value">${member.total_base_cost?.toFixed(2)}</div>
+                          </div>
+                          <div className="stat-card">
+                            <div className="stat-label">Billed Amount</div>
+                            <div className="stat-value">${member.total_billed?.toFixed(2)}</div>
+                          </div>
+                          <div className="stat-card success">
+                            <div className="stat-label">SLA Credits</div>
+                            <div className="stat-value success">
+                              ${member.total_credits?.toFixed(2)}
                             </div>
                           </div>
+                          <div className={`stat-card ${member.meets_sla ? 'success' : 'error'}`}>
+                            <div className="stat-label">SLA Status</div>
+                            <div className={`stat-value ${member.meets_sla ? 'success' : 'error'}`}>
+                              {member.meets_sla ? 'PASS' : 'FAIL'}
+                            </div>
+                          </div>
+                        </div>
 
-                          {/* Service Breakdown */}
-                          {member.services && member.services.length > 0 && (
-                            <div className="services-breakdown">
-                              <h4 className="section-title">Service Breakdown</h4>
-                              <table className="service-table">
-                                <thead>
-                                  <tr>
-                                    <th>Service</th>
-                                    <th>Base Cost</th>
-                                    <th>Uptime</th>
-                                    <th>Billed</th>
-                                    <th>Credits</th>
-                                    <th>SLA</th>
+                        {/* Service Breakdown */}
+                        {member.services && member.services.length > 0 && (
+                          <div className="services-breakdown">
+                            <h4 className="section-title">Service Breakdown</h4>
+                            <table className="service-table">
+                              <thead>
+                                <tr>
+                                  <th>Service</th>
+                                  <th>Base Cost</th>
+                                  <th>Uptime</th>
+                                  <th>Billed</th>
+                                  <th>Credits</th>
+                                  <th>SLA</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {member.services.map(service => (
+                                  <tr key={service.name}>
+                                    <td>{service.name}</td>
+                                    <td>${service.base_cost?.toFixed(2)}</td>
+                                    <td>
+                                      <span className={`uptime-badge ${getUptimeClass(service.uptime_percentage)}`}>
+                                        {service.uptime_percentage?.toFixed(2)}%
+                                      </span>
+                                    </td>
+                                    <td>${service.billed_cost?.toFixed(2)}</td>
+                                    <td>${service.credits?.toFixed(2)}</td>
+                                    <td>
+                                      <span className={`sla-status ${service.meets_sla ? 'pass' : 'fail'}`}>
+                                        {service.meets_sla ? '✓ PASS' : '✗ FAIL'}
+                                      </span>
+                                    </td>
                                   </tr>
-                                </thead>
-                                <tbody>
-                                  {member.services.map(service => (
-                                    <tr key={service.name}>
-                                      <td>{service.name}</td>
-                                      <td>${service.base_cost?.toFixed(2)}</td>
-                                      <td>
-                                        <span className={`uptime-badge ${getUptimeClass(service.uptime_percentage)}`}>
-                                          {service.uptime_percentage?.toFixed(2)}%
-                                        </span>
-                                      </td>
-                                      <td>${service.billed_cost?.toFixed(2)}</td>
-                                      <td>${service.credits?.toFixed(2)}</td>
-                                      <td>
-                                        <span className={`sla-status ${service.meets_sla ? 'pass' : 'fail'}`}>
-                                          {service.meets_sla ? '✓ PASS' : '✗ FAIL'}
-                                        </span>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Historical PDFs */}
-                    <div className="historical-section">
-                      <h3 className="section-title">
-                        <span>📋</span>
-                        Historical Billing PDFs
-                      </h3>
-                      {historicalPDFs.length > 0 ? (
-                        <div className="pdf-list">
-                          {historicalPDFs.map((pdf, index) => (
-                            <div key={index} className="pdf-item">
-                              <div className="pdf-info">
-                                <div className="pdf-month">
-                                  {formatMonth(pdf.year, pdf.month)}
-                                </div>
-                                <div className="pdf-stats">
-                                  <span>Size: {(pdf.file_size / 1024).toFixed(1)} KB</span>
-                                  <span>•</span>
-                                  <span>Generated: {new Date(pdf.modified_time).toLocaleDateString()}</span>
-                                </div>
-                              </div>
-                              <button
-                                className="pdf-download"
-                                onClick={() => downloadPDF(pdf)}
-                              >
-                                <span>⬇</span>
-                                Download PDF
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="no-data">
-                          No historical PDFs available
-                        </div>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <div className="no-data">
-                    No billing data available
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="placeholder-content">
-              <div className="placeholder-icon">💰</div>
-              <h3>Select a member to view billing details</h3>
-              <p>Choose from the list on the left to see billing information</p>
+
+                  {/* Historical PDFs */}
+                  <div className="historical-section">
+                    <h3 className="section-title">
+                      <span>📋</span>
+                      Historical Billing PDFs
+                    </h3>
+                    {historicalPDFs.length > 0 ? (
+                      <div className="pdf-list">
+                        {historicalPDFs.map((pdf, index) => (
+                          <div key={index} className="pdf-item">
+                            <div className="pdf-info">
+                              <div className="pdf-month">
+                                {formatMonth(pdf.year, pdf.month)}
+                              </div>
+                              <div className="pdf-stats">
+                                <span>Size: {(pdf.file_size / 1024).toFixed(1)} KB</span>
+                                <span>•</span>
+                                <span>Generated: {new Date(pdf.modified_time).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                            <button
+                              className="pdf-download"
+                              onClick={() => downloadPDF(pdf)}
+                            >
+                              <span>⬇</span>
+                              Download PDF
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="no-data">
+                        No historical PDFs available
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="no-data">
+                  No billing data available
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        ) : (
+          <div className="placeholder-content">
+            <div className="placeholder-icon">💰</div>
+            <h3>Select a member to view billing details</h3>
+            <p>Choose from the list above to see billing information</p>
+          </div>
+        )}
       </div>
     </div>
   );
