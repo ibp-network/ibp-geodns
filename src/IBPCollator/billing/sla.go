@@ -45,30 +45,39 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 	totalHours := endTime.Sub(startTime).Hours()
 	slaHours := totalHours * (DefaultSLAPercentage / 100.0)
 
-	// Query downtime events for all members
+	// Get configuration for member name mapping
+	c := cfg.GetConfig()
+
+	// Query ALL downtime events (both closed and open)
 	query := `
 		SELECT 
 			member_name,
 			domain_name,
 			check_type,
 			start_time,
-			COALESCE(end_time, ?) as end_time,
+			CASE 
+				WHEN end_time IS NULL THEN NOW()
+				ELSE end_time 
+			END as calc_end_time,
 			is_ipv6
 		FROM member_events
 		WHERE status = 0
 		AND start_time < ?
 		AND (end_time IS NULL OR end_time > ?)
-		ORDER BY member_name, domain_name, start_time
+		ORDER BY member_name, start_time
 	`
 
-	rows, err := data2.DB.Query(query, endTime, endTime, startTime)
+	rows, err := data2.DB.Query(query, endTime, startTime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query downtime events: %w", err)
 	}
 	defer rows.Close()
 
 	// Track downtime by member and service
+	// Map from memberID -> serviceName -> accumulated downtime hours
 	memberServiceDowntime := make(map[string]map[string]float64)
+	// Track site-level downtime separately
+	memberSiteDowntime := make(map[string]float64)
 
 	for rows.Next() {
 		var memberName, checkType string
@@ -82,12 +91,24 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 			continue
 		}
 
+		// Map database member name to config member ID
+		memberID := ""
+		for id, member := range c.Members {
+			if member.Details.Name == memberName {
+				memberID = id
+				break
+			}
+		}
+		if memberID == "" {
+			// Fallback to using the name as-is
+			memberID = memberName
+		}
+
 		// Adjust times to be within the month
 		eventStart := startTimeRaw
 		if eventStart.Before(startTime) {
 			eventStart = startTime
 		}
-
 		eventEnd := endTimeRaw
 		if eventEnd.After(endTime) {
 			eventEnd = endTime
@@ -96,19 +117,28 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 		// Calculate downtime hours for this event
 		downtimeHours := eventEnd.Sub(eventStart).Hours()
 
-		// Map domain to service
-		serviceName := mapDomainToService(domainName.String, checkType)
-		if serviceName == "" {
-			continue
-		}
+		// Handle site-level checks (affects ALL services)
+		if checkType == "site" {
+			memberSiteDowntime[memberID] += downtimeHours
+			log.Log(log.Debug, "[SLA] Site downtime for %s: +%.2f hours (total: %.2f)",
+				memberID, downtimeHours, memberSiteDowntime[memberID])
+		} else {
+			// Map domain to service for domain/endpoint checks
+			serviceName := mapDomainToService(domainName.String, checkType)
+			if serviceName == "" {
+				continue
+			}
 
-		// Initialize maps if needed
-		if _, exists := memberServiceDowntime[memberName]; !exists {
-			memberServiceDowntime[memberName] = make(map[string]float64)
-		}
+			// Initialize maps if needed
+			if _, exists := memberServiceDowntime[memberID]; !exists {
+				memberServiceDowntime[memberID] = make(map[string]float64)
+			}
 
-		// Add to downtime
-		memberServiceDowntime[memberName][serviceName] += downtimeHours
+			// Add to service-specific downtime
+			memberServiceDowntime[memberID][serviceName] += downtimeHours
+			log.Log(log.Debug, "[SLA] Service downtime for %s/%s: +%.2f hours (total: %.2f)",
+				memberID, serviceName, downtimeHours, memberServiceDowntime[memberID][serviceName])
+		}
 	}
 
 	// Build the SLA summary
@@ -117,16 +147,12 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 			out[memberID] = make(map[string]SLABreakdown)
 		}
 
-		// Check if there's a site-level downtime
-		siteDowntime := 0.0
-		if allServicesDowntime, exists := memberServiceDowntime[memberID]; exists {
-			if siteDown, exists2 := allServicesDowntime["ALL_SERVICES"]; exists2 {
-				siteDowntime = siteDown
-			}
-		}
+		// Get site-level downtime for this member
+		siteDowntime := memberSiteDowntime[memberID]
 
 		for svcKey := range m.ServiceCosts {
-			downtime := siteDowntime // Start with site-level downtime
+			// Start with site-level downtime (affects all services)
+			downtime := siteDowntime
 
 			// Add service-specific downtime
 			if memberDowntime, exists := memberServiceDowntime[memberID]; exists {
@@ -153,6 +179,11 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 				SLAHours:     slaHours,
 				MeetsSLA:     meetsSLA,
 			}
+
+			if downtime > 0 {
+				log.Log(log.Debug, "[SLA] %s/%s - Total downtime: %.2f hours (%.2f%% uptime)",
+					memberID, svcKey, downtime, uptimePercent)
+			}
 		}
 	}
 
@@ -162,8 +193,8 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 // mapDomainToService maps a domain name to a service name
 func mapDomainToService(domain, checkType string) string {
 	if checkType == "site" {
-		// Site-level checks affect all services
-		return "ALL_SERVICES"
+		// Site-level checks don't map to a specific service
+		return ""
 	}
 
 	if domain == "" {

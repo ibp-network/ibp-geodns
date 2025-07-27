@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 
@@ -21,6 +22,31 @@ var (
 	keyPath     string
 	lastCertMod time.Time
 	lastKeyMod  time.Time
+)
+
+// PDF Management
+type PDFInfo struct {
+	Year       string `json:"year"`
+	Month      string `json:"month"`
+	MemberName string `json:"member_name,omitempty"`
+	IsOverview bool   `json:"is_overview"`
+	FileName   string `json:"file_name"`
+	FilePath   string `json:"-"` // Don't expose full path in API
+	FileSize   int64  `json:"file_size"`
+	ModTime    string `json:"modified_time"`
+}
+
+type PDFManager struct {
+	mu       sync.RWMutex
+	pdfFiles map[string][]PDFInfo // key: "YYYY-MM"
+	baseDir  string
+}
+
+var (
+	pdfManager      *PDFManager
+	pdfFilePattern  = regexp.MustCompile(`^(\d{4})_(\d{2})-IBP-Service_(.+)\.pdf$`)
+	overviewPattern = regexp.MustCompile(`^(\d{4})_(\d{2})-Monthly_Overview\.pdf$`)
+	monthDirPattern = regexp.MustCompile(`^\d{4}-\d{2}$`)
 )
 
 // CORS middleware
@@ -44,9 +70,11 @@ func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 func Init() {
 	log.Log(log.Info, "[CollatorAPI] Initializing API...")
-
 	c := cfg.GetConfig()
 	mux = http.NewServeMux()
+
+	// Initialize PDF manager
+	initPDFManager()
 
 	// Request statistics endpoints
 	mux.HandleFunc("/api/requests/country", corsMiddleware(handleRequestsByCountry))
@@ -67,6 +95,10 @@ func Init() {
 	// Billing endpoints
 	mux.HandleFunc("/api/billing/breakdown", corsMiddleware(handleBillingBreakdown))
 	mux.HandleFunc("/api/billing/summary", corsMiddleware(handleBillingSummary))
+
+	// PDF endpoints
+	mux.HandleFunc("/api/billing/pdfs", corsMiddleware(handleListPDFs))
+	mux.HandleFunc("/api/billing/pdfs/download", corsMiddleware(handleDownloadPDF))
 
 	// Health check
 	mux.HandleFunc("/api/health", corsMiddleware(handleHealth))
@@ -147,7 +179,6 @@ func getCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	if tlsConfig != nil && len(tlsConfig.Certificates) > 0 {
 		return &tlsConfig.Certificates[0], nil
 	}
-
 	return nil, fmt.Errorf("no certificate available")
 }
 

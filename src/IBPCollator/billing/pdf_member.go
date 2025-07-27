@@ -1,7 +1,6 @@
 package billing
 
 import (
-	"archive/zip"
 	"fmt"
 	"io"
 	"net/http"
@@ -157,7 +156,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	}
 
 	// Single large member information card
-	drawMemberCard(pdf, 10, 35, 190, 65)
+	drawMemberCard(pdf, 10, 35, 190, 95) // Increased height to accommodate overview
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(15, 40)
 	pdf.CellFormat(120, 8, "Member Information", "", 1, "L", false, 0, "")
@@ -260,6 +259,143 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetDrawColor(0, 0, 0)
 	y += 4
 
+	// Add Overview section
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.SetXY(15, y)
+	pdf.CellFormat(100, 5, "Overview", "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	y += 6
+
+	// Calculate totals for overview
+	totalBilled := 0.0
+	totalServices := 0
+	totalDowntimeHours := 0.0
+	totalServiceHours := 0.0
+	totalCores := 0.0
+	totalMemory := 0.0
+	totalDisk := 0.0
+	totalBandwidth := 0.0
+
+	for svcName, baseCost := range memberCost.ServiceCosts {
+		totalServices++
+		breakdown := getSLABreakdown(sla, memberName, svcName)
+		billed := baseCost * (breakdown.Uptime / 100.0)
+		totalBilled += billed
+		totalDowntimeHours += breakdown.HoursDown
+		totalServiceHours += breakdown.HoursTotal
+
+		// Get resource totals
+		if svcConfig, exists := c.Services[svcName]; exists {
+			totalCores += svcConfig.Resources.Cores * float64(svcConfig.Resources.Nodes)
+			totalMemory += svcConfig.Resources.Memory * float64(svcConfig.Resources.Nodes)
+			totalDisk += svcConfig.Resources.Disk * float64(svcConfig.Resources.Nodes)
+			totalBandwidth += svcConfig.Resources.Bandwidth * float64(svcConfig.Resources.Nodes) * 1024 // Convert TB to GB
+		}
+	}
+
+	totalUptime := 100.0
+	if totalServiceHours > 0 {
+		totalUptime = ((totalServiceHours - totalDowntimeHours) / totalServiceHours) * 100.0
+	}
+
+	// Calculate base total for the member
+	memberBaseTotal := 0.0
+	for _, baseCost := range memberCost.ServiceCosts {
+		memberBaseTotal += baseCost
+	}
+
+	slaPenalty := memberBaseTotal - totalBilled
+
+	// First row - financial
+	pdf.SetXY(15, y)
+	pdf.CellFormat(35, 5, "Total Payment:", "", 0, "L", false, 0, "")
+	pdf.SetX(50)
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(30, 5, fmt.Sprintf("$%.2f", totalBilled), "", 0, "L", false, 0, "")
+
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetXY(80, y)
+	pdf.CellFormat(35, 5, "SLA Credits:", "", 0, "L", false, 0, "")
+	pdf.SetX(115)
+	if slaPenalty > 0 {
+		pdf.SetTextColor(0, 150, 0)
+		pdf.SetFont("Helvetica", "B", 10)
+		pdf.CellFormat(30, 5, fmt.Sprintf("-$%.2f", slaPenalty), "", 1, "L", false, 0, "")
+	} else {
+		pdf.SetFont("Helvetica", "B", 10)
+		pdf.CellFormat(30, 5, "$0.00", "", 1, "L", false, 0, "")
+	}
+	pdf.SetTextColor(0, 0, 0)
+	pdf.SetFont("Helvetica", "", 10)
+	y += 6
+
+	// Second row - services and uptime
+	pdf.SetXY(15, y)
+	pdf.CellFormat(35, 5, "Total Services:", "", 0, "L", false, 0, "")
+	pdf.SetX(50)
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(30, 5, fmt.Sprintf("%d", totalServices), "", 0, "L", false, 0, "")
+
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetXY(80, y)
+	pdf.CellFormat(35, 5, "Avg Uptime:", "", 0, "L", false, 0, "")
+	pdf.SetX(115)
+	if totalUptime < DefaultSLAPercentage {
+		pdf.SetTextColor(255, 0, 0)
+	} else {
+		pdf.SetTextColor(0, 150, 0)
+	}
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(30, 5, fmt.Sprintf("%.2f%%", totalUptime), "", 1, "L", false, 0, "")
+	pdf.SetTextColor(0, 0, 0)
+	pdf.SetFont("Helvetica", "", 10)
+	y += 6
+
+	// Resources header
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.SetXY(15, y)
+	pdf.CellFormat(100, 5, "Total Resources:", "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	y += 5
+
+	// Resources row 1
+	pdf.SetXY(15, y)
+	pdf.CellFormat(25, 5, "Cores:", "", 0, "L", false, 0, "")
+	pdf.SetX(40)
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(30, 5, fmt.Sprintf("%.1f", totalCores), "", 0, "L", false, 0, "")
+
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetXY(80, y)
+	pdf.CellFormat(25, 5, "Memory:", "", 0, "L", false, 0, "")
+	pdf.SetX(105)
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(30, 5, fmt.Sprintf("%.1f GB", totalMemory), "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	y += 5
+
+	// Resources row 2
+	pdf.SetXY(15, y)
+	pdf.CellFormat(25, 5, "Disk:", "", 0, "L", false, 0, "")
+	pdf.SetX(40)
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(30, 5, fmt.Sprintf("%.1f GB", totalDisk), "", 0, "L", false, 0, "")
+
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetXY(80, y)
+	pdf.CellFormat(25, 5, "Bandwidth:", "", 0, "L", false, 0, "")
+	pdf.SetX(105)
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(40, 5, fmt.Sprintf("%.1f GB", totalBandwidth), "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	y += 4
+
+	// Another separator
+	pdf.SetDrawColor(200, 200, 200)
+	pdf.Line(15, y, 145, y)
+	pdf.SetDrawColor(0, 0, 0)
+	y += 4
+
 	pdf.SetXY(15, y)
 	pdf.CellFormat(30, 5, "DNS Requests:", "", 0, "L", false, 0, "")
 	pdf.SetX(45)
@@ -279,7 +415,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetFont("Helvetica", "", 10)
 
 	// Service details grouped by level
-	y = 110
+	y = 145 // Increased from 110 to account for overview section
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(10, y)
 	pdf.CellFormat(190, 8, "Service Details", "", 1, "L", false, 0, "")
@@ -323,7 +459,6 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 			baseHeight := 45.0
 			events := getServiceDowntimeEvents(dbMemberName, svcName, month)
 			filteredEvents := filterEvents(events, 5) // 5+ minute events
-
 			if len(filteredEvents) > 0 {
 				baseHeight += 25 + float64(len(filteredEvents))*6 // Header + rows
 			}
@@ -440,7 +575,6 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 					pdf.CellFormat(25, 4, formatDuration(duration), "1", 0, "L", false, 0, "")
 					pdf.CellFormat(50, 4, event.StartTime.Format("Jan 2 15:04 UTC"), "1", 0, "L", false, 0, "")
 					pdf.CellFormat(50, 4, event.EndTime.Format("Jan 2 15:04 UTC"), "1", 0, "L", false, 0, "")
-
 					errorText := event.ErrorText
 					if len(errorText) > 40 {
 						errorText = errorText[:37] + "..."
@@ -476,6 +610,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	drawMemberCard(pdf, 10, y, 190, 20)
 	pdf.SetFillColor(30, 30, 30)
 	pdf.Rect(10, y, 190, 20, "F")
+
 	pdf.SetTextColor(255, 255, 255)
 	pdf.SetFont("Helvetica", "B", 12)
 	pdf.SetXY(15, y+7)
@@ -494,6 +629,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 // getServiceDowntimeEvents retrieves downtime events for a specific service
 func getServiceDowntimeEvents(memberName, serviceName string, month time.Time) []DowntimeEvent {
 	events := []DowntimeEvent{}
+
 	if data2.DB == nil {
 		return events
 	}
@@ -652,6 +788,7 @@ func formatDuration(d time.Duration) string {
 // getMemberDowntimeEvents retrieves downtime events for a member in the given month
 func getMemberDowntimeEvents(memberName string, month time.Time) []DowntimeEvent {
 	events := []DowntimeEvent{}
+
 	if data2.DB == nil {
 		return events
 	}
@@ -748,58 +885,4 @@ type DowntimeEvent struct {
 	ErrorText  string
 	VoteData   string
 	IsIPv6     bool
-}
-
-// createMonthlyZip creates a zip file of all PDFs for the month
-func createMonthlyZip(monthDir, zipPath string) error {
-	zipFile, err := os.Create(zipPath)
-	if err != nil {
-		return err
-	}
-	defer zipFile.Close()
-
-	zipWriter := zip.NewWriter(zipFile)
-	defer zipWriter.Close()
-
-	// Walk through the directory and add files to zip
-	err = filepath.Walk(monthDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Skip directories
-		if info.IsDir() {
-			return nil
-		}
-
-		// Only include PDF files
-		if !strings.HasSuffix(strings.ToLower(path), ".pdf") {
-			return nil
-		}
-
-		// Create relative path for the zip
-		relPath, err := filepath.Rel(monthDir, path)
-		if err != nil {
-			return err
-		}
-
-		// Create file in zip
-		zipFile, err := zipWriter.Create(relPath)
-		if err != nil {
-			return err
-		}
-
-		// Open source file
-		file, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-
-		// Copy file to zip
-		_, err = io.Copy(zipFile, file)
-		return err
-	})
-
-	return err
 }
