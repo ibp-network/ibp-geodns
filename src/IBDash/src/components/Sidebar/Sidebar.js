@@ -63,7 +63,7 @@ const Sidebar = () => {
 
   return (
     <>
-      <button className="mobile-menu-toggle" onClick={toggleSidebar}>
+      <button className={`mobile-menu-toggle ${isOpen ? 'hidden' : ''}`} onClick={toggleSidebar}>
         <span className="menu-icon">☰</span>
       </button>
       
@@ -75,9 +75,11 @@ const Sidebar = () => {
             <img src="/static/imgs/ibp.png" alt="IBP" className="logo" />
             <h1 className="logo-text">Dashboard</h1>
           </div>
-          <button className="mobile-close-btn" onClick={closeSidebar}>
-            ×
-          </button>
+          {window.innerWidth <= 768 && (
+            <button className="mobile-close-btn" onClick={closeSidebar}>
+              ×
+            </button>
+          )}
         </div>
         
         <nav className="sidebar-nav">

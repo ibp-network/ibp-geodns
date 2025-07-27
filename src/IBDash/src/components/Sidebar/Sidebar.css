@@ -46,6 +46,12 @@
   transform: scale(1.05);
 }
 
+.mobile-menu-toggle.hidden {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-60px);
+}
+
 .menu-icon {
   display: block;
 }
@@ -60,7 +66,6 @@
   padding: 0;
   width: 40px;
   height: 40px;
-  display: flex;
   align-items: center;
   justify-content: center;
 }
