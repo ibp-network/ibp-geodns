@@ -39,8 +39,8 @@ func handleDowntimeEvents(w http.ResponseWriter, r *http.Request) {
 	checkType := sanitizeString(r.URL.Query().Get("check_type"))
 	status := sanitizeString(r.URL.Query().Get("status"))
 
-	// Validate member name
-	if member != "" && !validateIdentifier(member) {
+	// Validate member name (use new function that allows spaces)
+	if member != "" && !validateMemberName(member) {
 		writeError(w, http.StatusBadRequest, "Invalid member name")
 		return
 	}
@@ -94,14 +94,17 @@ func handleDowntimeEvents(w http.ResponseWriter, r *http.Request) {
 		query += " AND member_name = ?"
 		args = append(args, member)
 	}
+
 	if domain != "" {
 		query += " AND domain_name = ?"
 		args = append(args, domain)
 	}
+
 	if checkType != "" {
 		query += " AND check_type = ?"
 		args = append(args, checkType)
 	}
+
 	if status == "ongoing" {
 		query += " AND end_time IS NULL"
 	} else if status == "resolved" {
@@ -143,6 +146,7 @@ func handleDowntimeEvents(w http.ResponseWriter, r *http.Request) {
 		}
 
 		event.IsIPv6 = isIPv6 == 1
+
 		if domainName.Valid {
 			event.DomainName = domainName.String
 		}
@@ -228,6 +232,7 @@ func handleCurrentDowntime(w http.ResponseWriter, r *http.Request) {
 
 		event.IsIPv6 = isIPv6 == 1
 		event.Status = "ongoing"
+
 		if domainName.Valid {
 			event.DomainName = domainName.String
 		}
@@ -266,7 +271,6 @@ func handleDowntimeSummary(w http.ResponseWriter, r *http.Request) {
 		AND start_time <= ?
 		AND (end_time IS NULL OR end_time >= ?)
 	`, end, start).Scan(&totalEvents)
-
 	if err != nil {
 		log.Log(log.Error, "[CollatorAPI] Failed to get total events: %v", err)
 	}
@@ -279,7 +283,6 @@ func handleDowntimeSummary(w http.ResponseWriter, r *http.Request) {
 		AND start_time <= ?
 		AND end_time IS NULL
 	`, end).Scan(&ongoingEvents)
-
 	if err != nil {
 		log.Log(log.Error, "[CollatorAPI] Failed to get ongoing events: %v", err)
 	}

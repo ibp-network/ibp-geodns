@@ -10,13 +10,12 @@ import (
 var (
 	// Only allow alphanumeric, dash, underscore, and dot for most identifiers
 	safeIdentifierRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-\.]+$`)
-
+	// Member names can have spaces
+	safeMemberNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-\.\s]+$`)
 	// Date format validation
 	dateRegex = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
-
 	// Country code validation (2 letter codes)
 	countryCodeRegex = regexp.MustCompile(`^[A-Z]{2}$`)
-
 	// ASN validation
 	asnRegex = regexp.MustCompile(`^AS\d+$`)
 )
@@ -25,10 +24,8 @@ var (
 func sanitizeString(input string) string {
 	// Remove any null bytes
 	input = strings.ReplaceAll(input, "\x00", "")
-
 	// Trim whitespace
 	input = strings.TrimSpace(input)
-
 	return input
 }
 
@@ -38,6 +35,14 @@ func validateIdentifier(input string) bool {
 		return true // Empty is valid (for optional parameters)
 	}
 	return safeIdentifierRegex.MatchString(input)
+}
+
+// validateMemberName checks if a member name is safe to use (allows spaces)
+func validateMemberName(input string) bool {
+	if input == "" {
+		return true // Empty is valid (for optional parameters)
+	}
+	return safeMemberNameRegex.MatchString(input)
 }
 
 // validateDate checks if a date string is in the correct format
@@ -81,7 +86,7 @@ func sanitizeRequestFilter(filter *RequestFilter) error {
 		return fmt.Errorf("invalid ASN")
 	}
 
-	if !validateIdentifier(filter.Member) {
+	if !validateMemberName(filter.Member) {
 		return fmt.Errorf("invalid member name")
 	}
 
