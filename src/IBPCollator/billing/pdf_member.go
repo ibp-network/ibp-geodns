@@ -464,7 +464,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 			}
 
 			// Service card
-			drawMemberCard(pdf, 10, y, 190, baseHeight)
+			drawMemberCard(pdf, 10, y, 184, baseHeight)
 
 			// Service header
 			pdf.SetFillColor(240, 240, 240)
@@ -580,7 +580,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 				}
 			}
 
-			y = serviceY + 6
+			y = serviceY + 12
 		}
 
 		// Level total
