@@ -157,7 +157,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 
 	// Member information card - reduced height
 	drawMemberCard(pdf, 10, 35, 190, 60)
-	pdf.SetFont("Helvetica", "B", 14)
+	pdf.SetFont("Helvetica", "B", 16)
 	pdf.SetXY(15, 40)
 	pdf.CellFormat(120, 8, "Member Information", "", 1, "L", false, 0, "")
 
@@ -278,7 +278,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	// Create separate Overview box below member information - reduced height
 	y = 100
 	drawMemberCard(pdf, 10, y, 190, 46)
-	pdf.SetFont("Helvetica", "B", 14)
+	pdf.SetFont("Helvetica", "B", 16)
 	pdf.SetXY(15, y+5)
 	pdf.CellFormat(100, 8, "Overview", "", 1, "L", false, 0, "")
 
@@ -411,7 +411,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 
 	// Service details grouped by level
 	y = 155
-	pdf.SetFont("Helvetica", "B", 14)
+	pdf.SetFont("Helvetica", "B", 16)
 	pdf.SetXY(10, y)
 	pdf.CellFormat(190, 8, "Service Details", "", 1, "L", false, 0, "")
 	y += 10
@@ -441,7 +441,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		}
 
 		// Level header
-		pdf.SetFont("Helvetica", "B", 12)
+		pdf.SetFont("Helvetica", "B", 14)
 		pdf.SetXY(10, y-2)
 		pdf.CellFormat(190, 7, fmt.Sprintf("Level %d Services", level), "", 1, "L", false, 0, "")
 		y += 8
@@ -589,7 +589,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 				pdf.AddPage()
 				y = 35
 			}
-			pdf.SetFont("Helvetica", "B", 10)
+			pdf.SetFont("Helvetica", "B", 14)
 			pdf.SetXY(110, y-2)
 			pdf.CellFormat(60, 6, fmt.Sprintf("Level %d Total:", level), "", 0, "R", false, 0, "")
 			pdf.CellFormat(30, 6, fmt.Sprintf("$%.2f", levelTotal), "", 1, "R", false, 0, "")
@@ -607,7 +607,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetFillColor(30, 30, 30)
 	pdf.Rect(10, y, 190, 20, "F")
 	pdf.SetTextColor(255, 255, 255)
-	pdf.SetFont("Helvetica", "B", 12)
+	pdf.SetFont("Helvetica", "B", 16)
 	pdf.SetXY(15, y+7)
 	pdf.CellFormat(140, 6, "Total Amount Due (All Services)", "", 0, "L", false, 0, "")
 	pdf.CellFormat(35, 6, fmt.Sprintf("$%.2f", memberTotal), "", 0, "R", false, 0, "")
