@@ -451,7 +451,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		// Process services in this level
 		for _, svcName := range services {
 			// Calculate service card height based on downtime events
-			baseHeight := 39.0
+			baseHeight := 33.0
 			events := getServiceDowntimeEvents(dbMemberName, svcName, month)
 			filteredEvents := filterEvents(events, 5) // 5+ minute events
 			if len(filteredEvents) > 0 {
