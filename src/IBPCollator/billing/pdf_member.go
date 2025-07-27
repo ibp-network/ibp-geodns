@@ -429,7 +429,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetFont("Helvetica", "", 10)
 
 	// Service details grouped by level
-	y = 145 // Increased from 110 to account for overview section
+	y = 180 // Start after overview box which ends around 175
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(10, y)
 	pdf.CellFormat(190, 8, "Service Details", "", 1, "L", false, 0, "")
@@ -740,25 +740,6 @@ func filterEvents(events []DowntimeEvent, minMinutes float64) []DowntimeEvent {
 		}
 	}
 	return filtered
-}
-
-// extractDomainFromURL extracts the domain from an RPC URL
-func extractDomainFromURL(rpcUrl string) string {
-	// Remove protocol
-	url := strings.TrimPrefix(rpcUrl, "wss://")
-	url = strings.TrimPrefix(url, "ws://")
-	url = strings.TrimPrefix(url, "https://")
-	url = strings.TrimPrefix(url, "http://")
-
-	// Remove path and port
-	if idx := strings.Index(url, "/"); idx != -1 {
-		url = url[:idx]
-	}
-	if idx := strings.Index(url, ":"); idx != -1 {
-		url = url[:idx]
-	}
-
-	return strings.ToLower(url)
 }
 
 // Helper functions remain the same...
