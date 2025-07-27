@@ -253,10 +253,10 @@ const BillingView = () => {
                   <div className="current-month-section">
                     <h3 className="section-title">
                       <span>💵</span>
-                      Current Month Billing
+                      Current Month Billing (Month-to-Date)
                     </h3>
                     
-                    {memberBilling.members?.map(member => (
+                    {memberBilling.members?.filter(m => m.name === selectedMember.name).map(member => (
                       <div key={member.name}>
                         <div className="current-month-stats">
                           <div className="stat-card">
@@ -280,6 +280,22 @@ const BillingView = () => {
                             </div>
                           </div>
                         </div>
+                        
+                        {/* Calculate and display site uptime */}
+                        {member.services && member.services.length > 0 && (() => {
+                          const totalUptime = member.services.reduce((sum, svc) => sum + (svc.uptime_percentage || 0), 0);
+                          const avgUptime = totalUptime / member.services.length;
+                          return (
+                            <div style={{ marginBottom: '20px' }}>
+                              <div className="stat-card">
+                                <div className="stat-label">Site Uptime (Average)</div>
+                                <div className={`stat-value ${avgUptime >= 99.9 ? 'success' : avgUptime >= 99 ? 'warning' : 'error'}`}>
+                                  {avgUptime.toFixed(2)}%
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* Service Breakdown */}
                         {member.services && member.services.length > 0 && (
