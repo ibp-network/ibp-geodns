@@ -163,36 +163,44 @@ const Charts = ({ data, type }) => {
         );
 
       case 'member':
-        // Member requests over time
-        const memberTimeline = data
-          .sort((a, b) => new Date(a.date) - new Date(b.date));
+        // Member distribution pie chart
+        const memberData = data
+          .reduce((acc, item) => {
+            const existing = acc.find(m => m.member === item.member);
+            if (existing) {
+              existing.requests += item.requests;
+            } else {
+              acc.push({
+                member: item.member,
+                requests: item.requests
+              });
+            }
+            return acc;
+          }, [])
+          .sort((a, b) => b.requests - a.requests)
+          .slice(0, 12); // Show top 12 members
 
         return (
           <div className="chart-container">
-            <h4 className="chart-title">Member Requests Over Time</h4>
+            <h4 className="chart-title">Member Distribution</h4>
             <ResponsiveContainer width="100%" height={400}>
-              <LineChart data={memberTimeline}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis
-                  dataKey="date"
-                  stroke="#666"
-                  tick={{ fill: '#999' }}
-                />
-                <YAxis
-                  stroke="#666"
-                  tick={{ fill: '#999' }}
-                  tickFormatter={(value) => value.toLocaleString()}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Line
-                  type="monotone"
+              <PieChart>
+                <Pie
+                  data={memberData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ member, percent }) => `${member}: ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={120}
+                  fill="#8884d8"
                   dataKey="requests"
-                  stroke={COLORS[3]}
-                  strokeWidth={2}
-                  dot={{ fill: COLORS[3], r: 4 }}
-                  activeDot={{ r: 6 }}
-                />
-              </LineChart>
+                >
+                  {memberData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
             </ResponsiveContainer>
           </div>
         );
