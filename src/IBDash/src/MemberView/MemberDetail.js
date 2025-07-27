@@ -463,7 +463,7 @@ const MemberDetail = () => {
           <div className="stat-icon">📡</div>
           <div className="stat-content">
             <div className="stat-value">{stats?.total_requests?.toLocaleString() || '0'}</div>
-            <div className="stat-label">Total Requests</div>
+            <div className="stat-label">Total DNS Requests</div>
           </div>
         </div>
         <div className="stat-card glass">
