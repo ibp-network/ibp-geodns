@@ -71,32 +71,61 @@ func validateASN(input string) bool {
 
 // sanitizeRequestFilter validates and sanitizes request filters
 func sanitizeRequestFilter(filter *RequestFilter) error {
-	filter.Country = sanitizeString(filter.Country)
-	filter.ASN = sanitizeString(filter.ASN)
-	filter.Network = sanitizeString(filter.Network)
-	filter.Service = sanitizeString(filter.Service)
-	filter.Member = sanitizeString(filter.Member)
-	filter.Domain = sanitizeString(filter.Domain)
-
-	if !validateCountryCode(filter.Country) {
-		return fmt.Errorf("invalid country code")
+	// Sanitize and validate countries
+	for i, country := range filter.Countries {
+		filter.Countries[i] = sanitizeString(country)
+		if !validateCountryCode(filter.Countries[i]) {
+			return fmt.Errorf("invalid country code: %s", filter.Countries[i])
+		}
 	}
 
-	if !validateASN(filter.ASN) {
-		return fmt.Errorf("invalid ASN")
+	// Sanitize and validate ASNs
+	for i, asn := range filter.ASNs {
+		filter.ASNs[i] = sanitizeString(asn)
+		if !validateASN(filter.ASNs[i]) {
+			return fmt.Errorf("invalid ASN: %s", filter.ASNs[i])
+		}
 	}
 
-	if !validateMemberName(filter.Member) {
-		return fmt.Errorf("invalid member name")
+	// Sanitize and validate networks
+	for i, network := range filter.Networks {
+		filter.Networks[i] = sanitizeString(network)
+		// Networks can be partial matches, so more lenient validation
+		if len(filter.Networks[i]) > 100 {
+			return fmt.Errorf("network name too long")
+		}
 	}
 
-	if !validateIdentifier(filter.Service) {
-		return fmt.Errorf("invalid service name")
+	// Sanitize and validate services
+	for i, service := range filter.Services {
+		filter.Services[i] = sanitizeString(service)
+		if !validateIdentifier(filter.Services[i]) {
+			return fmt.Errorf("invalid service name: %s", filter.Services[i])
+		}
 	}
 
-	// Domain can contain dots, so we use a more permissive check
-	if filter.Domain != "" && !safeIdentifierRegex.MatchString(filter.Domain) {
-		return fmt.Errorf("invalid domain name")
+	// Sanitize and validate members
+	for i, member := range filter.Members {
+		filter.Members[i] = sanitizeString(member)
+		if !validateMemberName(filter.Members[i]) {
+			return fmt.Errorf("invalid member name: %s", filter.Members[i])
+		}
+	}
+
+	// Sanitize and validate domains
+	for i, domain := range filter.Domains {
+		filter.Domains[i] = sanitizeString(domain)
+		// Domain can contain dots, so we use a more permissive check
+		if !safeIdentifierRegex.MatchString(filter.Domains[i]) {
+			return fmt.Errorf("invalid domain name: %s", filter.Domains[i])
+		}
+	}
+
+	// Limit total number of filters to prevent abuse
+	totalFilters := len(filter.Countries) + len(filter.ASNs) + len(filter.Networks) +
+		len(filter.Services) + len(filter.Members) + len(filter.Domains)
+	if totalFilters > 50 {
+		return fmt.Errorf("too many filters specified (max 50 total)")
 	}
 
 	return nil

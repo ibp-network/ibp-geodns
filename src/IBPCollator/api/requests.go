@@ -12,12 +12,12 @@ import (
 )
 
 type RequestFilter struct {
-	Country string
-	ASN     string
-	Network string
-	Service string
-	Member  string
-	Domain  string
+	Countries []string
+	ASNs      []string
+	Networks  []string
+	Services  []string
+	Members   []string
+	Domains   []string
 }
 
 type RequestStats struct {
@@ -34,12 +34,12 @@ type RequestStats struct {
 
 func parseRequestFilters(r *http.Request) (RequestFilter, error) {
 	filter := RequestFilter{
-		Country: r.URL.Query().Get("country"),
-		ASN:     r.URL.Query().Get("asn"),
-		Network: r.URL.Query().Get("network"),
-		Service: r.URL.Query().Get("service"),
-		Member:  r.URL.Query().Get("member"),
-		Domain:  r.URL.Query().Get("domain"),
+		Countries: parseMultiValue(r.URL.Query().Get("country")),
+		ASNs:      parseMultiValue(r.URL.Query().Get("asn")),
+		Networks:  parseMultiValue(r.URL.Query().Get("network")),
+		Services:  parseMultiValue(r.URL.Query().Get("service")),
+		Members:   parseMultiValue(r.URL.Query().Get("member")),
+		Domains:   parseMultiValue(r.URL.Query().Get("domain")),
 	}
 
 	// Validate and sanitize the filter
@@ -48,6 +48,83 @@ func parseRequestFilters(r *http.Request) (RequestFilter, error) {
 	}
 
 	return filter, nil
+}
+
+// parseMultiValue splits comma-separated values and trims whitespace
+func parseMultiValue(value string) []string {
+	if value == "" {
+		return []string{}
+	}
+
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+
+	return result
+}
+
+// buildFilterConditions builds SQL WHERE conditions and args for filters
+func buildFilterConditions(filter RequestFilter, baseArgs []interface{}) (string, []interface{}) {
+	conditions := []string{}
+	args := append([]interface{}{}, baseArgs...)
+
+	if len(filter.Countries) > 0 {
+		placeholders := make([]string, len(filter.Countries))
+		for i, country := range filter.Countries {
+			placeholders[i] = "?"
+			args = append(args, country)
+		}
+		conditions = append(conditions, fmt.Sprintf("country_code IN (%s)", strings.Join(placeholders, ",")))
+	}
+
+	if len(filter.ASNs) > 0 {
+		placeholders := make([]string, len(filter.ASNs))
+		for i, asn := range filter.ASNs {
+			placeholders[i] = "?"
+			args = append(args, asn)
+		}
+		conditions = append(conditions, fmt.Sprintf("network_asn IN (%s)", strings.Join(placeholders, ",")))
+	}
+
+	if len(filter.Networks) > 0 {
+		networkConditions := make([]string, len(filter.Networks))
+		for i, network := range filter.Networks {
+			networkConditions[i] = "network_name LIKE ?"
+			args = append(args, "%"+network+"%")
+		}
+		conditions = append(conditions, fmt.Sprintf("(%s)", strings.Join(networkConditions, " OR ")))
+	}
+
+	if len(filter.Members) > 0 {
+		placeholders := make([]string, len(filter.Members))
+		for i, member := range filter.Members {
+			placeholders[i] = "?"
+			args = append(args, member)
+		}
+		conditions = append(conditions, fmt.Sprintf("member_name IN (%s)", strings.Join(placeholders, ",")))
+	}
+
+	if len(filter.Domains) > 0 {
+		placeholders := make([]string, len(filter.Domains))
+		for i, domain := range filter.Domains {
+			placeholders[i] = "?"
+			args = append(args, domain)
+		}
+		conditions = append(conditions, fmt.Sprintf("domain_name IN (%s)", strings.Join(placeholders, ",")))
+	}
+
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = " AND " + strings.Join(conditions, " AND ")
+	}
+
+	return whereClause, args
 }
 
 func handleRequestsByCountry(w http.ResponseWriter, r *http.Request) {
@@ -63,7 +140,7 @@ func handleRequestsByCountry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `
+	baseQuery := `
 		SELECT 
 			date,
 			country_code,
@@ -73,27 +150,11 @@ func handleRequestsByCountry(w http.ResponseWriter, r *http.Request) {
 		WHERE date >= ? AND date <= ?
 	`
 
-	args := []interface{}{start.Format("2006-01-02"), end.Format("2006-01-02")}
+	baseArgs := []interface{}{start.Format("2006-01-02"), end.Format("2006-01-02")}
 
-	// Apply filters with parameterized queries
-	if filters.Member != "" {
-		query += " AND member_name = ?"
-		args = append(args, filters.Member)
-	}
-	if filters.Domain != "" {
-		query += " AND domain_name = ?"
-		args = append(args, filters.Domain)
-	}
-	if filters.ASN != "" {
-		query += " AND network_asn = ?"
-		args = append(args, filters.ASN)
-	}
-	if filters.Network != "" {
-		query += " AND network_name LIKE ?"
-		args = append(args, "%"+filters.Network+"%")
-	}
-
-	query += " GROUP BY date, country_code ORDER BY date, total_hits DESC"
+	// Build filter conditions
+	whereClause, args := buildFilterConditions(filters, baseArgs)
+	query := baseQuery + whereClause + " GROUP BY date, country_code ORDER BY date, total_hits DESC"
 
 	rows, err := data2.DB.Query(query, args...)
 	if err != nil {
@@ -137,7 +198,7 @@ func handleRequestsByASN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `
+	baseQuery := `
 		SELECT 
 			date,
 			COALESCE(network_asn, 'Unknown') as asn,
@@ -147,23 +208,11 @@ func handleRequestsByASN(w http.ResponseWriter, r *http.Request) {
 		WHERE date >= ? AND date <= ?
 	`
 
-	args := []interface{}{start.Format("2006-01-02"), end.Format("2006-01-02")}
+	baseArgs := []interface{}{start.Format("2006-01-02"), end.Format("2006-01-02")}
 
-	// Apply filters
-	if filters.Country != "" {
-		query += " AND country_code = ?"
-		args = append(args, filters.Country)
-	}
-	if filters.Member != "" {
-		query += " AND member_name = ?"
-		args = append(args, filters.Member)
-	}
-	if filters.Domain != "" {
-		query += " AND domain_name = ?"
-		args = append(args, filters.Domain)
-	}
-
-	query += " GROUP BY date, network_asn, network_name ORDER BY date, total_hits DESC"
+	// Build filter conditions
+	whereClause, args := buildFilterConditions(filters, baseArgs)
+	query := baseQuery + whereClause + " GROUP BY date, network_asn, network_name ORDER BY date, total_hits DESC"
 
 	rows, err := data2.DB.Query(query, args...)
 	if err != nil {
@@ -200,7 +249,15 @@ func handleRequestsByService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `
+	// For service filtering, we need to handle both service names and domains
+	// since the API uses domains in the database
+	serviceFilter := filters
+	if len(filters.Services) > 0 {
+		// Convert service names to domains if needed
+		serviceFilter.Domains = append(serviceFilter.Domains, convertServicesToDomains(filters.Services)...)
+	}
+
+	baseQuery := `
 		SELECT 
 			date,
 			domain_name as domain,
@@ -210,23 +267,11 @@ func handleRequestsByService(w http.ResponseWriter, r *http.Request) {
 		AND domain_name != ''
 	`
 
-	args := []interface{}{start.Format("2006-01-02"), end.Format("2006-01-02")}
+	baseArgs := []interface{}{start.Format("2006-01-02"), end.Format("2006-01-02")}
 
-	// Apply filters
-	if filters.Country != "" {
-		query += " AND country_code = ?"
-		args = append(args, filters.Country)
-	}
-	if filters.Member != "" {
-		query += " AND member_name = ?"
-		args = append(args, filters.Member)
-	}
-	if filters.ASN != "" {
-		query += " AND network_asn = ?"
-		args = append(args, filters.ASN)
-	}
-
-	query += " GROUP BY date, domain_name ORDER BY date, total_hits DESC"
+	// Build filter conditions
+	whereClause, args := buildFilterConditions(serviceFilter, baseArgs)
+	query := baseQuery + whereClause + " GROUP BY date, domain_name ORDER BY date, total_hits DESC"
 
 	rows, err := data2.DB.Query(query, args...)
 	if err != nil {
@@ -265,7 +310,7 @@ func handleRequestsByMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `
+	baseQuery := `
 		SELECT 
 			date,
 			COALESCE(member_name, '(none)') as member,
@@ -274,23 +319,11 @@ func handleRequestsByMember(w http.ResponseWriter, r *http.Request) {
 		WHERE date >= ? AND date <= ?
 	`
 
-	args := []interface{}{start.Format("2006-01-02"), end.Format("2006-01-02")}
+	baseArgs := []interface{}{start.Format("2006-01-02"), end.Format("2006-01-02")}
 
-	// Apply filters
-	if filters.Country != "" {
-		query += " AND country_code = ?"
-		args = append(args, filters.Country)
-	}
-	if filters.Domain != "" {
-		query += " AND domain_name = ?"
-		args = append(args, filters.Domain)
-	}
-	if filters.ASN != "" {
-		query += " AND network_asn = ?"
-		args = append(args, filters.ASN)
-	}
-
-	query += " GROUP BY date, member_name ORDER BY date, total_hits DESC"
+	// Build filter conditions
+	whereClause, args := buildFilterConditions(filters, baseArgs)
+	query := baseQuery + whereClause + " GROUP BY date, member_name ORDER BY date, total_hits DESC"
 
 	rows, err := data2.DB.Query(query, args...)
 	if err != nil {
@@ -334,7 +367,6 @@ func handleRequestsSummary(w http.ResponseWriter, r *http.Request) {
 		FROM requests 
 		WHERE date >= ? AND date <= ?
 	`, start.Format("2006-01-02"), end.Format("2006-01-02")).Scan(&totalRequests)
-
 	if err != nil {
 		log.Log(log.Error, "[CollatorAPI] Failed to get total requests: %v", err)
 		totalRequests = 0
@@ -380,6 +412,29 @@ func handleRequestsSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, summary)
 }
 
+// Helper function to convert service names to domains
+func convertServicesToDomains(services []string) []string {
+	c := cfg.GetConfig()
+	domains := []string{}
+
+	for _, serviceName := range services {
+		// Try to find matching domains for this service
+		for svcName, svc := range c.Services {
+			if strings.EqualFold(svcName, serviceName) {
+				for _, provider := range svc.Providers {
+					for _, rpcUrl := range provider.RpcUrls {
+						if domain := extractDomainFromURL(rpcUrl); domain != "" {
+							domains = append(domains, domain)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return domains
+}
+
 // Helper function to convert domain to service name with improved matching
 func domainToServiceName(domain string) string {
 	// First try to find exact match in config
@@ -414,7 +469,7 @@ func domainToServiceName(domain string) string {
 	name = strings.TrimSuffix(name, ".ibp.network")
 
 	// Don't replace hyphens in the middle of service names
-	// This prevents "eth-passet-hub-paseo" from becoming "Eth Passet Hub Paseo"
+	// This prevents "eth-asset-hub-paseo" from becoming "Eth Asset Hub Paseo"
 	// Only capitalize first letter of each hyphenated part
 	parts := strings.Split(name, "-")
 	for i, part := range parts {

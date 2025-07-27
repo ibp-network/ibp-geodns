@@ -156,18 +156,18 @@ const DataView = () => {
         end: dateRange.end.toISOString().split('T')[0]
       };
 
-      // Only apply one filter at a time as the API doesn't support multiple values
+      // Add comma-separated filter values to params
       if (selectedCountries.length > 0) {
-        params.country = selectedCountries[0];
+        params.country = selectedCountries.join(',');
       }
       if (selectedServices.length > 0) {
-        params.service = selectedServices[0];
+        params.service = selectedServices.join(',');
       }
       if (selectedMembers.length > 0) {
-        params.member = selectedMembers[0];
+        params.member = selectedMembers.join(',');
       }
       if (selectedNetworks.length > 0) {
-        params.asn = selectedNetworks[0].asn;
+        params.asn = selectedNetworks.map(n => n.asn).join(',');
       }
 
       let response;
@@ -188,35 +188,7 @@ const DataView = () => {
           response = { data: [] };
       }
       
-      // Client-side filtering for multiple selections
-      let filteredData = response.data;
-      
-      if (selectedCountries.length > 1) {
-        filteredData = filteredData.filter(item => 
-          selectedCountries.includes(item.country)
-        );
-      }
-      
-      if (selectedServices.length > 0) {
-        filteredData = filteredData.filter(item => 
-          selectedServices.includes(item.service || item.domain)
-        );
-      }
-      
-      if (selectedMembers.length > 1) {
-        filteredData = filteredData.filter(item => 
-          selectedMembers.includes(item.member)
-        );
-      }
-      
-      if (selectedNetworks.length > 1) {
-        const selectedASNs = selectedNetworks.map(n => n.asn);
-        filteredData = filteredData.filter(item => 
-          selectedASNs.includes(item.asn)
-        );
-      }
-      
-      setData(filteredData);
+      setData(response.data);
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -431,8 +403,8 @@ const DataView = () => {
           <button
             className="clear-filters-btn"
             onClick={clearAllFilters}
-            disabled={selectedCountries.length === 0 && selectedServices.length === 0 && 
-                     selectedMembers.length === 0 && selectedNetworks.length === 0}
+            disabled={selectedCountries.length === 0 && selectedServices.length === 0 &&
+                      selectedMembers.length === 0 && selectedNetworks.length === 0}
           >
             Clear All Filters
           </button>
@@ -612,6 +584,7 @@ const DataView = () => {
             </button>
           ))}
         </div>
+
         <div className="tab-content">
           {loading ? (
             <div className="loading-container">
