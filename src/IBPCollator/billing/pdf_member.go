@@ -624,7 +624,6 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 // getServiceDowntimeEvents retrieves downtime events for a specific service
 func getServiceDowntimeEvents(memberName, serviceName string, month time.Time) []DowntimeEvent {
 	events := []DowntimeEvent{}
-
 	if data2.DB == nil {
 		return events
 	}
@@ -642,87 +641,154 @@ func getServiceDowntimeEvents(memberName, serviceName string, month time.Time) [
 		}
 	}
 
-	if len(domains) == 0 {
-		return events
-	}
-
 	startTime := month
-	endTime := month.AddDate(0, 1, 0).Add(-time.Second)
-	now := time.Now().UTC()
+	endTime := month.AddDate(0, 1, 0).Add(-time.Nanosecond)
 
-	// If calculating for current or future month, use current time as end
-	if endTime.After(now) {
-		endTime = now
-	}
-
-	// Build parameterized query with proper placeholders
-	placeholders := make([]string, len(domains))
-	args := make([]interface{}, 0, len(domains)+4)
-	args = append(args, endTime, memberName)
-	for i, domain := range domains {
-		placeholders[i] = "?"
-		args = append(args, domain)
-	}
-	args = append(args, endTime, startTime)
-
-	// Safe query construction with parameterized inputs
-	query := fmt.Sprintf(`
-		SELECT 
+	// First, get site-level events (affects all services)
+	siteQuery := `
+		SELECT  
 			check_type,
 			check_name,
 			COALESCE(domain_name, '') as domain_name,
 			COALESCE(endpoint, '') as endpoint,
 			start_time,
-			CASE 
-				WHEN end_time IS NULL THEN ?
-				ELSE end_time 
-			END as end_time,
+			end_time,
 			COALESCE(error, '') as error,
 			COALESCE(vote_data, '') as vote_data,
 			is_ipv6
 		FROM member_events
 		WHERE member_name = ?
+		AND check_type = 'site'
 		AND status = 0
-		AND domain_name IN (%s)
-		AND start_time < ?
-		AND (end_time IS NULL OR end_time > ?)
-		ORDER BY start_time DESC
-	`, strings.Join(placeholders, ","))
-
-	rows, err := data2.DB.Query(query, args...)
-	if err != nil {
-		log.Log(log.Error, "[billing] Failed to query service downtime events: %v", err)
-		return events
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var event DowntimeEvent
-		err := rows.Scan(
-			&event.CheckType,
-			&event.CheckName,
-			&event.DomainName,
-			&event.Endpoint,
-			&event.StartTime,
-			&event.EndTime,
-			&event.ErrorText,
-			&event.VoteData,
-			&event.IsIPv6,
+		AND (
+			(start_time < ? AND (end_time IS NULL OR end_time > ?))
+			OR
+			(start_time >= ? AND start_time < ?)
 		)
+		ORDER BY start_time DESC
+	`
+
+	rows, err := data2.DB.Query(siteQuery, memberName, endTime, startTime, startTime, endTime)
+	if err != nil {
+		log.Log(log.Error, "[billing] Failed to query site downtime events: %v", err)
+	} else {
+		defer rows.Close()
+		for rows.Next() {
+			var event DowntimeEvent
+			var endTimePtr *time.Time
+			err := rows.Scan(
+				&event.CheckType,
+				&event.CheckName,
+				&event.DomainName,
+				&event.Endpoint,
+				&event.StartTime,
+				&endTimePtr,
+				&event.ErrorText,
+				&event.VoteData,
+				&event.IsIPv6,
+			)
+			if err != nil {
+				log.Log(log.Error, "[billing] Failed to scan site downtime event: %v", err)
+				continue
+			}
+
+			// Adjust times to be within month
+			if event.StartTime.Before(startTime) {
+				event.StartTime = startTime
+			}
+
+			if endTimePtr != nil {
+				event.EndTime = *endTimePtr
+				if event.EndTime.After(endTime) {
+					event.EndTime = endTime
+				}
+			} else {
+				event.EndTime = endTime
+			}
+
+			events = append(events, event)
+		}
+	}
+
+	// Then get service-specific events
+	if len(domains) > 0 {
+		// Build parameterized query with proper placeholders
+		placeholders := make([]string, len(domains))
+		args := make([]interface{}, 0, len(domains)+5)
+		args = append(args, memberName)
+		for i, domain := range domains {
+			placeholders[i] = "?"
+			args = append(args, domain)
+		}
+		args = append(args, endTime, startTime, startTime, endTime)
+
+		// Safe query construction with parameterized inputs
+		query := fmt.Sprintf(`
+			SELECT  
+				check_type,
+				check_name,
+				COALESCE(domain_name, '') as domain_name,
+				COALESCE(endpoint, '') as endpoint,
+				start_time,
+				end_time,
+				COALESCE(error, '') as error,
+				COALESCE(vote_data, '') as vote_data,
+				is_ipv6
+			FROM member_events
+			WHERE member_name = ?
+			AND check_type IN ('domain', 'endpoint')
+			AND status = 0
+			AND domain_name IN (%s)
+			AND (
+				(start_time < ? AND (end_time IS NULL OR end_time > ?))
+				OR
+				(start_time >= ? AND start_time < ?)
+			)
+			ORDER BY start_time DESC
+		`, strings.Join(placeholders, ","))
+
+		rows, err := data2.DB.Query(query, args...)
 		if err != nil {
-			log.Log(log.Error, "[billing] Failed to scan downtime event: %v", err)
-			continue
+			log.Log(log.Error, "[billing] Failed to query service downtime events: %v", err)
+			return events
 		}
+		defer rows.Close()
 
-		// Adjust times to be within month
-		if event.StartTime.Before(startTime) {
-			event.StartTime = startTime
-		}
-		if event.EndTime.After(endTime) {
-			event.EndTime = endTime
-		}
+		for rows.Next() {
+			var event DowntimeEvent
+			var endTimePtr *time.Time
+			err := rows.Scan(
+				&event.CheckType,
+				&event.CheckName,
+				&event.DomainName,
+				&event.Endpoint,
+				&event.StartTime,
+				&endTimePtr,
+				&event.ErrorText,
+				&event.VoteData,
+				&event.IsIPv6,
+			)
+			if err != nil {
+				log.Log(log.Error, "[billing] Failed to scan downtime event: %v", err)
+				continue
+			}
 
-		events = append(events, event)
+			// Adjust times to be within month
+			if event.StartTime.Before(startTime) {
+				event.StartTime = startTime
+			}
+
+			if endTimePtr != nil {
+				event.EndTime = *endTimePtr
+				if event.EndTime.After(endTime) {
+					event.EndTime = endTime
+				}
+			} else {
+				event.EndTime = endTime
+			}
+
+			events = append(events, event)
+		}
 	}
 
 	return events

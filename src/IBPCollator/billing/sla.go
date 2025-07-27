@@ -44,17 +44,13 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 
 	// Calculate the time range for the month
 	startTime := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC)
-	endTime := startTime.AddDate(0, 1, 0).Add(-time.Second)
-	now := time.Now().UTC()
+	endTime := startTime.AddDate(0, 1, 0).Add(-time.Nanosecond) // Last nanosecond of the month
 
-	// If calculating for current or future month, use current time as end
-	if endTime.After(now) {
-		endTime = now
-	}
-
-	// Total hours in the month (up to current time if applicable)
+	// Total hours in the month
 	totalHours := endTime.Sub(startTime).Hours()
 	slaHours := totalHours * (DefaultSLAPercentage / 100.0)
+
+	log.Log(log.Debug, "[SLA] Calculating for month %s: %.2f total hours", month.Format("2006-01"), totalHours)
 
 	// Get configuration for member name mapping
 	c := cfg.GetConfig()
@@ -119,7 +115,7 @@ func CalculateSLAAdjustments(month time.Time, sum *Summary) (SLASummary, error) 
 			}
 
 			if downtime > 0 {
-				log.Log(log.Debug, "[SLA] %s/%s - Total downtime: %.2f hours (%.2f%% uptime)",
+				log.Log(log.Info, "[SLA] %s/%s - Total downtime: %.2f hours (%.2f%% uptime)",
 					memberID, svcKey, downtime, uptimePercent)
 			}
 		}
@@ -134,47 +130,57 @@ func calculateServiceDowntime(memberName, serviceName string, domains []string, 
 		return 0
 	}
 
-	totalDowntime := 0.0
+	// Collect all downtime periods
+	allPeriods := []downtimePeriod{}
 
 	// Query for site-level checks (affects all services)
+	// This handles scenarios A, B, C, D, and E for site-level events
 	siteQuery := `
-		SELECT 
+		SELECT  
 			start_time,
-			CASE 
-				WHEN end_time IS NULL THEN ?
-				ELSE end_time 
-			END as calc_end_time
+			end_time
 		FROM member_events
 		WHERE member_name = ?
 		AND check_type = 'site'
 		AND status = 0
-		AND start_time < ?
-		AND (end_time IS NULL OR end_time > ?)
+		AND (
+			-- Event starts before period and ends during or after period
+			(start_time < ? AND (end_time IS NULL OR end_time > ?))
+			OR
+			-- Event starts during period
+			(start_time >= ? AND start_time < ?)
+		)
 	`
 
-	rows, err := data2.DB.Query(siteQuery, endTime, memberName, endTime, startTime)
+	rows, err := data2.DB.Query(siteQuery, memberName, endTime, startTime, startTime, endTime)
 	if err != nil {
 		log.Log(log.Error, "[SLA] Failed to query site downtime: %v", err)
 	} else {
 		defer rows.Close()
 		for rows.Next() {
-			var eventStart, eventEnd time.Time
+			var eventStart time.Time
+			var eventEnd *time.Time
+
 			if err := rows.Scan(&eventStart, &eventEnd); err != nil {
 				log.Log(log.Error, "[SLA] Failed to scan site event: %v", err)
 				continue
 			}
 
-			// Adjust to month boundaries
+			// Adjust times to month boundaries
 			if eventStart.Before(startTime) {
 				eventStart = startTime
 			}
-			if eventEnd.After(endTime) {
-				eventEnd = endTime
+
+			actualEnd := endTime
+			if eventEnd != nil && eventEnd.Before(endTime) {
+				actualEnd = *eventEnd
 			}
 
-			downtime := eventEnd.Sub(eventStart).Hours()
-			totalDowntime += downtime
-			log.Log(log.Debug, "[SLA] Site downtime for %s: %.2f hours", memberName, downtime)
+			downtime := actualEnd.Sub(eventStart).Hours()
+			allPeriods = append(allPeriods, downtimePeriod{start: eventStart, end: actualEnd})
+
+			log.Log(log.Debug, "[SLA] Site downtime for %s: %.2f hours (start: %s, end: %s)",
+				memberName, downtime, eventStart.Format("2006-01-02 15:04:05"), actualEnd.Format("2006-01-02 15:04:05"))
 		}
 	}
 
@@ -182,33 +188,35 @@ func calculateServiceDowntime(memberName, serviceName string, domains []string, 
 	if len(domains) > 0 {
 		// Build parameterized query
 		placeholders := make([]string, len(domains))
-		args := make([]interface{}, 0, len(domains)+4)
-		args = append(args, endTime, memberName)
+		args := make([]interface{}, 0, len(domains)+5)
+		args = append(args, memberName)
 
 		for i, domain := range domains {
 			placeholders[i] = "?"
 			args = append(args, domain)
 		}
 
-		args = append(args, endTime, startTime)
+		args = append(args, endTime, startTime, startTime, endTime)
 
 		serviceQuery := fmt.Sprintf(`
-			SELECT 
+			SELECT  
 				check_type,
 				domain_name,
 				endpoint,
 				start_time,
-				CASE 
-					WHEN end_time IS NULL THEN ?
-					ELSE end_time 
-				END as calc_end_time
+				end_time
 			FROM member_events
 			WHERE member_name = ?
 			AND check_type IN ('domain', 'endpoint')
 			AND status = 0
 			AND domain_name IN (%s)
-			AND start_time < ?
-			AND (end_time IS NULL OR end_time > ?)
+			AND (
+				-- Event starts before period and ends during or after period
+				(start_time < ? AND (end_time IS NULL OR end_time > ?))
+				OR
+				-- Event starts during period
+				(start_time >= ? AND start_time < ?)
+			)
 		`, strings.Join(placeholders, ","))
 
 		rows, err := data2.DB.Query(serviceQuery, args...)
@@ -217,40 +225,50 @@ func calculateServiceDowntime(memberName, serviceName string, domains []string, 
 		} else {
 			defer rows.Close()
 
-			// Track unique downtime periods to avoid double-counting overlaps
-			periods := []downtimePeriod{}
-
 			for rows.Next() {
 				var checkType, domainName, endpoint string
-				var eventStart, eventEnd time.Time
+				var eventStart time.Time
+				var eventEnd *time.Time
 
 				if err := rows.Scan(&checkType, &domainName, &endpoint, &eventStart, &eventEnd); err != nil {
 					log.Log(log.Error, "[SLA] Failed to scan service event: %v", err)
 					continue
 				}
 
-				// Adjust to month boundaries
+				// Adjust times to month boundaries
 				if eventStart.Before(startTime) {
 					eventStart = startTime
 				}
-				if eventEnd.After(endTime) {
-					eventEnd = endTime
+
+				actualEnd := endTime
+				if eventEnd != nil && eventEnd.Before(endTime) {
+					actualEnd = *eventEnd
 				}
 
-				periods = append(periods, downtimePeriod{start: eventStart, end: eventEnd})
+				allPeriods = append(allPeriods, downtimePeriod{start: eventStart, end: actualEnd})
 
-				log.Log(log.Debug, "[SLA] %s downtime for %s/%s (domain: %s): %.2f hours",
-					checkType, memberName, serviceName, domainName, eventEnd.Sub(eventStart).Hours())
-			}
-
-			// Merge overlapping periods
-			if len(periods) > 0 {
-				merged := mergeOverlappingPeriods(periods)
-				for _, period := range merged {
-					totalDowntime += period.end.Sub(period.start).Hours()
-				}
+				downtime := actualEnd.Sub(eventStart).Hours()
+				log.Log(log.Debug, "[SLA] %s downtime for %s/%s (domain: %s): %.2f hours (start: %s, end: %s)",
+					checkType, memberName, serviceName, domainName, downtime,
+					eventStart.Format("2006-01-02 15:04:05"), actualEnd.Format("2006-01-02 15:04:05"))
 			}
 		}
+	}
+
+	// Merge overlapping periods to avoid double-counting
+	if len(allPeriods) == 0 {
+		return 0
+	}
+
+	merged := mergeOverlappingPeriods(allPeriods)
+	totalDowntime := 0.0
+
+	for _, period := range merged {
+		hours := period.end.Sub(period.start).Hours()
+		totalDowntime += hours
+		log.Log(log.Debug, "[SLA] Merged period for %s/%s: %.2f hours (start: %s, end: %s)",
+			memberName, serviceName, hours,
+			period.start.Format("2006-01-02 15:04:05"), period.end.Format("2006-01-02 15:04:05"))
 	}
 
 	return totalDowntime
@@ -272,6 +290,7 @@ func mergeOverlappingPeriods(periods []downtimePeriod) []downtimePeriod {
 	}
 
 	merged := []downtimePeriod{periods[0]}
+
 	for i := 1; i < len(periods); i++ {
 		last := &merged[len(merged)-1]
 		current := periods[i]

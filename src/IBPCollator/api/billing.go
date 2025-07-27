@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -235,7 +236,6 @@ func getSLABreakdown(sla billing.SLASummary, member, service string) billing.SLA
 
 func getServiceDowntimeForAPI(memberName, serviceName string, month time.Time) []DowntimeEvent {
 	events := []DowntimeEvent{}
-
 	if data2.DB == nil {
 		return events
 	}
@@ -253,46 +253,136 @@ func getServiceDowntimeForAPI(memberName, serviceName string, month time.Time) [
 		}
 	}
 
-	if len(domains) == 0 {
-		return events
-	}
-
 	startTime := month
-	endTime := month.AddDate(0, 1, 0).Add(-time.Second)
+	endTime := month.AddDate(0, 1, 0).Add(-time.Nanosecond)
 
-	// Build parameterized query with proper placeholders
-	placeholders := make([]string, len(domains))
-	args := make([]interface{}, 0, len(domains)+4)
-	args = append(args, endTime, memberName)
-
-	for i, domain := range domains {
-		placeholders[i] = "?"
-		args = append(args, domain)
-	}
-
-	args = append(args, endTime, startTime)
-
-	// Safe query construction with parameterized inputs
-	query := `
-		SELECT 
+	// First get site-level events that affect all services
+	siteQuery := `
+		SELECT  
 			id,
 			check_type,
 			check_name,
 			COALESCE(domain_name, '') as domain_name,
 			COALESCE(endpoint, '') as endpoint,
 			start_time,
-			COALESCE(end_time, ?) as end_time,
+			end_time,
+			COALESCE(error, '') as error,
+			is_ipv6
+		FROM member_events
+		WHERE member_name = ?
+		AND check_type = 'site'
+		AND status = 0
+		AND (
+			(start_time < ? AND (end_time IS NULL OR end_time > ?))
+			OR
+			(start_time >= ? AND start_time < ?)
+		)
+		ORDER BY start_time DESC
+	`
+
+	rows, err := data2.DB.Query(siteQuery, memberName, endTime, startTime, startTime, endTime)
+	if err != nil {
+		log.Log(log.Error, "[CollatorAPI] Failed to query site downtime events: %v", err)
+	} else {
+		defer rows.Close()
+		for rows.Next() {
+			var event DowntimeEvent
+			var domainName, endpoint, errorText sql.NullString
+			var isIPv6 int
+			var endTime sql.NullTime
+
+			err := rows.Scan(
+				&event.ID,
+				&event.CheckType,
+				&event.CheckName,
+				&domainName,
+				&endpoint,
+				&event.StartTime,
+				&endTime,
+				&errorText,
+				&isIPv6,
+			)
+			if err != nil {
+				log.Log(log.Error, "[CollatorAPI] Failed to scan site downtime event: %v", err)
+				continue
+			}
+
+			event.MemberName = memberName
+			event.IsIPv6 = isIPv6 == 1
+			if domainName.Valid {
+				event.DomainName = domainName.String
+			}
+			if endpoint.Valid {
+				event.Endpoint = endpoint.String
+			}
+			if errorText.Valid {
+				event.Error = errorText.String
+			}
+
+			// Adjust times to be within month
+			if event.StartTime.Before(startTime) {
+				event.StartTime = startTime
+			}
+			if endTime.Valid {
+				event.EndTime = &endTime.Time
+				if event.EndTime.After(month.AddDate(0, 1, 0).Add(-time.Nanosecond)) {
+					t := month.AddDate(0, 1, 0).Add(-time.Nanosecond)
+					event.EndTime = &t
+				}
+				event.Status = "resolved"
+			} else {
+				t := month.AddDate(0, 1, 0).Add(-time.Nanosecond)
+				event.EndTime = &t
+				event.Status = "ongoing"
+			}
+
+			// Calculate duration
+			duration := event.EndTime.Sub(event.StartTime)
+			event.Duration = formatDuration(duration)
+
+			events = append(events, event)
+		}
+	}
+
+	// Then get service-specific events
+	if len(domains) == 0 {
+		return events
+	}
+
+	// Build parameterized query with proper placeholders
+	placeholders := make([]string, len(domains))
+	args := make([]interface{}, 0, len(domains)+5)
+	args = append(args, memberName)
+	for i, domain := range domains {
+		placeholders[i] = "?"
+		args = append(args, domain)
+	}
+	args = append(args, endTime, startTime, startTime, endTime)
+
+	// Safe query construction with parameterized inputs
+	query := fmt.Sprintf(`
+		SELECT  
+			id,
+			check_type,
+			check_name,
+			COALESCE(domain_name, '') as domain_name,
+			COALESCE(endpoint, '') as endpoint,
+			start_time,
+			end_time,
 			COALESCE(error, '') as error,
 			is_ipv6
 		FROM member_events
 		WHERE member_name = ?
 		AND status = 0
-		AND domain_name IN (` + strings.Join(placeholders, ",") + `)
-		AND start_time < ?
-		AND (end_time IS NULL OR end_time > ?)
-		ORDER BY start_time DESC`
+		AND domain_name IN (%s)
+		AND (
+			(start_time < ? AND (end_time IS NULL OR end_time > ?))
+			OR
+			(start_time >= ? AND start_time < ?)
+		)
+		ORDER BY start_time DESC`, strings.Join(placeholders, ","))
 
-	rows, err := data2.DB.Query(query, args...)
+	rows, err = data2.DB.Query(query, args...)
 	if err != nil {
 		log.Log(log.Error, "[CollatorAPI] Failed to query service downtime events: %v", err)
 		return events
@@ -323,7 +413,6 @@ func getServiceDowntimeForAPI(memberName, serviceName string, month time.Time) [
 
 		event.MemberName = memberName
 		event.IsIPv6 = isIPv6 == 1
-
 		if domainName.Valid {
 			event.DomainName = domainName.String
 		}
@@ -338,20 +427,16 @@ func getServiceDowntimeForAPI(memberName, serviceName string, month time.Time) [
 		if event.StartTime.Before(startTime) {
 			event.StartTime = startTime
 		}
-
 		if endTime.Valid {
 			event.EndTime = &endTime.Time
-			if event.EndTime.After(endTime.Time) {
-				*event.EndTime = endTime.Time
+			if event.EndTime.After(month.AddDate(0, 1, 0).Add(-time.Nanosecond)) {
+				t := month.AddDate(0, 1, 0).Add(-time.Nanosecond)
+				event.EndTime = &t
 			}
 			event.Status = "resolved"
 		} else {
-			now := time.Now().UTC()
-			if now.After(endTime.Time) {
-				event.EndTime = &endTime.Time
-			} else {
-				event.EndTime = &now
-			}
+			t := month.AddDate(0, 1, 0).Add(-time.Nanosecond)
+			event.EndTime = &t
 			event.Status = "ongoing"
 		}
 
