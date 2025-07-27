@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ApiHelper from '../components/ApiHelper/ApiHelper';
 import DataTable from '../components/DataTable/DataTable';
 import StatsCard from '../components/Cards/StatsCard';
@@ -21,14 +21,29 @@ const DataView = () => {
     country: '',
     service: '',
     member: '',
-    asn: ''
+    network: ''
   });
   const [filterOptions, setFilterOptions] = useState({
     countries: [],
     services: [],
     members: [],
-    asns: []
+    networks: []
   });
+  const [showSuggestions, setShowSuggestions] = useState({
+    country: false,
+    service: false,
+    member: false,
+    network: false
+  });
+  const [selectedCountries, setSelectedCountries] = useState([]);
+  const [selectedServices, setSelectedServices] = useState([]);
+  const [selectedMembers, setSelectedMembers] = useState([]);
+  const [selectedNetworks, setSelectedNetworks] = useState([]);
+
+  const countryRef = useRef(null);
+  const serviceRef = useRef(null);
+  const memberRef = useRef(null);
+  const networkRef = useRef(null);
 
   useEffect(() => {
     loadInitialData();
@@ -39,14 +54,33 @@ const DataView = () => {
       loadData();
       loadSummary();
     }
-  }, [dateRange, activeTab, filters, initialLoading]);
+  }, [dateRange, activeTab, selectedCountries, selectedServices, selectedMembers, selectedNetworks, initialLoading]);
 
   useEffect(() => {
-    // Load filter options when date range changes
     if (!initialLoading) {
       loadFilterOptions();
     }
   }, [dateRange, initialLoading]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (countryRef.current && !countryRef.current.contains(event.target)) {
+        setShowSuggestions(prev => ({ ...prev, country: false }));
+      }
+      if (serviceRef.current && !serviceRef.current.contains(event.target)) {
+        setShowSuggestions(prev => ({ ...prev, service: false }));
+      }
+      if (memberRef.current && !memberRef.current.contains(event.target)) {
+        setShowSuggestions(prev => ({ ...prev, member: false }));
+      }
+      if (networkRef.current && !networkRef.current.contains(event.target)) {
+        setShowSuggestions(prev => ({ ...prev, network: false }));
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadInitialData = async () => {
     setInitialLoading(true);
@@ -57,7 +91,6 @@ const DataView = () => {
         loadFilterOptions()
       ]);
     } finally {
-      // Wait for animation to complete
       setTimeout(() => setInitialLoading(false), 1500);
     }
   };
@@ -69,7 +102,6 @@ const DataView = () => {
         end: dateRange.end.toISOString().split('T')[0]
       };
 
-      // Fetch all data types to extract unique options
       const [countryRes, serviceRes, memberRes, asnRes] = await Promise.all([
         ApiHelper.fetchRequestsByCountry(params),
         ApiHelper.fetchRequestsByService(params),
@@ -77,31 +109,39 @@ const DataView = () => {
         ApiHelper.fetchRequestsByASN(params)
       ]);
 
-      // Extract unique countries
-      const countries = [...new Set(countryRes.data.map(item => item.country))]
-        .filter(c => c)
-        .sort();
+      const countriesMap = new Map();
+      countryRes.data.forEach(item => {
+        if (item.country && item.country_name) {
+          countriesMap.set(item.country, {
+            code: item.country,
+            name: item.country_name
+          });
+        }
+      });
 
-      // Extract unique services/domains
       const services = [...new Set(serviceRes.data.map(item => item.service || item.domain))]
         .filter(s => s)
         .sort();
 
-      // Extract unique members
       const members = [...new Set(memberRes.data.map(item => item.member))]
         .filter(m => m && m !== '(none)')
         .sort();
 
-      // Extract unique ASNs
-      const asns = [...new Set(asnRes.data.map(item => item.asn))]
-        .filter(a => a && a !== 'Unknown')
-        .sort();
+      const networksMap = new Map();
+      asnRes.data.forEach(item => {
+        if (item.asn && item.network && item.asn !== 'Unknown') {
+          networksMap.set(item.asn, {
+            asn: item.asn,
+            name: item.network
+          });
+        }
+      });
 
       setFilterOptions({
-        countries,
+        countries: Array.from(countriesMap.values()),
         services,
         members,
-        asns
+        networks: Array.from(networksMap.values())
       });
     } catch (error) {
       console.error('Error loading filter options:', error);
@@ -113,9 +153,22 @@ const DataView = () => {
     try {
       const params = {
         start: dateRange.start.toISOString().split('T')[0],
-        end: dateRange.end.toISOString().split('T')[0],
-        ...filters // Include all filters
+        end: dateRange.end.toISOString().split('T')[0]
       };
+
+      if (selectedCountries.length > 0) {
+        params.country = selectedCountries.join(',');
+      }
+      if (selectedServices.length > 0) {
+        params.service = selectedServices.join(',');
+      }
+      if (selectedMembers.length > 0) {
+        params.member = selectedMembers.join(',');
+      }
+      if (selectedNetworks.length > 0) {
+        params.asn = selectedNetworks.map(n => n.asn).join(',');
+      }
+
       let response;
       switch (activeTab) {
         case 'country':
@@ -151,6 +204,122 @@ const DataView = () => {
     } catch (error) {
       console.error('Error loading summary:', error);
     }
+  };
+
+  const getFilteredSuggestions = (input, options, type) => {
+    const searchTerm = input.toLowerCase();
+    if (type === 'country') {
+      return options.filter(country => 
+        country.name.toLowerCase().includes(searchTerm) ||
+        country.code.toLowerCase().includes(searchTerm)
+      );
+    } else if (type === 'network') {
+      return options.filter(network =>
+        network.name.toLowerCase().includes(searchTerm) ||
+        network.asn.toLowerCase().includes(searchTerm)
+      );
+    } else {
+      return options.filter(option =>
+        option.toLowerCase().includes(searchTerm)
+      );
+    }
+  };
+
+  const handleTagRemove = (value, type) => {
+    switch (type) {
+      case 'country':
+        setSelectedCountries(prev => prev.filter(c => c !== value));
+        break;
+      case 'service':
+        setSelectedServices(prev => prev.filter(s => s !== value));
+        break;
+      case 'member':
+        setSelectedMembers(prev => prev.filter(m => m !== value));
+        break;
+      case 'network':
+        setSelectedNetworks(prev => prev.filter(n => n.asn !== value.asn));
+        break;
+    }
+  };
+
+  const handleSuggestionClick = (suggestion, type) => {
+    switch (type) {
+      case 'country':
+        if (!selectedCountries.includes(suggestion.code)) {
+          setSelectedCountries(prev => [...prev, suggestion.code]);
+        }
+        setFilters(prev => ({ ...prev, country: '' }));
+        break;
+      case 'service':
+        if (!selectedServices.includes(suggestion)) {
+          setSelectedServices(prev => [...prev, suggestion]);
+        }
+        setFilters(prev => ({ ...prev, service: '' }));
+        break;
+      case 'member':
+        if (!selectedMembers.includes(suggestion)) {
+          setSelectedMembers(prev => [...prev, suggestion]);
+        }
+        setFilters(prev => ({ ...prev, member: '' }));
+        break;
+      case 'network':
+        if (!selectedNetworks.find(n => n.asn === suggestion.asn)) {
+          setSelectedNetworks(prev => [...prev, suggestion]);
+        }
+        setFilters(prev => ({ ...prev, network: '' }));
+        break;
+    }
+    setShowSuggestions(prev => ({ ...prev, [type]: false }));
+  };
+
+  const handleKeyDown = (e, type) => {
+    if (e.key === 'Enter' && filters[type].trim()) {
+      const trimmed = filters[type].trim();
+      switch (type) {
+        case 'country':
+          const country = filterOptions.countries.find(c => 
+            c.code.toLowerCase() === trimmed.toLowerCase() ||
+            c.name.toLowerCase() === trimmed.toLowerCase()
+          );
+          if (country && !selectedCountries.includes(country.code)) {
+            setSelectedCountries(prev => [...prev, country.code]);
+          }
+          break;
+        case 'service':
+          if (!selectedServices.includes(trimmed)) {
+            setSelectedServices(prev => [...prev, trimmed]);
+          }
+          break;
+        case 'member':
+          if (!selectedMembers.includes(trimmed)) {
+            setSelectedMembers(prev => [...prev, trimmed]);
+          }
+          break;
+        case 'network':
+          const network = filterOptions.networks.find(n =>
+            n.name.toLowerCase() === trimmed.toLowerCase()
+          );
+          if (network && !selectedNetworks.find(n => n.asn === network.asn)) {
+            setSelectedNetworks(prev => [...prev, network]);
+          }
+          break;
+      }
+      setFilters(prev => ({ ...prev, [type]: '' }));
+      setShowSuggestions(prev => ({ ...prev, [type]: false }));
+    }
+  };
+
+  const clearAllFilters = () => {
+    setSelectedCountries([]);
+    setSelectedServices([]);
+    setSelectedMembers([]);
+    setSelectedNetworks([]);
+    setFilters({
+      country: '',
+      service: '',
+      member: '',
+      network: ''
+    });
   };
 
   const tabs = [
@@ -195,8 +364,8 @@ const DataView = () => {
         </div>
       )}
 
-      <div className="controls-bar">
-        <div className="controls-group">
+      <div className="unified-controls-bar">
+        <div className="controls-top-row">
           <div className="control-section">
             <span className="control-label">View Mode:</span>
             <div className="aggregate-checkbox">
@@ -228,73 +397,175 @@ const DataView = () => {
               />
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="filters-bar">
-        <div className="filters-group">
-          <div className="filter-section">
-            <span className="filter-label">Filter by Country:</span>
-            <select
-              value={filters.country}
-              onChange={(e) => setFilters({ ...filters, country: e.target.value })}
-              className="filter-select"
-            >
-              <option value="">All Countries</option>
-              {filterOptions.countries.map(country => (
-                <option key={country} value={country}>{country}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="filter-section">
-            <span className="filter-label">Filter by Service:</span>
-            <select
-              value={filters.service}
-              onChange={(e) => setFilters({ ...filters, service: e.target.value })}
-              className="filter-select"
-            >
-              <option value="">All Services</option>
-              {filterOptions.services.map(service => (
-                <option key={service} value={service}>{service}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="filter-section">
-            <span className="filter-label">Filter by Member:</span>
-            <select
-              value={filters.member}
-              onChange={(e) => setFilters({ ...filters, member: e.target.value })}
-              className="filter-select"
-            >
-              <option value="">All Members</option>
-              {filterOptions.members.map(member => (
-                <option key={member} value={member}>{member}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="filter-section">
-            <span className="filter-label">Filter by ASN:</span>
-            <select
-              value={filters.asn}
-              onChange={(e) => setFilters({ ...filters, asn: e.target.value })}
-              className="filter-select"
-            >
-              <option value="">All ASNs</option>
-              {filterOptions.asns.map(asn => (
-                <option key={asn} value={asn}>{asn}</option>
-              ))}
-            </select>
-          </div>
-          
           <button
             className="clear-filters-btn"
-            onClick={() => setFilters({ country: '', service: '', member: '', asn: '' })}
+            onClick={clearAllFilters}
+            disabled={selectedCountries.length === 0 && selectedServices.length === 0 && 
+                     selectedMembers.length === 0 && selectedNetworks.length === 0}
           >
-            Clear Filters
+            Clear All Filters
           </button>
+        </div>
+
+        <div className="filters-row">
+          <div className="filter-section" ref={countryRef}>
+            <span className="filter-label">Filter Countries:</span>
+            <div className="filter-input-wrapper">
+              <div className="selected-tags">
+                {selectedCountries.map(code => (
+                  <span key={code} className="filter-tag">
+                    {code}
+                    <button onClick={() => handleTagRemove(code, 'country')}>×</button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  placeholder="Type country name or code..."
+                  value={filters.country}
+                  onChange={(e) => {
+                    setFilters({ ...filters, country: e.target.value });
+                    setShowSuggestions({ ...showSuggestions, country: true });
+                  }}
+                  onFocus={() => setShowSuggestions({ ...showSuggestions, country: true })}
+                  onKeyDown={(e) => handleKeyDown(e, 'country')}
+                  className="filter-input"
+                />
+              </div>
+              {showSuggestions.country && filters.country && (
+                <div className="suggestions-dropdown">
+                  {getFilteredSuggestions(filters.country, filterOptions.countries, 'country').map(country => (
+                    <div
+                      key={country.code}
+                      className="suggestion-item"
+                      onClick={() => handleSuggestionClick(country, 'country')}
+                    >
+                      <span className="suggestion-code">{country.code}</span>
+                      <span className="suggestion-name">{country.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className="filter-section" ref={serviceRef}>
+            <span className="filter-label">Filter Services:</span>
+            <div className="filter-input-wrapper">
+              <div className="selected-tags">
+                {selectedServices.map(service => (
+                  <span key={service} className="filter-tag">
+                    {service}
+                    <button onClick={() => handleTagRemove(service, 'service')}>×</button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  placeholder="Type service name..."
+                  value={filters.service}
+                  onChange={(e) => {
+                    setFilters({ ...filters, service: e.target.value });
+                    setShowSuggestions({ ...showSuggestions, service: true });
+                  }}
+                  onFocus={() => setShowSuggestions({ ...showSuggestions, service: true })}
+                  onKeyDown={(e) => handleKeyDown(e, 'service')}
+                  className="filter-input"
+                />
+              </div>
+              {showSuggestions.service && filters.service && (
+                <div className="suggestions-dropdown">
+                  {getFilteredSuggestions(filters.service, filterOptions.services, 'service').map(service => (
+                    <div
+                      key={service}
+                      className="suggestion-item"
+                      onClick={() => handleSuggestionClick(service, 'service')}
+                    >
+                      {service}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className="filter-section" ref={memberRef}>
+            <span className="filter-label">Filter Members:</span>
+            <div className="filter-input-wrapper">
+              <div className="selected-tags">
+                {selectedMembers.map(member => (
+                  <span key={member} className="filter-tag">
+                    {member}
+                    <button onClick={() => handleTagRemove(member, 'member')}>×</button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  placeholder="Type member name..."
+                  value={filters.member}
+                  onChange={(e) => {
+                    setFilters({ ...filters, member: e.target.value });
+                    setShowSuggestions({ ...showSuggestions, member: true });
+                  }}
+                  onFocus={() => setShowSuggestions({ ...showSuggestions, member: true })}
+                  onKeyDown={(e) => handleKeyDown(e, 'member')}
+                  className="filter-input"
+                />
+              </div>
+              {showSuggestions.member && filters.member && (
+                <div className="suggestions-dropdown">
+                  {getFilteredSuggestions(filters.member, filterOptions.members, 'member').map(member => (
+                    <div
+                      key={member}
+                      className="suggestion-item"
+                      onClick={() => handleSuggestionClick(member, 'member')}
+                    >
+                      {member}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className="filter-section" ref={networkRef}>
+            <span className="filter-label">Filter Networks:</span>
+            <div className="filter-input-wrapper">
+              <div className="selected-tags">
+                {selectedNetworks.map(network => (
+                  <span key={network.asn} className="filter-tag">
+                    {network.name}
+                    <button onClick={() => handleTagRemove(network, 'network')}>×</button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  placeholder="Type network name..."
+                  value={filters.network}
+                  onChange={(e) => {
+                    setFilters({ ...filters, network: e.target.value });
+                    setShowSuggestions({ ...showSuggestions, network: true });
+                  }}
+                  onFocus={() => setShowSuggestions({ ...showSuggestions, network: true })}
+                  onKeyDown={(e) => handleKeyDown(e, 'network')}
+                  className="filter-input"
+                />
+              </div>
+              {showSuggestions.network && filters.network && (
+                <div className="suggestions-dropdown">
+                  {getFilteredSuggestions(filters.network, filterOptions.networks, 'network').map(network => (
+                    <div
+                      key={network.asn}
+                      className="suggestion-item"
+                      onClick={() => handleSuggestionClick(network, 'network')}
+                    >
+                      <span className="suggestion-name">{network.name}</span>
+                      <span className="suggestion-code">{network.asn}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
