@@ -27,14 +27,11 @@
   align-items: center;
   padding: 20px;
   z-index: 100;
+  pointer-events: none; /* Allow clicking through header except for its children */
 }
 
-.earth-header h1 {
-  font-size: 28px;
-  font-weight: 600;
-  margin: 0;
-  color: var(--text-primary);
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+.earth-header > * {
+  pointer-events: auto; /* Re-enable pointer events for header content */
 }
 
 .status-summary {
@@ -73,7 +70,6 @@
   width: 100%;
   height: 100%;
   background: radial-gradient(circle at 50% 50%, #0a0a0a 0%, #000000 100%);
-  overflow: hidden;
 }
 
 .globe-wrapper {
@@ -90,10 +86,23 @@
   width: 100%;
   height: 100%;
   cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }
 
 .globe:active {
   cursor: grabbing;
+}
+
+/* Prevent text selection and image dragging on the entire globe area */
+.globe canvas {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  -webkit-user-drag: none;
 }
 
 /* Member Info Panel - Enhanced styling */
@@ -408,6 +417,8 @@
 /* Member markers */
 .member-marker {
   pointer-events: auto !important;
+  position: relative;
+  z-index: 10;
 }
 
 .marker-container {
@@ -513,6 +524,7 @@
   min-width: 240px;
   max-width: 300px;
   z-index: 100;
+  pointer-events: auto;
 }
 
 .globe-controls h3 {
@@ -543,6 +555,7 @@
   min-width: 280px;
   max-width: 350px;
   z-index: 100;
+  pointer-events: auto;
 }
 
 .globe-legend h3 {

@@ -145,81 +145,87 @@ const EarthView = () => {
     setHoveredMember(null);
   };
 
-  useEffect(() => {
-    if (!containerRef.current || !globeRef.current || members.length === 0) return;
+// Add these styles to prevent text selection and dragging in the useEffect where globe is created
+useEffect(() => {
+  if (!containerRef.current || !globeRef.current || members.length === 0) return;
 
-    // Clean up previous instance
-    if (globeInstance.current) {
-      if (globeInstance.current._destructor) {
-        globeInstance.current._destructor();
-      }
-      globeInstance.current = null;
+  // Clean up previous instance
+  if (globeInstance.current) {
+    if (globeInstance.current._destructor) {
+      globeInstance.current._destructor();
     }
+    globeInstance.current = null;
+  }
 
-    // Create new globe instance
-    const globe = Globe()(globeRef.current)
-      .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
-      .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
-      .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
-      .showAtmosphere(true)
-      .atmosphereColor('lightskyblue')
-      .atmosphereAltitude(0.15)
-      .pointsData(members)
-      .pointLat(d => d.latitude)
-      .pointLng(d => d.longitude)
-      .pointRadius(0) // Hide the default points
-      .pointAltitude(0)
-      .htmlElementsData(members)
-      .htmlLat(d => d.latitude)
-      .htmlLng(d => d.longitude)
-      .htmlAltitude(0.01)
-      .htmlElement(d => {
-        const el = document.createElement('div');
-        el.className = 'member-marker';
+  // Prevent default drag behavior on the container
+  const container = containerRef.current;
+  container.addEventListener('dragstart', (e) => e.preventDefault());
+  container.addEventListener('selectstart', (e) => e.preventDefault());
 
-        const health = getMemberHealth(d.name);
-        const status = health === 100 ? 'operational' : health >= 50 ? 'degraded' : 'offline';
-
-        // Calculate number of active lights (1-5)
-        const activeLights = Math.ceil(health / 20);
-
-        // Create member marker with logo
-        el.innerHTML = `
-          <div class="marker-container ${status}">
-            ${d.logo ?
-              `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'member-logo-placeholder\\'>${d.name.substring(0, 2).toUpperCase()}</div>'" />` :
-              `<div class="member-logo-placeholder">${d.name.substring(0, 2).toUpperCase()}</div>`
-            }
-            <div class="member-name-label">${d.name}</div>
-            <div class="health-lights">
-              ${Array.from({ length: 5 }, (_, i) =>
-                `<span class="health-light ${i < activeLights ? 'active' : 'inactive'}"></span>`
-              ).join('')}
-            </div>
+  // Create new globe instance
+  const globe = Globe()(globeRef.current)
+    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+    .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+    .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
+    .showAtmosphere(true)
+    .atmosphereColor('lightskyblue')
+    .atmosphereAltitude(0.15)
+    .pointsData(members)
+    .pointLat(d => d.latitude)
+    .pointLng(d => d.longitude)
+    .pointRadius(0) // Hide the default points
+    .pointAltitude(0)
+    .htmlElementsData(members)
+    .htmlLat(d => d.latitude)
+    .htmlLng(d => d.longitude)
+    .htmlAltitude(0.01)
+    .htmlElement(d => {
+      const el = document.createElement('div');
+      el.className = 'member-marker';
+      el.style.pointerEvents = 'auto';
+      el.style.cursor = 'pointer';
+      
+      const health = getMemberHealth(d.name);
+      const status = health === 100 ? 'operational' : health >= 50 ? 'degraded' : 'offline';
+      
+      // Calculate number of active lights (1-5)
+      const activeLights = Math.ceil(health / 20);
+      
+      // Create member marker with logo
+      el.innerHTML = `
+        <div class="marker-container ${status}">
+          ${d.logo ?
+            `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'member-logo-placeholder\\'>${d.name.substring(0, 2).toUpperCase()}</div>'" />` :
+            `<div class="member-logo-placeholder">${d.name.substring(0, 2).toUpperCase()}</div>`
+          }
+          <div class="member-name-label">${d.name}</div>
+          <div class="health-lights">
+            ${Array.from({ length: 5 }, (_, i) =>
+              `<span class="health-light ${i < activeLights ? 'active' : 'inactive'}"></span>`
+            ).join('')}
           </div>
-        `;
+        </div>
+      `;
+      
+      // Handle mouse events - show popup on hover and keep it visible
+      el.onmouseenter = () => {
+        setHoveredMember(d);
+      };
+      
+      // Don't hide on mouse leave - panel stays visible
+      el.onmouseleave = () => {
+        // Do nothing - keep panel visible
+      };
+      
+      el.onclick = (e) => {
+        e.stopPropagation(); // Prevent globe click
+        // Navigate to member detail page on click
+        navigate(`/members/${d.name}`);
+      };
 
-        el.style.pointerEvents = 'auto';
-        el.style.cursor = 'pointer';
-        
-        // Handle mouse events - show popup on hover and keep it visible
-        el.onmouseenter = () => {
-          setHoveredMember(d);
-        };
-        
-        // Don't hide on mouse leave - panel stays visible
-        el.onmouseleave = () => {
-          // Do nothing - keep panel visible
-        };
-        
-        el.onclick = () => {
-          // Navigate to member detail page on click
-          navigate(`/members/${d.name}`);
-        };
-
-        return el;
-      })
-      .htmlTransitionDuration(1000);
+      return el;
+    })
+    .htmlTransitionDuration(1000);
 
     // Add connection arcs based on member health
     const arcs = [];
@@ -299,6 +305,8 @@ const EarthView = () => {
 
     // Cleanup function
     return () => {
+      container.removeEventListener('dragstart', (e) => e.preventDefault());
+      container.removeEventListener('selectstart', (e) => e.preventDefault());
       window.removeEventListener('resize', handleResize);
       if (globeInstance.current && globeInstance.current._destructor) {
         globeInstance.current._destructor();
