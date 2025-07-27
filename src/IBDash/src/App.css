@@ -9,6 +9,7 @@
   margin-left: 280px;
   display: flex;
   flex-direction: column;
+  transition: margin-left 0.3s ease;
 }
 
 .content-area {
@@ -102,12 +103,16 @@
 
 @media (max-width: 768px) {
   .main-content {
-    margin-left: 240px;
+    margin-left: 0;
+  }
+  
+  .content-area {
+    padding-top: 80px; /* Space for mobile menu button */
   }
 }
 
 @media (max-width: 600px) {
-  .main-content {
-    margin-left: 200px;
+  .content-area {
+    padding-top: 70px;
   }
 }
