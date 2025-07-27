@@ -74,6 +74,16 @@
   height: 100%;
   background: radial-gradient(circle at 50% 50%, #0a0a0a 0%, #000000 100%);
   overflow: hidden;
+  /* Prevent default drag behavior */
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  /* Prevent text selection */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 .globe-wrapper {
@@ -84,16 +94,40 @@
   bottom: 0;
   width: 100%;
   height: 100%;
+  /* Ensure all child elements can't be dragged */
+  -webkit-user-drag: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .globe {
   width: 100%;
   height: 100%;
   cursor: grab;
+  /* Prevent image dragging */
+  -webkit-user-drag: none;
 }
 
 .globe:active {
   cursor: grabbing;
+}
+
+/* Prevent all images in globe from being draggable */
+.globe-container img,
+.globe-wrapper img,
+.globe img,
+.globe-container canvas,
+.globe-wrapper canvas,
+.globe canvas {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  pointer-events: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 /* Member Info Panel - Enhanced styling */

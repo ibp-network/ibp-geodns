@@ -33,6 +33,35 @@ const EarthView = () => {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
 
+  // Prevent default drag behavior on the entire container
+  useEffect(() => {
+    const preventDrag = (e) => {
+      e.preventDefault();
+      return false;
+    };
+
+    const globeContainer = containerRef.current;
+    if (globeContainer) {
+      globeContainer.addEventListener('dragstart', preventDrag);
+      globeContainer.addEventListener('selectstart', preventDrag);
+      
+      // Also prevent on all images within
+      const images = globeContainer.querySelectorAll('img');
+      images.forEach(img => {
+        img.addEventListener('dragstart', preventDrag);
+        img.setAttribute('draggable', 'false');
+      });
+
+      return () => {
+        globeContainer.removeEventListener('dragstart', preventDrag);
+        globeContainer.removeEventListener('selectstart', preventDrag);
+        images.forEach(img => {
+          img.removeEventListener('dragstart', preventDrag);
+        });
+      };
+    }
+  }, [loading]);
+
   const loadMembersData = async () => {
     try {
       const response = await ApiHelper.fetchMembers();
@@ -190,20 +219,20 @@ const EarthView = () => {
         el.className = 'member-marker';
         const health = getMemberHealth(d.name);
         const status = health === 100 ? 'operational' : health >= 50 ? 'degraded' : 'offline';
-
+        
         // Calculate number of active lights (1-5)
         const activeLights = Math.ceil(health / 20);
-
+        
         // Create member marker with logo
         el.innerHTML = `
           <div class="marker-container ${status}">
-            ${d.logo ?
-              `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'member-logo-placeholder\\'>${d.name.substring(0, 2).toUpperCase()}</div>'" />` :
+            ${d.logo ? 
+              `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" draggable="false" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'member-logo-placeholder\\'>${d.name.substring(0, 2).toUpperCase()}</div>'" />` :
               `<div class="member-logo-placeholder">${d.name.substring(0, 2).toUpperCase()}</div>`
             }
             <div class="member-name-label">${d.name}</div>
             <div class="health-lights">
-              ${Array.from({ length: 5 }, (_, i) =>
+              ${Array.from({ length: 5 }, (_, i) => 
                 `<span class="health-light ${i < activeLights ? 'active' : 'inactive'}"></span>`
               ).join('')}
             </div>
@@ -308,6 +337,32 @@ const EarthView = () => {
     // Store the instance
     globeInstance.current = globe;
 
+    // Prevent drag on the globe's canvas
+    setTimeout(() => {
+      const canvas = globeRef.current?.querySelector('canvas');
+      if (canvas) {
+        canvas.setAttribute('draggable', 'false');
+        canvas.style.userSelect = 'none';
+        canvas.style.webkitUserDrag = 'none';
+        
+        const preventCanvasDrag = (e) => {
+          e.preventDefault();
+          return false;
+        };
+        
+        canvas.addEventListener('dragstart', preventCanvasDrag);
+        canvas.addEventListener('selectstart', preventCanvasDrag);
+      }
+
+      // Also set on all images created by the globe
+      const allImages = containerRef.current?.querySelectorAll('img');
+      allImages?.forEach(img => {
+        img.setAttribute('draggable', 'false');
+        img.style.userSelect = 'none';
+        img.style.webkitUserDrag = 'none';
+      });
+    }, 500);
+
     // Cleanup function
     return () => {
       window.removeEventListener('resize', handleResize);
@@ -367,7 +422,7 @@ const EarthView = () => {
         </div>
 
         {/* Fixed member info panel */}
-        <div
+        <div 
           ref={panelRef}
           className={`member-info-panel enhanced-glass ${displayMember ? 'visible' : ''} ${pinnedMember ? 'pinned' : ''}`}
         >
