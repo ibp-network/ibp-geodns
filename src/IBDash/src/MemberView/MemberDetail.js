@@ -226,7 +226,10 @@ const MemberDetail = () => {
     return 'operational';
   };
 
-  const getServiceUptime = (serviceName) => {
+  const getServiceUptime = (serviceName, customDateRange = null) => {
+    // Use custom date range if provided (for billing calculations)
+    const effectiveDateRange = customDateRange || dateRange;
+    
     // Calculate service-specific uptime based on downtime events
     const serviceDowntime = downtime.filter(dt => {
       const eventService = getServiceFromEvent(dt);
@@ -241,7 +244,7 @@ const MemberDetail = () => {
     if (allRelevantDowntime.length === 0) return 100;
     
     // Calculate total hours in period
-    const totalHours = (dateRange.end - dateRange.start) / (1000 * 60 * 60);
+    const totalHours = (effectiveDateRange.end - effectiveDateRange.start) / (1000 * 60 * 60);
     let totalDowntimeHours = 0;
     const currentTime = new Date();
     
@@ -256,8 +259,8 @@ const MemberDetail = () => {
       const eventStart = new Date(event.start_time);
       const eventEnd = event.end_time ? new Date(event.end_time) : currentTime;
       
-      const start = eventStart < dateRange.start ? dateRange.start : eventStart;
-      const end = eventEnd > dateRange.end ? dateRange.end : eventEnd;
+      const start = eventStart < effectiveDateRange.start ? effectiveDateRange.start : eventStart;
+      const end = eventEnd > effectiveDateRange.end ? effectiveDateRange.end : eventEnd;
       
       if (start < end) {
         if (mergedPeriods.length === 0 || start > mergedPeriods[mergedPeriods.length - 1].end) {
@@ -277,6 +280,65 @@ const MemberDetail = () => {
     const uptimePercentage = (uptimeHours / totalHours) * 100;
     
     return Math.max(0, Math.min(100, uptimePercentage));
+  };
+
+  const calculateBillingWithActualUptime = (billingData) => {
+    if (!billingData || !billingData.members) return billingData;
+    
+    // Get the current month's date range for billing
+    const now = new Date();
+    const billingStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    const billingEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    
+    const updatedBilling = {
+      ...billingData,
+      members: billingData.members.map(memberBilling => {
+        if (memberBilling.name !== memberName) return memberBilling;
+        
+        const updatedServices = memberBilling.services?.map(service => {
+          // Calculate actual uptime for this service based on downtime events
+          const actualUptime = getServiceUptime(service.name, { start: billingStartDate, end: billingEndDate });
+          
+          // Determine if service meets SLA (99.9%)
+          const meetsSlaNow = actualUptime >= 99.9;
+          
+          // Calculate credits based on actual uptime
+          let credits = 0;
+          if (actualUptime < 99.9 && actualUptime >= 99.0) {
+            credits = service.base_cost * 0.1; // 10% credit
+          } else if (actualUptime < 99.0 && actualUptime >= 95.0) {
+            credits = service.base_cost * 0.25; // 25% credit
+          } else if (actualUptime < 95.0) {
+            credits = service.base_cost * 0.5; // 50% credit
+          }
+          
+          const billedCost = service.base_cost - credits;
+          
+          return {
+            ...service,
+            uptime_percentage: actualUptime,
+            meets_sla: meetsSlaNow,
+            credits: credits,
+            billed_cost: billedCost
+          };
+        }) || [];
+        
+        // Recalculate totals
+        const totalBaseCost = updatedServices.reduce((sum, s) => sum + (s.base_cost || 0), 0);
+        const totalCredits = updatedServices.reduce((sum, s) => sum + (s.credits || 0), 0);
+        const totalBilled = totalBaseCost - totalCredits;
+        
+        return {
+          ...memberBilling,
+          services: updatedServices,
+          total_base_cost: totalBaseCost,
+          total_credits: totalCredits,
+          total_billed: totalBilled
+        };
+      })
+    };
+    
+    return updatedBilling;
   };
 
   const groupDowntimeEvents = () => {
@@ -384,6 +446,9 @@ const MemberDetail = () => {
   ];
 
   const groupedDowntime = groupDowntimeEvents();
+  
+  // Calculate billing with actual uptime including ongoing events
+  const actualBilling = calculateBillingWithActualUptime(billing);
 
   return (
     <div className="member-detail fade-in">
@@ -571,10 +636,10 @@ const MemberDetail = () => {
             </div>
           )}
 
-          {activeTab === 'billing' && billing && (
+          {activeTab === 'billing' && actualBilling && (
             <div className="billing-content">
               <h3>Current Month Billing</h3>
-              {billing.members?.map(memberBilling => (
+              {actualBilling.members?.map(memberBilling => (
                 <div key={memberBilling.name} className="billing-section">
                   <div className="billing-summary">
                     <div className="billing-item">
