@@ -16,7 +16,7 @@ const DataView = () => {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [aggregateView, setAggregateView] = useState(false);
+  const [aggregateView, setAggregateView] = useState(true);
 
   useEffect(() => {
     loadInitialData();
