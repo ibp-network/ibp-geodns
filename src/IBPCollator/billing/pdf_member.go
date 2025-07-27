@@ -580,7 +580,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 				}
 			}
 
-			y = serviceY + 12
+			y = serviceY + 18
 		}
 
 		// Level total
