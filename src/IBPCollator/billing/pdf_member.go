@@ -593,7 +593,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 			pdf.SetXY(110, y-2)
 			pdf.CellFormat(60, 6, fmt.Sprintf("Level %d Total:", level), "", 0, "R", false, 0, "")
 			pdf.CellFormat(30, 6, fmt.Sprintf("$%.2f", levelTotal), "", 1, "R", false, 0, "")
-			y += 10
+			y += 2
 		}
 	}
 
@@ -602,6 +602,8 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		pdf.AddPage()
 		y = 35
 	}
+
+	y = y + 12
 
 	drawMemberCard(pdf, 10, y, 190, 20)
 	pdf.SetFillColor(30, 30, 30)
