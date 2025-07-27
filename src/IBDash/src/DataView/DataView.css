@@ -28,7 +28,6 @@
 
 .controls-bar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
   background: var(--bg-secondary);
@@ -38,38 +37,24 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.date-controls {
+.controls-group {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+}
+
+.control-section {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.date-input {
-  padding: 10px 14px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  color: var(--text-primary);
+.control-label {
   font-size: 14px;
-  transition: all 0.2s ease;
-}
-
-.date-input:focus {
-  outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.date-separator {
   color: var(--text-secondary);
-  font-size: 14px;
   font-weight: 500;
-}
-
-.view-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  white-space: nowrap;
 }
 
 .aggregate-checkbox {
@@ -101,6 +86,34 @@
   color: var(--text-primary);
   cursor: pointer;
   margin: 0;
+  font-weight: 500;
+}
+
+.date-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.date-input {
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.date-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.date-separator {
+  color: var(--text-secondary);
+  font-size: 14px;
   font-weight: 500;
 }
 
@@ -184,16 +197,23 @@
 
 @media (max-width: 768px) {
   .controls-bar {
+    padding: 16px;
+  }
+
+  .controls-group {
     flex-direction: column;
     gap: 16px;
     align-items: stretch;
   }
 
-  .date-controls {
-    justify-content: center;
+  .control-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 
-  .view-controls {
+  .date-controls {
+    width: 100%;
     justify-content: center;
   }
 }

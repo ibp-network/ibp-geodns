@@ -131,30 +131,37 @@ const DataView = () => {
       )}
 
       <div className="controls-bar">
-        <div className="date-controls">
-          <input
-            type="date"
-            value={dateRange.start.toISOString().split('T')[0]}
-            onChange={(e) => setDateRange({ ...dateRange, start: new Date(e.target.value) })}
-            className="date-input"
-          />
-          <span className="date-separator">to</span>
-          <input
-            type="date"
-            value={dateRange.end.toISOString().split('T')[0]}
-            onChange={(e) => setDateRange({ ...dateRange, end: new Date(e.target.value) })}
-            className="date-input"
-          />
-        </div>
-        <div className="view-controls">
-          <div className="aggregate-checkbox">
-            <input
-              type="checkbox"
-              id="aggregate-view"
-              checked={aggregateView}
-              onChange={(e) => setAggregateView(e.target.checked)}
-            />
-            <label htmlFor="aggregate-view">Aggregate View</label>
+        <div className="controls-group">
+          <div className="control-section">
+            <span className="control-label">View Mode:</span>
+            <div className="aggregate-checkbox">
+              <input
+                type="checkbox"
+                id="aggregate-view"
+                checked={aggregateView}
+                onChange={(e) => setAggregateView(e.target.checked)}
+              />
+              <label htmlFor="aggregate-view">Aggregate View</label>
+            </div>
+          </div>
+          
+          <div className="control-section">
+            <span className="control-label">Date Range:</span>
+            <div className="date-controls">
+              <input
+                type="date"
+                value={dateRange.start.toISOString().split('T')[0]}
+                onChange={(e) => setDateRange({ ...dateRange, start: new Date(e.target.value) })}
+                className="date-input"
+              />
+              <span className="date-separator">to</span>
+              <input
+                type="date"
+                value={dateRange.end.toISOString().split('T')[0]}
+                onChange={(e) => setDateRange({ ...dateRange, end: new Date(e.target.value) })}
+                className="date-input"
+              />
+            </div>
           </div>
         </div>
       </div>
