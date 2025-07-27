@@ -27,20 +27,9 @@ const EarthView = () => {
         setHoveredMember(null);
       }
     };
-
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [pinnedMember]);
-
-  // Handle scrolling detection
-  useEffect(() => {
-    if (panelRef.current && hoveredMember) {
-      const hasScroll = panelRef.current.scrollHeight > panelRef.current.clientHeight;
-      if (hasScroll && !pinnedMember) {
-        setPinnedMember(hoveredMember);
-      }
-    }
-  }, [hoveredMember, pinnedMember]);
 
   const loadMembersData = async () => {
     try {
@@ -64,12 +53,27 @@ const EarthView = () => {
     }
   };
 
-  // Calculate member health percentage
+  // Calculate member health percentage based on services online
   const getMemberHealth = (memberName) => {
+    const member = members.find(m => m.name === memberName);
+    if (!member || !member.services || member.services.length === 0) return 100;
+    
+    const totalServices = member.services.length;
     const memberDowntime = downtime.filter(dt => dt.member_name === memberName);
-    if (memberDowntime.length === 0) return 100;
-    if (memberDowntime.length > 10) return 0;
-    return Math.max(0, 100 - (memberDowntime.length * 10));
+    
+    // Get unique services that are down
+    const downServices = new Set();
+    memberDowntime.forEach(dt => {
+      member.services.forEach(service => {
+        if ((dt.domain_name && dt.domain_name.includes(service.toLowerCase())) ||
+            (dt.endpoint && dt.endpoint.includes(service.toLowerCase()))) {
+          downServices.add(service);
+        }
+      });
+    });
+    
+    const servicesOnline = totalServices - downServices.size;
+    return (servicesOnline / totalServices) * 100;
   };
 
   // Get member outages
@@ -79,26 +83,17 @@ const EarthView = () => {
 
   // Check if a specific service is down for a member
   const isServiceDown = (memberName, serviceName) => {
-    return downtime.some(dt => 
-      dt.member_name === memberName && 
+    return downtime.some(dt =>
+      dt.member_name === memberName &&
       (dt.domain_name?.includes(serviceName.toLowerCase()) ||
        dt.endpoint?.includes(serviceName.toLowerCase()))
     );
   };
 
-  // Get service status
+  // Get service status - only online or offline
   const getServiceStatus = (memberName, serviceName) => {
     const hasOutage = isServiceDown(memberName, serviceName);
-    if (hasOutage) return 'offline';
-    
-    // Check if there are any domain/endpoint issues that might indicate degraded service
-    const serviceOutages = downtime.filter(dt => 
-      dt.member_name === memberName && 
-      dt.check_type !== 'site'
-    );
-    
-    if (serviceOutages.length > 0 && serviceOutages.length < 3) return 'degraded';
-    return 'online';
+    return hasOutage ? 'offline' : 'online';
   };
 
   // Calculate total downtime hours
@@ -106,6 +101,12 @@ const EarthView = () => {
     const outages = getMemberOutages(memberName);
     // Simplified calculation - assuming each outage is approximately 1 hour
     return outages.length;
+  };
+
+  // Handle close button click
+  const handleClosePanel = () => {
+    setPinnedMember(null);
+    setHoveredMember(null);
   };
 
   useEffect(() => {
@@ -139,47 +140,49 @@ const EarthView = () => {
       .htmlElement(d => {
         const el = document.createElement('div');
         el.className = 'member-marker';
-        
+
         const health = getMemberHealth(d.name);
-        const status = health === 100 ? 'operational' : health > 50 ? 'degraded' : 'offline';
-        
+        const status = health === 100 ? 'operational' : health >= 50 ? 'degraded' : 'offline';
+
         // Calculate number of active lights (1-5)
         const activeLights = Math.ceil(health / 20);
-        
+
         // Create member marker with logo
         el.innerHTML = `
           <div class="marker-container ${status}">
-            ${d.logo ? 
-              `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'member-logo-placeholder\\'>${d.name.substring(0, 2).toUpperCase()}</div>'" />` : 
+            ${d.logo ?
+              `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'member-logo-placeholder\\'>${d.name.substring(0, 2).toUpperCase()}</div>'" />` :
               `<div class="member-logo-placeholder">${d.name.substring(0, 2).toUpperCase()}</div>`
             }
             <div class="member-name-label">${d.name}</div>
             <div class="health-lights">
-              ${Array.from({ length: 5 }, (_, i) => 
+              ${Array.from({ length: 5 }, (_, i) =>
                 `<span class="health-light ${i < activeLights ? 'active' : 'inactive'}"></span>`
               ).join('')}
             </div>
           </div>
         `;
-        
+
         el.style.pointerEvents = 'auto';
         el.style.cursor = 'pointer';
-        
-        // Handle mouse events
+
+        // Handle mouse events - always show popup on hover
         el.onmouseenter = () => {
-          if (!pinnedMember || pinnedMember.name !== d.name) {
-            setHoveredMember(d);
-          }
+          setHoveredMember(d);
+          setPinnedMember(null); // Clear any pinned member on new hover
         };
-        
+
         el.onmouseleave = () => {
           if (!pinnedMember) {
             setHoveredMember(null);
           }
         };
-        
-        el.onclick = () => window.location.href = `/members/${d.name}`;
-        
+
+        el.onclick = () => {
+          setPinnedMember(d);
+          setHoveredMember(d);
+        };
+
         return el;
       })
       .htmlTransitionDuration(1000);
@@ -190,15 +193,15 @@ const EarthView = () => {
       for (let j = i + 1; j < members.length; j++) {
         const health1 = getMemberHealth(members[i].name);
         const health2 = getMemberHealth(members[j].name);
-        
+
         // Calculate connection probability based on combined health
         const connectionProbability = (health1 + health2) / 200;
-        
+
         if (Math.random() < connectionProbability * 0.8) {
           // Determine arc color based on average health
           const avgHealth = (health1 + health2) / 2;
           let color;
-          
+
           if (avgHealth >= 80) {
             color = ['rgba(16, 185, 129, 0.6)', 'rgba(16, 185, 129, 0.3)']; // Green
           } else if (avgHealth >= 50) {
@@ -206,7 +209,7 @@ const EarthView = () => {
           } else {
             color = ['rgba(239, 68, 68, 0.6)', 'rgba(239, 68, 68, 0.3)']; // Red
           }
-          
+
           arcs.push({
             startLat: members[i].latitude,
             startLng: members[i].longitude,
@@ -248,13 +251,13 @@ const EarthView = () => {
         globe.height(height);
       }
     };
-    
+
     // Initial size
     handleResize();
-    
+
     // Add resize listener
     window.addEventListener('resize', handleResize);
-    
+
     // Add a small delay to ensure proper initial sizing
     setTimeout(handleResize, 100);
 
@@ -264,7 +267,7 @@ const EarthView = () => {
     // Cleanup function
     return () => {
       window.removeEventListener('resize', handleResize);
-      
+
       if (globeInstance.current && globeInstance.current._destructor) {
         globeInstance.current._destructor();
       }
@@ -300,7 +303,7 @@ const EarthView = () => {
         <div className="globe-wrapper">
           <div ref={globeRef} className="globe"></div>
         </div>
-        
+
         {/* Header overlaid on top of globe */}
         <div className="earth-header">
           <h1>Global Infrastructure Map</h1>
@@ -319,14 +322,15 @@ const EarthView = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Fixed member info panel */}
-        <div 
+        <div
           ref={panelRef}
           className={`member-info-panel enhanced-glass ${displayMember ? 'visible' : ''} ${pinnedMember ? 'pinned' : ''}`}
         >
           {displayMember && (
             <>
+              <div className="panel-close-btn" onClick={handleClosePanel}>✕</div>
               {pinnedMember && (
                 <div className="panel-hint">ESC TO CLOSE</div>
               )}
@@ -343,14 +347,14 @@ const EarthView = () => {
                   <div className="panel-region">{displayMember.region}</div>
                 </div>
               </div>
-              
+
               <div className="panel-content">
                 <div className="info-section">
                   <h3 className="section-title">Member Information</h3>
-                  <div className="info-grid">
+                  <div className="info-grid compact">
                     <div className="info-row">
                       <span className="info-label">Health:</span>
-                      <span className="info-value">{getMemberHealth(displayMember.name)}%</span>
+                      <span className="info-value">{getMemberHealth(displayMember.name).toFixed(0)}%</span>
                     </div>
                     <div className="info-row">
                       <span className="info-label">Level:</span>
@@ -380,7 +384,7 @@ const EarthView = () => {
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Active Events Alert */}
                 {getMemberOutages(displayMember.name).length > 0 && (
                   <div className="active-events">
@@ -398,7 +402,7 @@ const EarthView = () => {
                     )}
                   </div>
                 )}
-                
+
                 {displayMember.services && displayMember.services.length > 0 && (
                   <div className="info-section">
                     <h3 className="section-title">Active Services</h3>
@@ -418,11 +422,11 @@ const EarthView = () => {
                     </div>
                   </div>
                 )}
-                
+
                 {getMemberOutages(displayMember.name).length === 0 && (
                   <div className="info-section">
                     <div className="no-issues">
-                      <div className="no-issues-icon">✔</div>
+                      <div className="no-issues-icon">✓</div>
                       <div>All systems operational</div>
                     </div>
                   </div>
@@ -431,7 +435,7 @@ const EarthView = () => {
             </>
           )}
         </div>
-                          
+
         <div className="globe-controls enhanced-glass">
           <h3>Controls</h3>
           <div className="control-item">
@@ -440,7 +444,7 @@ const EarthView = () => {
           </div>
           <div className="control-item">
             <span className="control-icon">👆</span>
-            <span>Click member for details</span>
+            <span>Click member to pin details</span>
           </div>
           <div className="control-item">
             <span className="control-icon">🔍</span>
@@ -458,7 +462,7 @@ const EarthView = () => {
               <span className="health-light active"></span>
               <span className="health-light active"></span>
             </div>
-            <span>100% Health (5 lights)</span>
+            <span>100% Services Online</span>
           </div>
           <div className="legend-item">
             <div className="legend-health-lights">
@@ -468,7 +472,7 @@ const EarthView = () => {
               <span className="health-light active"></span>
               <span className="health-light inactive"></span>
             </div>
-            <span>80% Health (4 lights)</span>
+            <span>80% Services Online</span>
           </div>
           <div className="legend-item">
             <div className="legend-health-lights">
@@ -478,7 +482,7 @@ const EarthView = () => {
               <span className="health-light inactive"></span>
               <span className="health-light inactive"></span>
             </div>
-            <span>60% Health (3 lights)</span>
+            <span>60% Services Online</span>
           </div>
           <div className="legend-item">
             <div className="legend-health-lights">
@@ -488,7 +492,7 @@ const EarthView = () => {
               <span className="health-light inactive"></span>
               <span className="health-light inactive"></span>
             </div>
-            <span>40% Health (2 lights)</span>
+            <span>40% Services Online</span>
           </div>
           <div className="legend-item">
             <div className="legend-health-lights">
@@ -498,7 +502,7 @@ const EarthView = () => {
               <span className="health-light inactive"></span>
               <span className="health-light inactive"></span>
             </div>
-            <span>20% Health (1 light)</span>
+            <span>20% Services Online</span>
           </div>
         </div>
       </div>
