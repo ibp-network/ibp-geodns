@@ -33,28 +33,44 @@
   background: var(--bg-secondary);
   border-radius: 12px;
   border: 1px solid var(--border-color);
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.filters-bar {
+  display: flex;
+  align-items: center;
+  padding: 20px 24px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
   margin-bottom: 32px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.controls-group {
+.controls-group,
+.filters-group {
   display: flex;
   align-items: center;
   gap: 40px;
   width: 100%;
+  flex-wrap: wrap;
 }
 
-.control-section {
+.control-section,
+.filter-section {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.control-label {
+.control-label,
+.filter-label {
   font-size: 14px;
   color: var(--text-secondary);
   font-weight: 500;
   white-space: nowrap;
+  min-width: 120px;
 }
 
 .aggregate-checkbox {
@@ -95,7 +111,8 @@
   gap: 12px;
 }
 
-.date-input {
+.date-input,
+.filter-input {
   padding: 10px 14px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
@@ -105,10 +122,50 @@
   transition: all 0.2s ease;
 }
 
-.date-input:focus {
+.filter-input {
+  width: 150px;
+}
+
+.date-input:focus,
+.filter-input:focus {
   outline: none;
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.filter-select {
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 180px;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.clear-filters-btn {
+  padding: 10px 20px;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: auto;
+}
+
+.clear-filters-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
 }
 
 .date-separator {
@@ -195,25 +252,55 @@
   margin: 8px 0;
 }
 
+@media (max-width: 1200px) {
+  .filters-group {
+    gap: 20px;
+  }
+  
+  .filter-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  
+  .filter-label {
+    min-width: auto;
+  }
+}
+
 @media (max-width: 768px) {
-  .controls-bar {
+  .controls-bar,
+  .filters-bar {
     padding: 16px;
   }
-
-  .controls-group {
+  
+  .controls-group,
+  .filters-group {
     flex-direction: column;
     gap: 16px;
     align-items: stretch;
   }
-
-  .control-section {
+  
+  .control-section,
+  .filter-section {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
-
+  
   .date-controls {
     width: 100%;
     justify-content: center;
+  }
+  
+  .filter-input,
+  .filter-select {
+    width: 100%;
+  }
+  
+  .clear-filters-btn {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 8px;
   }
 }

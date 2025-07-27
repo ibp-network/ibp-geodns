@@ -17,6 +17,18 @@ const DataView = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [aggregateView, setAggregateView] = useState(true);
+  const [filters, setFilters] = useState({
+    country: '',
+    service: '',
+    member: '',
+    asn: ''
+  });
+  const [filterOptions, setFilterOptions] = useState({
+    countries: [],
+    services: [],
+    members: [],
+    asns: []
+  });
 
   useEffect(() => {
     loadInitialData();
@@ -27,18 +39,72 @@ const DataView = () => {
       loadData();
       loadSummary();
     }
-  }, [dateRange, activeTab, initialLoading]);
+  }, [dateRange, activeTab, filters, initialLoading]);
+
+  useEffect(() => {
+    // Load filter options when date range changes
+    if (!initialLoading) {
+      loadFilterOptions();
+    }
+  }, [dateRange, initialLoading]);
 
   const loadInitialData = async () => {
     setInitialLoading(true);
     try {
       await Promise.all([
         loadData(),
-        loadSummary()
+        loadSummary(),
+        loadFilterOptions()
       ]);
     } finally {
       // Wait for animation to complete
       setTimeout(() => setInitialLoading(false), 1500);
+    }
+  };
+
+  const loadFilterOptions = async () => {
+    try {
+      const params = {
+        start: dateRange.start.toISOString().split('T')[0],
+        end: dateRange.end.toISOString().split('T')[0]
+      };
+
+      // Fetch all data types to extract unique options
+      const [countryRes, serviceRes, memberRes, asnRes] = await Promise.all([
+        ApiHelper.fetchRequestsByCountry(params),
+        ApiHelper.fetchRequestsByService(params),
+        ApiHelper.fetchRequestsByMember(params),
+        ApiHelper.fetchRequestsByASN(params)
+      ]);
+
+      // Extract unique countries
+      const countries = [...new Set(countryRes.data.map(item => item.country))]
+        .filter(c => c)
+        .sort();
+
+      // Extract unique services/domains
+      const services = [...new Set(serviceRes.data.map(item => item.service || item.domain))]
+        .filter(s => s)
+        .sort();
+
+      // Extract unique members
+      const members = [...new Set(memberRes.data.map(item => item.member))]
+        .filter(m => m && m !== '(none)')
+        .sort();
+
+      // Extract unique ASNs
+      const asns = [...new Set(asnRes.data.map(item => item.asn))]
+        .filter(a => a && a !== 'Unknown')
+        .sort();
+
+      setFilterOptions({
+        countries,
+        services,
+        members,
+        asns
+      });
+    } catch (error) {
+      console.error('Error loading filter options:', error);
     }
   };
 
@@ -47,9 +113,9 @@ const DataView = () => {
     try {
       const params = {
         start: dateRange.start.toISOString().split('T')[0],
-        end: dateRange.end.toISOString().split('T')[0]
+        end: dateRange.end.toISOString().split('T')[0],
+        ...filters // Include all filters
       };
-
       let response;
       switch (activeTab) {
         case 'country':
@@ -67,7 +133,6 @@ const DataView = () => {
         default:
           response = { data: [] };
       }
-
       setData(response.data);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -166,6 +231,73 @@ const DataView = () => {
         </div>
       </div>
 
+      <div className="filters-bar">
+        <div className="filters-group">
+          <div className="filter-section">
+            <span className="filter-label">Filter by Country:</span>
+            <select
+              value={filters.country}
+              onChange={(e) => setFilters({ ...filters, country: e.target.value })}
+              className="filter-select"
+            >
+              <option value="">All Countries</option>
+              {filterOptions.countries.map(country => (
+                <option key={country} value={country}>{country}</option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="filter-section">
+            <span className="filter-label">Filter by Service:</span>
+            <select
+              value={filters.service}
+              onChange={(e) => setFilters({ ...filters, service: e.target.value })}
+              className="filter-select"
+            >
+              <option value="">All Services</option>
+              {filterOptions.services.map(service => (
+                <option key={service} value={service}>{service}</option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="filter-section">
+            <span className="filter-label">Filter by Member:</span>
+            <select
+              value={filters.member}
+              onChange={(e) => setFilters({ ...filters, member: e.target.value })}
+              className="filter-select"
+            >
+              <option value="">All Members</option>
+              {filterOptions.members.map(member => (
+                <option key={member} value={member}>{member}</option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="filter-section">
+            <span className="filter-label">Filter by ASN:</span>
+            <select
+              value={filters.asn}
+              onChange={(e) => setFilters({ ...filters, asn: e.target.value })}
+              className="filter-select"
+            >
+              <option value="">All ASNs</option>
+              {filterOptions.asns.map(asn => (
+                <option key={asn} value={asn}>{asn}</option>
+              ))}
+            </select>
+          </div>
+          
+          <button
+            className="clear-filters-btn"
+            onClick={() => setFilters({ country: '', service: '', member: '', asn: '' })}
+          >
+            Clear Filters
+          </button>
+        </div>
+      </div>
+
       <div className="data-tabs card">
         <div className="tab-header">
           {tabs.map(tab => (
@@ -179,7 +311,6 @@ const DataView = () => {
             </button>
           ))}
         </div>
-
         <div className="tab-content">
           {loading ? (
             <div className="loading-container">
