@@ -244,10 +244,8 @@ func handleRequestsByService(w http.ResponseWriter, r *http.Request) {
 			log.Log(log.Error, "[CollatorAPI] Failed to scan row: %v", err)
 			continue
 		}
-
 		// Map domain to service name
 		stat.Service = domainToServiceName(stat.Domain)
-
 		results = append(results, stat)
 	}
 
@@ -382,32 +380,48 @@ func handleRequestsSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, summary)
 }
 
-// Helper function to convert domain to service name
+// Helper function to convert domain to service name with improved matching
 func domainToServiceName(domain string) string {
 	// First try to find exact match in config
 	c := cfg.GetConfig()
+	domainLower := strings.ToLower(domain)
+
+	// Clean up domain for comparison
+	cleanDomain := strings.TrimSuffix(domainLower, ".dotters.network")
+	cleanDomain = strings.TrimSuffix(cleanDomain, ".ibp.network")
+
 	for serviceName, service := range c.Services {
+		serviceNameLower := strings.ToLower(serviceName)
+
+		// Check for exact match after cleaning
+		if cleanDomain == serviceNameLower {
+			return serviceName
+		}
+
+		// Check if any RPC URL contains this exact domain
 		for _, provider := range service.Providers {
 			for _, rpcUrl := range provider.RpcUrls {
-				if strings.Contains(strings.ToLower(rpcUrl), strings.ToLower(domain)) {
+				rpcUrlLower := strings.ToLower(rpcUrl)
+				if strings.Contains(rpcUrlLower, domainLower) {
 					return serviceName
 				}
 			}
 		}
 	}
 
-	// Fallback: clean up the domain name
+	// Fallback: clean up the domain name for display
 	name := strings.TrimSuffix(domain, ".dotters.network")
-	name = strings.ReplaceAll(name, "-", " ")
-	name = strings.ReplaceAll(name, ".", " ")
+	name = strings.TrimSuffix(name, ".ibp.network")
 
-	// Title case each word
-	parts := strings.Fields(name)
+	// Don't replace hyphens in the middle of service names
+	// This prevents "eth-passet-hub-paseo" from becoming "Eth Passet Hub Paseo"
+	// Only capitalize first letter of each hyphenated part
+	parts := strings.Split(name, "-")
 	for i, part := range parts {
 		if len(part) > 0 {
 			parts[i] = strings.ToUpper(string(part[0])) + strings.ToLower(part[1:])
 		}
 	}
 
-	return strings.Join(parts, " ")
+	return strings.Join(parts, "-")
 }

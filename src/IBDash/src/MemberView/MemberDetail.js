@@ -201,17 +201,24 @@ const MemberDetail = () => {
 
   const getServiceStatus = (serviceName) => {
     // Check for service-specific downtime
-    const serviceDowntime = downtime.filter(dt => 
-      (dt.domain_name && dt.domain_name.includes(serviceName.toLowerCase())) ||
-      (dt.endpoint && dt.endpoint.includes(serviceName.toLowerCase()))
-    );
+    const serviceDowntime = downtime.filter(dt => {
+      const eventService = getServiceFromEvent(dt);
+      return eventService === serviceName && !dt.end_time;
+    });
     
     // Check for site-level downtime
     const siteDowntime = downtime.filter(dt => dt.check_type === 'site' && !dt.end_time);
     
     if (siteDowntime.length > 0) return 'offline';
-    if (serviceDowntime.some(dt => !dt.end_time)) return 'offline';
-    if (serviceDowntime.length > 0) return 'degraded';
+    if (serviceDowntime.length > 0) return 'offline';
+    
+    // Check if service had downtime but is now resolved
+    const hadDowntime = downtime.some(dt => {
+      const eventService = getServiceFromEvent(dt);
+      return eventService === serviceName;
+    });
+    
+    if (hadDowntime) return 'degraded';
     return 'operational';
   };
 
@@ -247,14 +254,52 @@ const MemberDetail = () => {
     return grouped;
   };
 
+  // Fixed service matching logic to avoid substring matching issues
   const getServiceFromEvent = (event) => {
     if (!member || !member.services) return 'Unknown Service';
     
     // Try to match domain or endpoint to a service
     for (const service of member.services) {
-      if ((event.domain_name && event.domain_name.includes(service.toLowerCase())) ||
-          (event.endpoint && event.endpoint.includes(service.toLowerCase()))) {
-        return service;
+      const serviceLower = service.toLowerCase();
+      
+      if (event.domain_name) {
+        const domainLower = event.domain_name.toLowerCase();
+        // Remove suffixes
+        const normalizedDomain = domainLower
+          .replace('.dotters.network', '')
+          .replace('.ibp.network', '');
+        
+        // Exact match
+        if (normalizedDomain === serviceLower) {
+          return service;
+        }
+        
+        // Check domain parts for exact match
+        const domainParts = normalizedDomain.split(/[-._]/);
+        if (domainParts.includes(serviceLower)) {
+          return service;
+        }
+      }
+      
+      if (event.endpoint) {
+        const endpointLower = event.endpoint.toLowerCase();
+        // Remove protocol and path
+        const normalizedEndpoint = endpointLower
+          .replace(/^(https?:\/\/)?(wss?:\/\/)?/, '')
+          .replace(/\/.*$/, '')
+          .replace('.dotters.network', '')
+          .replace('.ibp.network', '');
+        
+        // Exact match
+        if (normalizedEndpoint === serviceLower) {
+          return service;
+        }
+        
+        // Check endpoint parts for exact match
+        const endpointParts = normalizedEndpoint.split(/[-._]/);
+        if (endpointParts.includes(serviceLower)) {
+          return service;
+        }
       }
     }
     
@@ -388,14 +433,14 @@ const MemberDetail = () => {
                     </div>
                   </div>
                   <div className="info-item">
-                    <span className="info-icon">🔢</span>
+                    <span className="info-icon">📢</span>
                     <div className="info-content">
                       <span className="info-label">IPv4 Address</span>
                       <span className="info-value">{member.service_ipv4 || 'Not configured'}</span>
                     </div>
                   </div>
                   <div className="info-item">
-                    <span className="info-icon">🔢</span>
+                    <span className="info-icon">📢</span>
                     <div className="info-content">
                       <span className="info-label">IPv6 Address</span>
                       <span className="info-value">{member.service_ipv6 || 'Not configured'}</span>

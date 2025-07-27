@@ -29,6 +29,7 @@ const EarthView = () => {
         setHoveredMember(null);
       }
     };
+
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
@@ -74,12 +75,18 @@ const EarthView = () => {
     return downServices;
   };
 
-  // Extract service name from downtime event
+  // Extract service name from downtime event - FIXED to avoid substring matching issues
   const getServiceNameFromDowntime = (dt, services) => {
     if (!services || services.length === 0) return null;
     
+    // For site-level downtime, all services are affected
+    if (dt.check_type === 'site') {
+      return null; // Don't match to a specific service
+    }
+    
     // Check each service to see if the downtime matches
     for (const service of services) {
+      // Exact match first (case-insensitive)
       const serviceLower = service.toLowerCase();
       
       // Check domain name
@@ -90,8 +97,15 @@ const EarthView = () => {
           .replace('.dotters.network', '')
           .replace('.ibp.network', '');
         
-        if (normalizedDomain.includes(serviceLower) || 
-            serviceLower.includes(normalizedDomain)) {
+        // Exact match after normalization
+        if (normalizedDomain === serviceLower) {
+          return service;
+        }
+        
+        // Check if domain contains service name with delimiters to avoid partial matches
+        // For example, "eth-passet-hub-paseo" should not match "paseo"
+        const domainParts = normalizedDomain.split(/[-._]/);
+        if (domainParts.includes(serviceLower)) {
           return service;
         }
       }
@@ -106,8 +120,14 @@ const EarthView = () => {
           .replace('.dotters.network', '')
           .replace('.ibp.network', '');
         
-        if (normalizedEndpoint.includes(serviceLower) || 
-            serviceLower.includes(normalizedEndpoint)) {
+        // Exact match after normalization
+        if (normalizedEndpoint === serviceLower) {
+          return service;
+        }
+        
+        // Check with delimiters
+        const endpointParts = normalizedEndpoint.split(/[-._]/);
+        if (endpointParts.includes(serviceLower)) {
           return service;
         }
       }
@@ -188,6 +208,7 @@ const EarthView = () => {
       .htmlElement(d => {
         const el = document.createElement('div');
         el.className = 'member-marker';
+
         const health = getMemberHealth(d.name);
         const status = health === 100 ? 'operational' : health >= 50 ? 'degraded' : 'offline';
 
@@ -387,6 +408,7 @@ const EarthView = () => {
                   <div className="panel-region">{displayMember.region}</div>
                 </div>
               </div>
+
               <div className="panel-content">
                 <div className="info-section">
                   <h3 className="section-title">Member Information</h3>
