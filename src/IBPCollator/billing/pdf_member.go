@@ -156,7 +156,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	}
 
 	// Single large member information card
-	drawMemberCard(pdf, 10, 35, 190, 95) // Increased height to accommodate overview
+	drawMemberCard(pdf, 10, 35, 190, 65)
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(15, 40)
 	pdf.CellFormat(120, 8, "Member Information", "", 1, "L", false, 0, "")
@@ -252,19 +252,33 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		}
 	}
 
-	// Usage statistics in the same box
-	y += 4
-	pdf.SetDrawColor(200, 200, 200)
-	pdf.Line(15, y, 145, y) // Separator line (don't cross logo area)
-	pdf.SetDrawColor(0, 0, 0)
-	y += 4
-
-	// Add Overview section
-	pdf.SetFont("Helvetica", "B", 11)
-	pdf.SetXY(15, y)
-	pdf.CellFormat(100, 5, "Overview", "", 1, "L", false, 0, "")
+	// DNS usage statistics at bottom of member info box
+	pdf.SetXY(15, 90)
+	pdf.CellFormat(30, 5, "DNS Requests:", "", 0, "L", false, 0, "")
+	pdf.SetX(45)
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(30, 5, fmt.Sprintf("%d", stats.RequestCount), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
-	y += 6
+
+	pdf.SetXY(80, 90)
+	pdf.CellFormat(30, 5, "% of Network:", "", 0, "L", false, 0, "")
+	pdf.SetX(110)
+	pdf.SetFont("Helvetica", "B", 10)
+	percentage := 0.0
+	if totalRequests > 0 {
+		percentage = float64(stats.RequestCount) / float64(totalRequests) * 100.0
+	}
+	pdf.CellFormat(30, 5, fmt.Sprintf("%.2f%%", percentage), "", 0, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+
+	// Create separate Overview box below member information
+	y = 105
+	drawMemberCard(pdf, 10, y, 190, 70)
+	pdf.SetFont("Helvetica", "B", 14)
+	pdf.SetXY(15, y+5)
+	pdf.CellFormat(100, 8, "Overview", "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	y += 15
 
 	// Calculate totals for overview
 	totalBilled := 0.0
@@ -407,7 +421,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.CellFormat(30, 5, "% of Network:", "", 0, "L", false, 0, "")
 	pdf.SetX(110)
 	pdf.SetFont("Helvetica", "B", 10)
-	percentage := 0.0
+	percentage = 0.0
 	if totalRequests > 0 {
 		percentage = float64(stats.RequestCount) / float64(totalRequests) * 100.0
 	}
