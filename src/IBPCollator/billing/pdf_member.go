@@ -455,7 +455,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 			events := getServiceDowntimeEvents(dbMemberName, svcName, month)
 			filteredEvents := filterEvents(events, 5) // 5+ minute events
 			if len(filteredEvents) > 0 {
-				baseHeight += 25 + float64(len(filteredEvents))*6 // Header + rows
+				baseHeight += 8 + float64(len(filteredEvents))*6 // Header + rows
 			}
 
 			if y+baseHeight > 270 {
