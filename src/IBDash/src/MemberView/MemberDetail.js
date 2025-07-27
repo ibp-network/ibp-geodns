@@ -23,60 +23,76 @@ const MemberDetail = () => {
     loadMemberData();
   }, [memberName, dateRange]);
 
-  const calculateSiteUptime = (downtimeEvents, startDate, endDate) => {
-    // Filter for site-level downtime only
-    const siteDowntime = downtimeEvents.filter(event => event.check_type === 'site');
+  const calculateSiteUptime = (downtimeEvents, startDate, endDate, serviceCount = 0) => {
+    if (serviceCount === 0) return 100; // No services means 100% uptime
     
-    if (siteDowntime.length === 0) {
-      return 100; // No downtime means 100% uptime
-    }
-
     // Calculate total hours in period
     const totalHours = (endDate - startDate) / (1000 * 60 * 60);
+    const totalServiceHours = totalHours * serviceCount;
     
-    // Calculate total downtime hours
-    let totalDowntimeHours = 0;
-    
-    // Sort events by start time to handle overlaps
-    const sortedEvents = siteDowntime.sort((a, b) => 
-      new Date(a.start_time) - new Date(b.start_time)
-    );
-    
-    // Merge overlapping downtime periods
-    const mergedPeriods = [];
+    let totalDowntimeServiceHours = 0;
     const currentTime = new Date();
     
-    sortedEvents.forEach(event => {
+    // Group downtime by service
+    const serviceDowntimeMap = new Map();
+    
+    downtimeEvents.forEach(event => {
       const eventStart = new Date(event.start_time);
-      // For ongoing events (no end_time), use current time as end
       const eventEnd = event.end_time ? new Date(event.end_time) : currentTime;
       
       // Clamp to date range
       const start = eventStart < startDate ? startDate : eventStart;
       const end = eventEnd > endDate ? endDate : eventEnd;
       
-      if (start < end) {
-        if (mergedPeriods.length === 0 || start > mergedPeriods[mergedPeriods.length - 1].end) {
-          // No overlap with previous period
-          mergedPeriods.push({ start, end });
-        } else {
-          // Overlap with previous period, merge them
-          const lastPeriod = mergedPeriods[mergedPeriods.length - 1];
-          lastPeriod.end = end > lastPeriod.end ? end : lastPeriod.end;
+      if (start >= end) return; // Skip if outside date range
+      
+      const downtimeHours = (end - start) / (1000 * 60 * 60);
+      
+      if (event.check_type === 'site') {
+        // Site downtime affects ALL services
+        for (let i = 0; i < serviceCount; i++) {
+          const serviceKey = `service_${i}`;
+          if (!serviceDowntimeMap.has(serviceKey)) {
+            serviceDowntimeMap.set(serviceKey, []);
+          }
+          serviceDowntimeMap.get(serviceKey).push({ start, end });
         }
+      } else {
+        // Service-specific downtime
+        const serviceName = getServiceFromEvent(event);
+        if (!serviceDowntimeMap.has(serviceName)) {
+          serviceDowntimeMap.set(serviceName, []);
+        }
+        serviceDowntimeMap.get(serviceName).push({ start, end });
       }
     });
     
-    // Calculate total downtime from merged periods
-    mergedPeriods.forEach(period => {
-      totalDowntimeHours += (period.end - period.start) / (1000 * 60 * 60);
+    // Calculate total downtime hours with overlap handling per service
+    serviceDowntimeMap.forEach((periods, serviceName) => {
+      // Sort periods by start time
+      const sortedPeriods = periods.sort((a, b) => a.start - b.start);
+      
+      // Merge overlapping periods
+      const mergedPeriods = [];
+      sortedPeriods.forEach(period => {
+        if (mergedPeriods.length === 0 || period.start > mergedPeriods[mergedPeriods.length - 1].end) {
+          mergedPeriods.push({ ...period });
+        } else {
+          const lastPeriod = mergedPeriods[mergedPeriods.length - 1];
+          lastPeriod.end = period.end > lastPeriod.end ? period.end : lastPeriod.end;
+        }
+      });
+      
+      // Sum up the merged periods
+      mergedPeriods.forEach(period => {
+        totalDowntimeServiceHours += (period.end - period.start) / (1000 * 60 * 60);
+      });
     });
     
     // Calculate uptime percentage
-    const uptimeHours = totalHours - totalDowntimeHours;
-    const uptimePercentage = (uptimeHours / totalHours) * 100;
+    const uptimeServiceHours = totalServiceHours - totalDowntimeServiceHours;
+    const uptimePercentage = (uptimeServiceHours / totalServiceHours) * 100;
     
-    // Ensure percentage is between 0 and 100
     return Math.max(0, Math.min(100, uptimePercentage));
   };
 
@@ -101,8 +117,9 @@ const MemberDetail = () => {
       const downtimeData = Array.isArray(downtimeRes.data) ? downtimeRes.data : [];
       setDowntime(downtimeData);
       
-      // Calculate site uptime based on actual downtime
-      const siteUptime = calculateSiteUptime(downtimeData, dateRange.start, dateRange.end);
+      // Calculate site uptime based on total service hours
+      const serviceCount = memberData?.services?.length || 0;
+      const siteUptime = calculateSiteUptime(downtimeData, dateRange.start, dateRange.end, serviceCount);
       
       // Update stats with calculated uptime
       const updatedStats = {
@@ -147,47 +164,21 @@ const MemberDetail = () => {
         
         const allDowntime = Array.isArray(downtimeRes.data) ? downtimeRes.data : [];
         
-        // Calculate site uptime for the month
-        const uptime = calculateSiteUptime(allDowntime, monthStart, monthEnd);
+        // Calculate site uptime for the month based on service hours
+        const serviceCount = member?.services?.length || 0;
+        const uptime = calculateSiteUptime(allDowntime, monthStart, monthEnd, serviceCount);
         
-        // Calculate total site downtime hours
-        const siteDowntime = allDowntime.filter(event => event.check_type === 'site');
-        let totalDowntimeHours = 0;
-        
-        // Calculate downtime hours with overlap handling
-        const sortedEvents = siteDowntime.sort((a, b) => 
-          new Date(a.start_time) - new Date(b.start_time)
-        );
-        
-        const mergedPeriods = [];
-        
-        sortedEvents.forEach(event => {
-          const eventStart = new Date(event.start_time);
-          // For ongoing events, use current time as end
-          const eventEnd = event.end_time ? new Date(event.end_time) : currentTime;
-          
-          const start = eventStart < monthStart ? monthStart : eventStart;
-          const end = eventEnd > monthEnd ? monthEnd : eventEnd;
-          
-          if (start < end) {
-            if (mergedPeriods.length === 0 || start > mergedPeriods[mergedPeriods.length - 1].end) {
-              mergedPeriods.push({ start, end });
-            } else {
-              const lastPeriod = mergedPeriods[mergedPeriods.length - 1];
-              lastPeriod.end = end > lastPeriod.end ? end : lastPeriod.end;
-            }
-          }
-        });
-        
-        mergedPeriods.forEach(period => {
-          totalDowntimeHours += (period.end - period.start) / (1000 * 60 * 60);
-        });
+        // Calculate total downtime hours (keeping this for display)
+        const totalHours = (monthEnd - monthStart) / (1000 * 60 * 60);
+        const totalServiceHours = totalHours * serviceCount;
+        const downtimeServiceHours = totalServiceHours * (1 - uptime / 100);
+        const avgDowntimeHours = serviceCount > 0 ? downtimeServiceHours / serviceCount : 0;
         
         months.push({
           month: monthStart.toLocaleDateString('en-US', { month: 'short' }),
           year: monthStart.getFullYear(),
           uptime: uptime,
-          downtime: totalDowntimeHours
+          downtime: avgDowntimeHours
         });
       } catch (error) {
         console.error('Error calculating monthly uptime:', error);
@@ -607,7 +598,7 @@ const MemberDetail = () => {
                         {month.uptime.toFixed(2)}%
                       </div>
                       <div className="month-status">
-                        {month.downtime > 0 ? `${month.downtime.toFixed(1)}h down` : 'No downtime'}
+                        {month.downtime > 0 ? `${month.downtime.toFixed(1)}h avg down` : 'No downtime'}
                       </div>
                     </div>
                   ))}
