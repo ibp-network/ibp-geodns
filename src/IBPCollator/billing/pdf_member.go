@@ -155,8 +155,8 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		memberLogoPath = downloadMemberLogo(memberName, memberConfig.Details.Logo, c.Local.System.WorkDir)
 	}
 
-	// Single large member information card
-	drawMemberCard(pdf, 10, 35, 190, 65)
+	// Member information card - reduced height
+	drawMemberCard(pdf, 10, 35, 190, 63) // Reduced from 65 to 63 (about 3% reduction)
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(15, 40)
 	pdf.CellFormat(120, 8, "Member Information", "", 1, "L", false, 0, "")
@@ -241,6 +241,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 			y += 6
 		}
 
+		// Add IPv6
 		if memberConfig.Service.ServiceIPv6 != "" {
 			pdf.SetXY(15, y)
 			pdf.CellFormat(30, 5, "IPv6:", "", 0, "L", false, 0, "")
@@ -252,15 +253,15 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		}
 	}
 
-	// DNS usage statistics at bottom of member info box
-	pdf.SetXY(15, 90)
+	// DNS usage statistics - moved up to align with other text
+	pdf.SetXY(15, 88) // Changed from 90 to 88
 	pdf.CellFormat(30, 5, "DNS Requests:", "", 0, "L", false, 0, "")
 	pdf.SetX(45)
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.CellFormat(30, 5, fmt.Sprintf("%d", stats.RequestCount), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
 
-	pdf.SetXY(80, 90)
+	pdf.SetXY(80, 88) // Changed from 90 to 88
 	pdf.CellFormat(30, 5, "% of Network:", "", 0, "L", false, 0, "")
 	pdf.SetX(110)
 	pdf.SetFont("Helvetica", "B", 10)
@@ -271,9 +272,9 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.CellFormat(30, 5, fmt.Sprintf("%.2f%%", percentage), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
 
-	// Create separate Overview box below member information - smaller height
-	y = 105
-	drawMemberCard(pdf, 10, y, 190, 55) // Reduced from 70 to 55
+	// Create separate Overview box below member information - reduced height
+	y = 103                             // Adjusted from 105 due to member box reduction
+	drawMemberCard(pdf, 10, y, 190, 52) // Reduced from 55 to 52 (about 5% reduction)
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(15, y+5)
 	pdf.CellFormat(100, 8, "Overview", "", 1, "L", false, 0, "")
@@ -281,7 +282,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetFont("Helvetica", "", 10)
 	y += 15
 
-	// Calculate totals for overview
+	// Calculate totals for overview - FIXED calculation
 	totalBilled := 0.0
 	totalServices := 0
 	totalDowntimeHours := 0.0
@@ -299,12 +300,12 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		totalDowntimeHours += breakdown.HoursDown
 		totalServiceHours += breakdown.HoursTotal
 
-		// Get resource totals
+		// Get resource totals - FIXED: no conversion needed for bandwidth
 		if svcConfig, exists := c.Services[svcName]; exists {
 			totalCores += svcConfig.Resources.Cores * float64(svcConfig.Resources.Nodes)
 			totalMemory += svcConfig.Resources.Memory * float64(svcConfig.Resources.Nodes)
 			totalDisk += svcConfig.Resources.Disk * float64(svcConfig.Resources.Nodes)
-			totalBandwidth += svcConfig.Resources.Bandwidth * float64(svcConfig.Resources.Nodes) * 1024 // Convert TB to GB
+			totalBandwidth += svcConfig.Resources.Bandwidth * float64(svcConfig.Resources.Nodes) // Already in GB
 		}
 	}
 
@@ -405,7 +406,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetFont("Helvetica", "", 10)
 
 	// Service details grouped by level
-	y = 165 // Start after overview box which ends around 160
+	y = 160 // Start after overview box which ends around 160
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(10, y)
 	pdf.CellFormat(190, 8, "Service Details", "", 1, "L", false, 0, "")
