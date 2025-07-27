@@ -410,7 +410,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetFont("Helvetica", "", 10)
 
 	// Service details grouped by level
-	y = 151
+	y = 155
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(10, y)
 	pdf.CellFormat(190, 8, "Service Details", "", 1, "L", false, 0, "")
@@ -590,7 +590,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 				y = 35
 			}
 			pdf.SetFont("Helvetica", "B", 10)
-			pdf.SetXY(110, y)
+			pdf.SetXY(110, y-2)
 			pdf.CellFormat(60, 6, fmt.Sprintf("Level %d Total:", level), "", 0, "R", false, 0, "")
 			pdf.CellFormat(30, 6, fmt.Sprintf("$%.2f", levelTotal), "", 1, "R", false, 0, "")
 			y += 10
