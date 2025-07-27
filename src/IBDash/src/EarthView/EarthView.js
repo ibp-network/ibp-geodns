@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Globe from 'globe.gl';
 import ApiHelper from '../components/ApiHelper/ApiHelper';
 import './EarthView.css';
 
 const EarthView = () => {
+  const navigate = useNavigate();
   const globeRef = useRef();
   const containerRef = useRef();
   const globeInstance = useRef(null);
@@ -19,17 +21,17 @@ const EarthView = () => {
     loadDowntimeData();
   }, []);
 
-  // Handle ESC key to close pinned panel
+  // Handle ESC key to close panel
   useEffect(() => {
     const handleKeyPress = (e) => {
-      if (e.key === 'Escape' && pinnedMember) {
+      if (e.key === 'Escape') {
         setPinnedMember(null);
         setHoveredMember(null);
       }
     };
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [pinnedMember]);
+  }, []);
 
   const loadMembersData = async () => {
     try {
@@ -211,20 +213,19 @@ const EarthView = () => {
         el.style.pointerEvents = 'auto';
         el.style.cursor = 'pointer';
         
-        // Handle mouse events - always show popup on hover
+        // Handle mouse events - show popup on hover and keep it visible
         el.onmouseenter = () => {
           setHoveredMember(d);
         };
         
+        // Don't hide on mouse leave - panel stays visible
         el.onmouseleave = () => {
-          if (!pinnedMember) {
-            setHoveredMember(null);
-          }
+          // Do nothing - keep panel visible
         };
         
         el.onclick = () => {
-          setPinnedMember(d);
-          setHoveredMember(d);
+          // Navigate to member detail page on click
+          navigate(`/members/${d.name}`);
         };
 
         return el;
@@ -315,7 +316,7 @@ const EarthView = () => {
       }
       globeInstance.current = null;
     };
-  }, [members, downtime]);
+  }, [members, downtime, navigate]);
 
   const stats = {
     total: members.length,
@@ -460,15 +461,6 @@ const EarthView = () => {
                     </div>
                   </div>
                 )}
-
-                {getMemberOutages(displayMember.name).length === 0 && (
-                  <div className="info-section">
-                    <div className="no-issues">
-                      <div className="no-issues-icon">✔</div>
-                      <div>All systems operational</div>
-                    </div>
-                  </div>
-                )}
               </div>
             </>
           )}
@@ -482,7 +474,7 @@ const EarthView = () => {
           </div>
           <div className="control-item">
             <span className="control-icon">👆</span>
-            <span>Click member to pin details</span>
+            <span>Click member for details</span>
           </div>
           <div className="control-item">
             <span className="control-icon">🔍</span>
