@@ -53,26 +53,76 @@ const EarthView = () => {
     }
   };
 
-  // Calculate member health percentage based on services online
+  // Get unique services that are down for a member
+  const getDownServices = (memberName) => {
+    const member = members.find(m => m.name === memberName);
+    if (!member || !member.services || member.services.length === 0) return new Set();
+    
+    const memberDowntime = downtime.filter(dt => dt.member_name === memberName);
+    const downServices = new Set();
+    
+    memberDowntime.forEach(dt => {
+      // Normalize the domain/endpoint to service name
+      const serviceName = getServiceNameFromDowntime(dt, member.services);
+      if (serviceName) {
+        downServices.add(serviceName);
+      }
+    });
+    
+    return downServices;
+  };
+
+  // Extract service name from downtime event
+  const getServiceNameFromDowntime = (dt, services) => {
+    if (!services || services.length === 0) return null;
+    
+    // Check each service to see if the downtime matches
+    for (const service of services) {
+      const serviceLower = service.toLowerCase();
+      
+      // Check domain name
+      if (dt.domain_name) {
+        const domainLower = dt.domain_name.toLowerCase();
+        // Remove common suffixes to normalize
+        const normalizedDomain = domainLower
+          .replace('.dotters.network', '')
+          .replace('.ibp.network', '');
+        
+        if (normalizedDomain.includes(serviceLower) || 
+            serviceLower.includes(normalizedDomain)) {
+          return service;
+        }
+      }
+      
+      // Check endpoint
+      if (dt.endpoint) {
+        const endpointLower = dt.endpoint.toLowerCase();
+        // Remove protocol and path
+        const normalizedEndpoint = endpointLower
+          .replace(/^(https?:\/\/)?(wss?:\/\/)?/, '')
+          .replace(/\/.*$/, '')
+          .replace('.dotters.network', '')
+          .replace('.ibp.network', '');
+        
+        if (normalizedEndpoint.includes(serviceLower) || 
+            serviceLower.includes(normalizedEndpoint)) {
+          return service;
+        }
+      }
+    }
+    
+    return null;
+  };
+
+  // Calculate member health percentage based on unique services online
   const getMemberHealth = (memberName) => {
     const member = members.find(m => m.name === memberName);
     if (!member || !member.services || member.services.length === 0) return 100;
     
     const totalServices = member.services.length;
-    const memberDowntime = downtime.filter(dt => dt.member_name === memberName);
-    
-    // Get unique services that are down
-    const downServices = new Set();
-    memberDowntime.forEach(dt => {
-      member.services.forEach(service => {
-        if ((dt.domain_name && dt.domain_name.includes(service.toLowerCase())) ||
-            (dt.endpoint && dt.endpoint.includes(service.toLowerCase()))) {
-          downServices.add(service);
-        }
-      });
-    });
-    
+    const downServices = getDownServices(memberName);
     const servicesOnline = totalServices - downServices.size;
+    
     return (servicesOnline / totalServices) * 100;
   };
 
@@ -83,17 +133,13 @@ const EarthView = () => {
 
   // Check if a specific service is down for a member
   const isServiceDown = (memberName, serviceName) => {
-    return downtime.some(dt =>
-      dt.member_name === memberName &&
-      (dt.domain_name?.includes(serviceName.toLowerCase()) ||
-       dt.endpoint?.includes(serviceName.toLowerCase()))
-    );
+    const downServices = getDownServices(memberName);
+    return downServices.has(serviceName);
   };
 
   // Get service status - only online or offline
   const getServiceStatus = (memberName, serviceName) => {
-    const hasOutage = isServiceDown(memberName, serviceName);
-    return hasOutage ? 'offline' : 'online';
+    return isServiceDown(memberName, serviceName) ? 'offline' : 'online';
   };
 
   // Calculate total downtime hours
@@ -140,7 +186,6 @@ const EarthView = () => {
       .htmlElement(d => {
         const el = document.createElement('div');
         el.className = 'member-marker';
-
         const health = getMemberHealth(d.name);
         const status = health === 100 ? 'operational' : health >= 50 ? 'degraded' : 'offline';
 
@@ -165,19 +210,18 @@ const EarthView = () => {
 
         el.style.pointerEvents = 'auto';
         el.style.cursor = 'pointer';
-
+        
         // Handle mouse events - always show popup on hover
         el.onmouseenter = () => {
           setHoveredMember(d);
-          setPinnedMember(null); // Clear any pinned member on new hover
         };
-
+        
         el.onmouseleave = () => {
           if (!pinnedMember) {
             setHoveredMember(null);
           }
         };
-
+        
         el.onclick = () => {
           setPinnedMember(d);
           setHoveredMember(d);
@@ -193,15 +237,14 @@ const EarthView = () => {
       for (let j = i + 1; j < members.length; j++) {
         const health1 = getMemberHealth(members[i].name);
         const health2 = getMemberHealth(members[j].name);
-
+        
         // Calculate connection probability based on combined health
         const connectionProbability = (health1 + health2) / 200;
-
+        
         if (Math.random() < connectionProbability * 0.8) {
           // Determine arc color based on average health
           const avgHealth = (health1 + health2) / 2;
           let color;
-
           if (avgHealth >= 80) {
             color = ['rgba(16, 185, 129, 0.6)', 'rgba(16, 185, 129, 0.3)']; // Green
           } else if (avgHealth >= 50) {
@@ -209,7 +252,7 @@ const EarthView = () => {
           } else {
             color = ['rgba(239, 68, 68, 0.6)', 'rgba(239, 68, 68, 0.3)']; // Red
           }
-
+          
           arcs.push({
             startLat: members[i].latitude,
             startLng: members[i].longitude,
@@ -267,7 +310,6 @@ const EarthView = () => {
     // Cleanup function
     return () => {
       window.removeEventListener('resize', handleResize);
-
       if (globeInstance.current && globeInstance.current._destructor) {
         globeInstance.current._destructor();
       }
@@ -303,7 +345,7 @@ const EarthView = () => {
         <div className="globe-wrapper">
           <div ref={globeRef} className="globe"></div>
         </div>
-
+        
         {/* Header overlaid on top of globe */}
         <div className="earth-header">
           <h1>Global Infrastructure Map</h1>
@@ -331,9 +373,6 @@ const EarthView = () => {
           {displayMember && (
             <>
               <div className="panel-close-btn" onClick={handleClosePanel}>✕</div>
-              {pinnedMember && (
-                <div className="panel-hint">ESC TO CLOSE</div>
-              )}
               <div className="panel-header">
                 {displayMember.logo ? (
                   <img src={displayMember.logo} alt={displayMember.name} className="panel-logo" />
@@ -347,7 +386,6 @@ const EarthView = () => {
                   <div className="panel-region">{displayMember.region}</div>
                 </div>
               </div>
-
               <div className="panel-content">
                 <div className="info-section">
                   <h3 className="section-title">Member Information</h3>
@@ -426,7 +464,7 @@ const EarthView = () => {
                 {getMemberOutages(displayMember.name).length === 0 && (
                   <div className="info-section">
                     <div className="no-issues">
-                      <div className="no-issues-icon">✓</div>
+                      <div className="no-issues-icon">✔</div>
                       <div>All systems operational</div>
                     </div>
                   </div>
