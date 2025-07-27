@@ -271,12 +271,13 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.CellFormat(30, 5, fmt.Sprintf("%.2f%%", percentage), "", 0, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
 
-	// Create separate Overview box below member information
+	// Create separate Overview box below member information - smaller height
 	y = 105
-	drawMemberCard(pdf, 10, y, 190, 70)
+	drawMemberCard(pdf, 10, y, 190, 55) // Reduced from 70 to 55
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(15, y+5)
 	pdf.CellFormat(100, 8, "Overview", "", 1, "L", false, 0, "")
+
 	pdf.SetFont("Helvetica", "", 10)
 	y += 15
 
@@ -307,6 +308,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 		}
 	}
 
+	// Calculate overall uptime percentage
 	totalUptime := 100.0
 	if totalServiceHours > 0 {
 		totalUptime = ((totalServiceHours - totalDowntimeHours) / totalServiceHours) * 100.0
@@ -317,7 +319,6 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	for _, baseCost := range memberCost.ServiceCosts {
 		memberBaseTotal += baseCost
 	}
-
 	slaPenalty := memberBaseTotal - totalBilled
 
 	// First row - financial
@@ -326,8 +327,8 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetX(50)
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.CellFormat(30, 5, fmt.Sprintf("$%.2f", totalBilled), "", 0, "L", false, 0, "")
-
 	pdf.SetFont("Helvetica", "", 10)
+
 	pdf.SetXY(80, y)
 	pdf.CellFormat(35, 5, "SLA Credits:", "", 0, "L", false, 0, "")
 	pdf.SetX(115)
@@ -349,8 +350,8 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetX(50)
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.CellFormat(30, 5, fmt.Sprintf("%d", totalServices), "", 0, "L", false, 0, "")
-
 	pdf.SetFont("Helvetica", "", 10)
+
 	pdf.SetXY(80, y)
 	pdf.CellFormat(35, 5, "Avg Uptime:", "", 0, "L", false, 0, "")
 	pdf.SetX(115)
@@ -378,8 +379,8 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetX(40)
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.CellFormat(30, 5, fmt.Sprintf("%.1f", totalCores), "", 0, "L", false, 0, "")
-
 	pdf.SetFont("Helvetica", "", 10)
+
 	pdf.SetXY(80, y)
 	pdf.CellFormat(25, 5, "Memory:", "", 0, "L", false, 0, "")
 	pdf.SetX(105)
@@ -394,42 +395,17 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	pdf.SetX(40)
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.CellFormat(30, 5, fmt.Sprintf("%.1f GB", totalDisk), "", 0, "L", false, 0, "")
-
 	pdf.SetFont("Helvetica", "", 10)
+
 	pdf.SetXY(80, y)
 	pdf.CellFormat(25, 5, "Bandwidth:", "", 0, "L", false, 0, "")
 	pdf.SetX(105)
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.CellFormat(40, 5, fmt.Sprintf("%.1f GB", totalBandwidth), "", 1, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
-	y += 4
-
-	// Another separator
-	pdf.SetDrawColor(200, 200, 200)
-	pdf.Line(15, y, 145, y)
-	pdf.SetDrawColor(0, 0, 0)
-	y += 4
-
-	pdf.SetXY(15, y)
-	pdf.CellFormat(30, 5, "DNS Requests:", "", 0, "L", false, 0, "")
-	pdf.SetX(45)
-	pdf.SetFont("Helvetica", "B", 10)
-	pdf.CellFormat(30, 5, fmt.Sprintf("%d", stats.RequestCount), "", 0, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 10)
-
-	pdf.SetXY(80, y)
-	pdf.CellFormat(30, 5, "% of Network:", "", 0, "L", false, 0, "")
-	pdf.SetX(110)
-	pdf.SetFont("Helvetica", "B", 10)
-	percentage = 0.0
-	if totalRequests > 0 {
-		percentage = float64(stats.RequestCount) / float64(totalRequests) * 100.0
-	}
-	pdf.CellFormat(30, 5, fmt.Sprintf("%.2f%%", percentage), "", 0, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 10)
 
 	// Service details grouped by level
-	y = 180 // Start after overview box which ends around 175
+	y = 165 // Start after overview box which ends around 160
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(10, y)
 	pdf.CellFormat(190, 8, "Service Details", "", 1, "L", false, 0, "")
@@ -506,12 +482,13 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 			if svcConfig, exists := c.Services[svcName]; exists {
 				pdf.SetXY(15, serviceY)
 				pdf.SetTextColor(100, 100, 100)
-				resourceText := fmt.Sprintf("Resources: %d nodes, %.1f cores, %.1f GB RAM, %.1f GB disk, %.1f TB bandwidth",
+				bandwidthGB := svcConfig.Resources.Bandwidth * 1024 // Convert TB to GB
+				resourceText := fmt.Sprintf("Resources: %d nodes, %.1f cores, %.1f GB RAM, %.1f GB disk, %.1f GB bandwidth",
 					svcConfig.Resources.Nodes,
 					svcConfig.Resources.Cores,
 					svcConfig.Resources.Memory,
 					svcConfig.Resources.Disk,
-					svcConfig.Resources.Bandwidth)
+					bandwidthGB)
 				pdf.CellFormat(180, 4, resourceText, "", 1, "L", false, 0, "")
 				pdf.SetTextColor(0, 0, 0)
 				serviceY += 5
@@ -624,7 +601,6 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 	drawMemberCard(pdf, 10, y, 190, 20)
 	pdf.SetFillColor(30, 30, 30)
 	pdf.Rect(10, y, 190, 20, "F")
-
 	pdf.SetTextColor(255, 255, 255)
 	pdf.SetFont("Helvetica", "B", 12)
 	pdf.SetXY(15, y+7)
@@ -643,7 +619,6 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 // getServiceDowntimeEvents retrieves downtime events for a specific service
 func getServiceDowntimeEvents(memberName, serviceName string, month time.Time) []DowntimeEvent {
 	events := []DowntimeEvent{}
-
 	if data2.DB == nil {
 		return events
 	}
@@ -667,10 +642,24 @@ func getServiceDowntimeEvents(memberName, serviceName string, month time.Time) [
 
 	startTime := month
 	endTime := month.AddDate(0, 1, 0).Add(-time.Second)
+	now := time.Now().UTC()
 
-	// Build domain list for SQL IN clause
-	domainList := "('" + strings.Join(domains, "','") + "')"
+	// If calculating for current or future month, use current time as end
+	if endTime.After(now) {
+		endTime = now
+	}
 
+	// Build parameterized query with proper placeholders
+	placeholders := make([]string, len(domains))
+	args := make([]interface{}, 0, len(domains)+4)
+	args = append(args, endTime, memberName)
+	for i, domain := range domains {
+		placeholders[i] = "?"
+		args = append(args, domain)
+	}
+	args = append(args, endTime, startTime)
+
+	// Safe query construction with parameterized inputs
 	query := fmt.Sprintf(`
 		SELECT 
 			check_type,
@@ -678,20 +667,23 @@ func getServiceDowntimeEvents(memberName, serviceName string, month time.Time) [
 			COALESCE(domain_name, '') as domain_name,
 			COALESCE(endpoint, '') as endpoint,
 			start_time,
-			COALESCE(end_time, ?) as end_time,
+			CASE 
+				WHEN end_time IS NULL THEN ?
+				ELSE end_time 
+			END as end_time,
 			COALESCE(error, '') as error,
 			COALESCE(vote_data, '') as vote_data,
 			is_ipv6
 		FROM member_events
 		WHERE member_name = ?
 		AND status = 0
-		AND domain_name IN %s
+		AND domain_name IN (%s)
 		AND start_time < ?
 		AND (end_time IS NULL OR end_time > ?)
 		ORDER BY start_time DESC
-	`, domainList)
+	`, strings.Join(placeholders, ","))
 
-	rows, err := data2.DB.Query(query, endTime, memberName, endTime, startTime)
+	rows, err := data2.DB.Query(query, args...)
 	if err != nil {
 		log.Log(log.Error, "[billing] Failed to query service downtime events: %v", err)
 		return events
@@ -783,7 +775,6 @@ func formatDuration(d time.Duration) string {
 // getMemberDowntimeEvents retrieves downtime events for a member in the given month
 func getMemberDowntimeEvents(memberName string, month time.Time) []DowntimeEvent {
 	events := []DowntimeEvent{}
-
 	if data2.DB == nil {
 		return events
 	}

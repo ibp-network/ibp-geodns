@@ -34,7 +34,7 @@ type ServiceCost struct {
 	Total       float64
 }
 
-// Summary keeps both perspectives together (no mutex – read-only snapshot).
+// Summary keeps both perspectives together (no mutex — read-only snapshot).
 type Summary struct {
 	Members  map[string]MemberCost
 	Services map[string]ServiceCost
@@ -177,7 +177,7 @@ func refresh(verbose bool) {
 		regionKey := strings.ToLower(strings.TrimSpace(mem.Location.Region))
 		price, ok := priceByRegion[regionKey]
 		if !ok {
-			log.Log(log.Warn, "[billing] region %q has no pricing entry – member %s skipped", mem.Location.Region, memName)
+			log.Log(log.Warn, "[billing] region %q has no pricing entry — member %s skipped", mem.Location.Region, memName)
 			continue
 		}
 
@@ -190,7 +190,7 @@ func refresh(verbose bool) {
 			for _, svcName := range svcList {
 				svc, exists := svcByName[strings.ToLower(strings.TrimSpace(svcName))]
 				if !exists {
-					log.Log(log.Warn, "[billing] unknown service %q referenced by member %s – skipped", svcName, memName)
+					log.Log(log.Warn, "[billing] unknown service %q referenced by member %s — skipped", svcName, memName)
 					continue
 				}
 
@@ -222,7 +222,7 @@ func refresh(verbose bool) {
 	billingStore.Unlock()
 
 	duration := time.Since(start).Round(time.Millisecond)
-	log.Log(log.Info, "[billing] refresh complete – %d members, %d services, in %s",
+	log.Log(log.Info, "[billing] refresh complete — %d members, %d services, in %s",
 		len(newMemberCosts), len(newServiceCosts), duration)
 
 	if verbose {
@@ -238,7 +238,7 @@ func generateServiceCostPDF() {
 	conf := cfg.GetConfig()
 	tmpDir := resolveTempDir(conf)
 	if tmpDir == "" {
-		log.Log(log.Warn, "[billing] tmp directory not configured – service cost PDF skipped")
+		log.Log(log.Warn, "[billing] tmp directory not configured — service cost PDF skipped")
 		return
 	}
 
@@ -269,7 +269,7 @@ func generateMonthlyBillingPDF() {
 	conf := cfg.GetConfig()
 	tmpDir := resolveTempDir(conf)
 	if tmpDir == "" {
-		log.Log(log.Warn, "[billing] tmp directory not configured – member billing PDF skipped")
+		log.Log(log.Warn, "[billing] tmp directory not configured — member billing PDF skipped")
 		return
 	}
 
@@ -286,7 +286,8 @@ func generateMonthlyBillingPDF() {
 	sla, err := CalculateSLAAdjustments(billingMonth, &snap)
 	if err != nil {
 		log.Log(log.Error, "[billing] failed SLA calculation: %v", err)
-		return
+		// Continue anyway with empty SLA data
+		sla = make(SLASummary)
 	}
 
 	// Log members not meeting SLA
@@ -330,18 +331,15 @@ func costForServiceInstance(res cfg.Resources, price cfg.IaasPricing) float64 {
 	if res.Nodes == 0 {
 		return 0
 	}
-
 	perNode := (float64(res.Cores) * price.Cores) +
 		(float64(res.Memory) * price.Memory) +
 		(float64(res.Disk) * price.Disk) +
 		(float64(res.Bandwidth) * price.Bandwidth)
-
 	return perNode * float64(res.Nodes)
 }
 
 func logDetails(memCosts map[string]MemberCost, svcCosts map[string]ServiceCost) {
 	log.Log(log.Info, "[billing] ---------------------- per member cost breakdown ----------------------")
-
 	memberNames := make([]string, 0, len(memCosts))
 	for n := range memCosts {
 		memberNames = append(memberNames, n)
@@ -350,21 +348,18 @@ func logDetails(memCosts map[string]MemberCost, svcCosts map[string]ServiceCost)
 
 	for _, m := range memberNames {
 		mc := memCosts[m]
-		log.Log(log.Info, "[billing] %s – $%.2f", mc.MemberName, mc.Total)
-
+		log.Log(log.Info, "[billing] %s — $%.2f", mc.MemberName, mc.Total)
 		svcNames := make([]string, 0, len(mc.ServiceCosts))
 		for s := range mc.ServiceCosts {
 			svcNames = append(svcNames, s)
 		}
 		sort.Strings(svcNames)
-
 		for _, s := range svcNames {
-			log.Log(log.Info, "[billing]   • %s – $%.2f", s, mc.ServiceCosts[s])
+			log.Log(log.Info, "[billing]   • %s — $%.2f", s, mc.ServiceCosts[s])
 		}
 	}
 
 	log.Log(log.Info, "[billing] ---------------------- per service cost breakdown --------------------")
-
 	serviceNames := make([]string, 0, len(svcCosts))
 	for s := range svcCosts {
 		serviceNames = append(serviceNames, s)
@@ -373,16 +368,14 @@ func logDetails(memCosts map[string]MemberCost, svcCosts map[string]ServiceCost)
 
 	for _, s := range serviceNames {
 		sc := svcCosts[s]
-		log.Log(log.Info, "[billing] %s – $%.2f", sc.ServiceName, sc.Total)
-
+		log.Log(log.Info, "[billing] %s — $%.2f", sc.ServiceName, sc.Total)
 		memNames := make([]string, 0, len(sc.MemberCosts))
 		for m := range sc.MemberCosts {
 			memNames = append(memNames, m)
 		}
 		sort.Strings(memNames)
-
 		for _, m := range memNames {
-			log.Log(log.Info, "[billing]   • %s – $%.2f", m, sc.MemberCosts[m])
+			log.Log(log.Info, "[billing]   • %s — $%.2f", m, sc.MemberCosts[m])
 		}
 	}
 }
