@@ -278,7 +278,7 @@ func writeMemberPDF(memberName string, sum *Summary, sla SLASummary, outDir stri
 
 	// Create separate Overview box below member information - reduced height
 	y = 103
-	drawMemberCard(pdf, 10, y, 190, 52)
+	drawMemberCard(pdf, 10, y, 190, 46)
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(15, y+5)
 	pdf.CellFormat(100, 8, "Overview", "", 1, "L", false, 0, "")
