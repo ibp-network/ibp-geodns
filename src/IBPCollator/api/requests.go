@@ -249,14 +249,6 @@ func handleRequestsByService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For service filtering, we need to handle both service names and domains
-	// since the API uses domains in the database
-	serviceFilter := filters
-	if len(filters.Services) > 0 {
-		// Convert service names to domains if needed
-		serviceFilter.Domains = append(serviceFilter.Domains, convertServicesToDomains(filters.Services)...)
-	}
-
 	baseQuery := `
 		SELECT 
 			date,
@@ -269,8 +261,37 @@ func handleRequestsByService(w http.ResponseWriter, r *http.Request) {
 
 	baseArgs := []interface{}{start.Format("2006-01-02"), end.Format("2006-01-02")}
 
-	// Build filter conditions
-	whereClause, args := buildFilterConditions(serviceFilter, baseArgs)
+	// Build filter conditions but don't use service filter directly
+	// Instead, convert services to domain patterns
+	whereClause := ""
+	args := baseArgs
+
+	// Handle service filtering specially
+	if len(filters.Services) > 0 {
+		// Convert service names to domain patterns
+		domainConditions := []string{}
+		for _, service := range filters.Services {
+			// Create pattern for domain matching (case-insensitive)
+			domainConditions = append(domainConditions, "LOWER(domain_name) LIKE LOWER(?)")
+			args = append(args, "%"+strings.ReplaceAll(strings.ToLower(service), " ", "-")+"%")
+		}
+		whereClause += " AND (" + strings.Join(domainConditions, " OR ") + ")"
+	}
+
+	// Add other filters
+	otherFilters := RequestFilter{
+		Countries: filters.Countries,
+		ASNs:      filters.ASNs,
+		Networks:  filters.Networks,
+		Members:   filters.Members,
+		Domains:   filters.Domains,
+	}
+	otherWhere, otherArgs := buildFilterConditions(otherFilters, []interface{}{})
+	if otherWhere != "" {
+		whereClause += otherWhere
+		args = append(args, otherArgs...)
+	}
+
 	query := baseQuery + whereClause + " GROUP BY date, domain_name ORDER BY date, total_hits DESC"
 
 	rows, err := data2.DB.Query(query, args...)
