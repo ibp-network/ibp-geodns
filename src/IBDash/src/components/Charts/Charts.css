@@ -22,6 +22,9 @@
   border-radius: 8px;
   padding: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  max-width: 300px;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
 .tooltip-item {
@@ -42,6 +45,12 @@
   color: var(--text-primary);
 }
 
+.tooltip-separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 8px 0;
+}
+
 /* Recharts customization */
 .recharts-cartesian-grid-horizontal line,
 .recharts-cartesian-grid-vertical line {
@@ -59,4 +68,23 @@
 .recharts-pie-label-text {
   font-size: 12px;
   fill: var(--text-primary);
+}
+
+/* Custom scrollbar for tooltip */
+.custom-tooltip::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-tooltip::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+}
+
+.custom-tooltip::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.custom-tooltip::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }

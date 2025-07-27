@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './DataTable.css';
 
-const DataTable = ({ data, type }) => {
+const DataTable = ({ data, type, aggregateView }) => {
   const [sortField, setSortField] = useState('requests');
   const [sortOrder, setSortOrder] = useState('desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -16,7 +16,43 @@ const DataTable = ({ data, type }) => {
     }
   };
 
-  const sortedData = [...data].sort((a, b) => {
+  // Aggregate data when aggregateView is true
+  const processedData = aggregateView ? aggregateData() : data;
+
+  function aggregateData() {
+    const aggregated = {};
+
+    data.forEach(item => {
+      let key;
+      switch (type) {
+        case 'country':
+          key = `${item.country}|${item.country_name}`;
+          break;
+        case 'asn':
+          key = `${item.asn}|${item.network}`;
+          break;
+        case 'service':
+          key = `${item.service}|${item.domain}`;
+          break;
+        case 'member':
+          key = item.member;
+          break;
+        default:
+          key = '';
+      }
+
+      if (!aggregated[key]) {
+        aggregated[key] = { ...item, requests: 0 };
+        // Remove date for aggregated view
+        delete aggregated[key].date;
+      }
+      aggregated[key].requests += item.requests;
+    });
+
+    return Object.values(aggregated);
+  }
+
+  const sortedData = [...processedData].sort((a, b) => {
     const aVal = a[sortField] || 0;
     const bVal = b[sortField] || 0;
     
@@ -34,31 +70,38 @@ const DataTable = ({ data, type }) => {
   const totalPages = Math.ceil(sortedData.length / itemsPerPage);
 
   const getColumns = () => {
+    const baseColumns = [];
+    
+    // Only show date column if not in aggregate view
+    if (!aggregateView) {
+      baseColumns.push({ key: 'date', label: 'Date', sortable: true });
+    }
+
     switch (type) {
       case 'country':
         return [
-          { key: 'date', label: 'Date', sortable: true },
+          ...baseColumns,
           { key: 'country', label: 'Country Code', sortable: true },
           { key: 'country_name', label: 'Country Name', sortable: true },
           { key: 'requests', label: 'Requests', sortable: true }
         ];
       case 'asn':
         return [
-          { key: 'date', label: 'Date', sortable: true },
+          ...baseColumns,
           { key: 'asn', label: 'ASN', sortable: true },
           { key: 'network', label: 'Network', sortable: true },
           { key: 'requests', label: 'Requests', sortable: true }
         ];
       case 'service':
         return [
-          { key: 'date', label: 'Date', sortable: true },
+          ...baseColumns,
           { key: 'service', label: 'Service', sortable: true },
           { key: 'domain', label: 'Domain', sortable: true },
           { key: 'requests', label: 'Requests', sortable: true }
         ];
       case 'member':
         return [
-          { key: 'date', label: 'Date', sortable: true },
+          ...baseColumns,
           { key: 'member', label: 'Member', sortable: true },
           { key: 'requests', label: 'Requests', sortable: true }
         ];
@@ -68,6 +111,11 @@ const DataTable = ({ data, type }) => {
   };
 
   const columns = getColumns();
+
+  // Reset to first page when view changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [aggregateView]);
 
   return (
     <div className="data-table-container">

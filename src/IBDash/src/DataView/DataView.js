@@ -16,6 +16,7 @@ const DataView = () => {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [aggregateView, setAggregateView] = useState(false);
 
   useEffect(() => {
     loadInitialData();
@@ -48,6 +49,7 @@ const DataView = () => {
         start: dateRange.start.toISOString().split('T')[0],
         end: dateRange.end.toISOString().split('T')[0]
       };
+
       let response;
       switch (activeTab) {
         case 'country':
@@ -65,6 +67,7 @@ const DataView = () => {
         default:
           response = { data: [] };
       }
+
       setData(response.data);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -86,7 +89,7 @@ const DataView = () => {
   };
 
   const tabs = [
-    { id: 'country', label: 'By Country', icon: '🌎' },
+    { id: 'country', label: 'By Country', icon: '🌍' },
     { id: 'asn', label: 'By ASN', icon: '🌐' },
     { id: 'service', label: 'By Service', icon: '⚡' },
     { id: 'member', label: 'By Member', icon: '👥' }
@@ -100,27 +103,12 @@ const DataView = () => {
     <div className="data-view fade-in">
       <div className="view-header">
         <h1>Data Analytics</h1>
-        <div className="date-controls">
-          <input
-            type="date"
-            value={dateRange.start.toISOString().split('T')[0]}
-            onChange={(e) => setDateRange({ ...dateRange, start: new Date(e.target.value) })}
-            className="date-input"
-          />
-          <span className="date-separator">to</span>
-          <input
-            type="date"
-            value={dateRange.end.toISOString().split('T')[0]}
-            onChange={(e) => setDateRange({ ...dateRange, end: new Date(e.target.value) })}
-            className="date-input"
-          />
-        </div>
       </div>
 
       {summary && (
         <div className="stats-grid">
           <StatsCard
-            title="Total DNS Requests"
+            title="Total Requests"
             value={summary.total_requests?.toLocaleString() || '0'}
             icon="📊"
           />
@@ -142,6 +130,35 @@ const DataView = () => {
         </div>
       )}
 
+      <div className="controls-bar">
+        <div className="date-controls">
+          <input
+            type="date"
+            value={dateRange.start.toISOString().split('T')[0]}
+            onChange={(e) => setDateRange({ ...dateRange, start: new Date(e.target.value) })}
+            className="date-input"
+          />
+          <span className="date-separator">to</span>
+          <input
+            type="date"
+            value={dateRange.end.toISOString().split('T')[0]}
+            onChange={(e) => setDateRange({ ...dateRange, end: new Date(e.target.value) })}
+            className="date-input"
+          />
+        </div>
+        <div className="view-controls">
+          <div className="aggregate-checkbox">
+            <input
+              type="checkbox"
+              id="aggregate-view"
+              checked={aggregateView}
+              onChange={(e) => setAggregateView(e.target.checked)}
+            />
+            <label htmlFor="aggregate-view">Aggregate View</label>
+          </div>
+        </div>
+      </div>
+
       <div className="data-tabs card">
         <div className="tab-header">
           {tabs.map(tab => (
@@ -155,6 +172,7 @@ const DataView = () => {
             </button>
           ))}
         </div>
+
         <div className="tab-content">
           {loading ? (
             <div className="loading-container">
@@ -164,7 +182,7 @@ const DataView = () => {
           ) : data && data.length > 0 ? (
             <>
               <Charts data={data} type={activeTab} />
-              <DataTable data={data} type={activeTab} />
+              <DataTable data={data} type={activeTab} aggregateView={aggregateView} />
             </>
           ) : (
             <p className="no-data">No data available for the selected period</p>
