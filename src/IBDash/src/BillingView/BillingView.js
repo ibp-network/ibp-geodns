@@ -121,9 +121,9 @@ const BillingView = () => {
     }
   };
 
-  const filteredMembers = members.filter(member =>
-    member.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredMembers = members
+    .filter(member => member.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const formatMonth = (year, month) => {
     const date = new Date(year, parseInt(month) - 1);

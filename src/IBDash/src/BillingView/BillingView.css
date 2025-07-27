@@ -95,7 +95,7 @@
 .members-horizontal-list {
   display: flex;
   gap: 12px;
-  overflow-x: auto;
+  flex-wrap: wrap;
   padding-bottom: 4px;
 }
 
