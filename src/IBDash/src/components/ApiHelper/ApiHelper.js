@@ -48,10 +48,15 @@ const ApiHelper = {
   fetchMemberStats: (memberName, params) => 
     api.get('/members/stats', { params: { name: memberName, ...params } }),
   
+  // Service endpoints
+  fetchServices: () => api.get('/services'),
+  fetchServicesSummary: () => api.get('/services/summary'),
+  
   // Billing endpoints
   fetchBillingBreakdown: (params) => api.get('/billing/breakdown', { params }),
   fetchBillingSummary: () => api.get('/billing/summary'),
-    // Billing PDF endpoints
+
+  // Billing PDF endpoints
   fetchBillingPDFs: (params) => api.get('/billing/pdfs', { params }),
   downloadBillingPDF: (params) => api.get('/billing/pdfs/download', { 
     params,

@@ -6,6 +6,7 @@ import DataView from './DataView/DataView';
 import EarthView from './EarthView/EarthView';
 import MemberView from './MemberView/MemberView';
 import MemberDetail from './MemberView/MemberDetail';
+import ServiceView from './ServiceView/ServiceView';
 import BillingView from './BillingView/BillingView';
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
               <Route path="/earth" element={<EarthView />} />
               <Route path="/members" element={<MemberView />} />
               <Route path="/members/:memberName" element={<MemberDetail />} />
+              <Route path="/services" element={<ServiceView />} />
               <Route path="/billing" element={<BillingView />} />
             </Routes>
           </div>

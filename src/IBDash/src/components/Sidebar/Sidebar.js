@@ -11,6 +11,7 @@ const Sidebar = () => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
+
     return () => clearInterval(timer);
   }, []);
 
@@ -20,6 +21,7 @@ const Sidebar = () => {
         setIsOpen(false);
       }
     };
+
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -42,6 +44,12 @@ const Sidebar = () => {
       path: '/members',
       icon: '👥',
       description: 'Member information and stats'
+    },
+    {
+      title: 'Service View',
+      path: '/services',
+      icon: '⚡',
+      description: 'Service catalog and details'
     },
     {
       title: 'Billing View',
