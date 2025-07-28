@@ -9,7 +9,7 @@ const Loading = ({ onAnimationComplete, dataReady, pageLevel = false, minDuratio
   const animationFrameRef = useRef(null);
 
   // GIF animation duration in milliseconds
-  const GIF_DURATION = pageLevel ? 500 : minDuration; // Shorter duration for page-level loading
+  const GIF_DURATION = pageLevel ? 100 : minDuration; // Shorter duration for page-level loading
 
   useEffect(() => {
     if (!animationError) {
