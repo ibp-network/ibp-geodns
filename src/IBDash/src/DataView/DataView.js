@@ -16,6 +16,7 @@ const DataView = () => {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [dataReady, setDataReady] = useState(false);
   const [aggregateView, setAggregateView] = useState(true);
   const [filters, setFilters] = useState({
     country: '',
@@ -51,16 +52,9 @@ const DataView = () => {
 
   useEffect(() => {
     if (!initialLoading) {
-      loadData();
-      loadSummary();
+      loadAllData();
     }
   }, [dateRange, activeTab, selectedCountries, selectedServices, selectedMembers, selectedNetworks, initialLoading]);
-
-  useEffect(() => {
-    if (!initialLoading) {
-      loadFilterOptions();
-    }
-  }, [dateRange, initialLoading]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -84,18 +78,55 @@ const DataView = () => {
 
   const loadInitialData = async () => {
     setInitialLoading(true);
+    setDataReady(false);
+    
     try {
+      // Load all data in parallel
       await Promise.all([
-        loadData(),
-        loadSummary(),
-        loadFilterOptions()
+        loadData(true),
+        loadSummary(true),
+        loadFilterOptions(true)
       ]);
+      setDataReady(true);
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      setDataReady(true);
     } finally {
-      setTimeout(() => setInitialLoading(false), 1500);
+      // Wait a bit for data ready state to propagate
+      setTimeout(() => setInitialLoading(false), 100);
     }
   };
 
-  const loadFilterOptions = async () => {
+  const loadAllData = async () => {
+    setLoading(true);
+    setDataReady(false);
+    
+    try {
+      // Load data and summary in parallel
+      await Promise.all([
+        loadData(true),
+        loadSummary(true)
+      ]);
+      
+      // Load filter options separately as it's less critical
+      loadFilterOptions(true);
+      
+      setDataReady(true);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setDataReady(true);
+    } finally {
+      // Wait a bit for data ready state to propagate
+      setTimeout(() => setLoading(false), 100);
+    }
+  };
+
+  const loadFilterOptions = async (skipLoadingState = false) => {
+    if (!skipLoadingState) {
+      setLoading(true);
+      setDataReady(false);
+    }
+    
     try {
       const params = {
         start: dateRange.start.toISOString().split('T')[0],
@@ -145,11 +176,20 @@ const DataView = () => {
       });
     } catch (error) {
       console.error('Error loading filter options:', error);
+    } finally {
+      if (!skipLoadingState) {
+        setDataReady(true);
+        setTimeout(() => setLoading(false), 100);
+      }
     }
   };
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (skipLoadingState = false) => {
+    if (!skipLoadingState) {
+      setLoading(true);
+      setDataReady(false);
+    }
+    
     try {
       const params = {
         start: dateRange.start.toISOString().split('T')[0],
@@ -191,11 +231,20 @@ const DataView = () => {
       setData(response.data);
     } catch (error) {
       console.error('Error loading data:', error);
+    } finally {
+      if (!skipLoadingState) {
+        setDataReady(true);
+        setTimeout(() => setLoading(false), 100);
+      }
     }
-    setLoading(false);
   };
 
-  const loadSummary = async () => {
+  const loadSummary = async (skipLoadingState = false) => {
+    if (!skipLoadingState) {
+      setLoading(true);
+      setDataReady(false);
+    }
+    
     try {
       const params = {
         start: dateRange.start.toISOString().split('T')[0],
@@ -206,6 +255,11 @@ const DataView = () => {
       setSummary(response.data);
     } catch (error) {
       console.error('Error loading summary:', error);
+    } finally {
+      if (!skipLoadingState) {
+        setDataReady(true);
+        setTimeout(() => setLoading(false), 100);
+      }
     }
   };
 
@@ -334,7 +388,7 @@ const DataView = () => {
 
   // Show full-screen loading for initial load or when loading data
   if (initialLoading || loading) {
-    return <Loading pageLevel={true} dataReady={!loading} />;
+    return <Loading pageLevel={true} dataReady={dataReady} minDuration={500} />;
   }
 
   return (

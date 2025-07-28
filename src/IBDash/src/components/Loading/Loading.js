@@ -7,28 +7,47 @@ const Loading = ({ onAnimationComplete, dataReady, pageLevel = false, minDuratio
   const animationRef = useRef(null);
   const startTimeRef = useRef(null);
   const animationFrameRef = useRef(null);
+  const completedRef = useRef(false);
 
-  // GIF animation duration in milliseconds
-  const GIF_DURATION = pageLevel ? 100 : minDuration; // Shorter duration for page-level loading
+  // Minimum display time to avoid flashing
+  const MIN_DISPLAY_TIME = 100;
 
   useEffect(() => {
     if (!animationError) {
       startTimeRef.current = Date.now();
+      completedRef.current = false;
       
       // Update progress bar
       const updateProgress = () => {
         const elapsed = Date.now() - startTimeRef.current;
-        const currentProgress = Math.min((elapsed / GIF_DURATION) * 100, 100);
-        setProgress(currentProgress);
-
-        if (currentProgress < 100) {
-          animationFrameRef.current = requestAnimationFrame(updateProgress);
-        } else {
-          // Animation complete
-          if (dataReady || pageLevel) {
+        
+        if (dataReady && elapsed >= MIN_DISPLAY_TIME) {
+          // If data is ready and minimum time has passed, complete immediately
+          setProgress(100);
+          if (!completedRef.current) {
+            completedRef.current = true;
             setTimeout(() => {
               if (onAnimationComplete) onAnimationComplete();
-            }, 200); // Small delay for smooth transition
+            }, 100);
+          }
+        } else if (!dataReady) {
+          // If data is not ready, show indeterminate progress
+          const fakeProgress = Math.min((elapsed / minDuration) * 90, 90); // Cap at 90%
+          setProgress(fakeProgress);
+          animationFrameRef.current = requestAnimationFrame(updateProgress);
+        } else {
+          // Data is ready but minimum time hasn't passed
+          const remainingTime = MIN_DISPLAY_TIME - elapsed;
+          const currentProgress = Math.min((elapsed / MIN_DISPLAY_TIME) * 100, 100);
+          setProgress(currentProgress);
+          
+          if (currentProgress < 100) {
+            animationFrameRef.current = requestAnimationFrame(updateProgress);
+          } else if (!completedRef.current) {
+            completedRef.current = true;
+            setTimeout(() => {
+              if (onAnimationComplete) onAnimationComplete();
+            }, 100);
           }
         }
       };
@@ -41,16 +60,7 @@ const Loading = ({ onAnimationComplete, dataReady, pageLevel = false, minDuratio
         }
       };
     }
-  }, [animationError, dataReady, onAnimationComplete, GIF_DURATION, pageLevel]);
-
-  // Auto-proceed when data becomes ready after animation completes
-  useEffect(() => {
-    if (dataReady && progress >= 100) {
-      setTimeout(() => {
-        if (onAnimationComplete) onAnimationComplete();
-      }, 200);
-    }
-  }, [dataReady, progress, onAnimationComplete]);
+  }, [animationError, dataReady, onAnimationComplete, minDuration]);
 
   const loadingAnimation = '/static/imgs/ibp.gif';
 
@@ -67,7 +77,7 @@ const Loading = ({ onAnimationComplete, dataReady, pageLevel = false, minDuratio
           </div>
           <h2 className="loading-title">Infrastructure Builders Program</h2>
           <p className="loading-subtitle">
-            {pageLevel ? 'Downloading API Data...' : 'Loading dashboard...'}
+            {progress < 90 || !dataReady ? 'Downloading API Data...' : 'Almost ready...'}
           </p>
           <div className="loading-progress">
             <div 
@@ -75,9 +85,6 @@ const Loading = ({ onAnimationComplete, dataReady, pageLevel = false, minDuratio
               style={{ width: `${progress}%` }}
             />
           </div>
-          {progress >= 100 && !dataReady && !pageLevel && (
-            <p className="loading-waiting">Waiting for data...</p>
-          )}
         </>
       ) : (
         // Fallback to original loading animation if gif fails
@@ -86,7 +93,7 @@ const Loading = ({ onAnimationComplete, dataReady, pageLevel = false, minDuratio
           <div className="loading-spinner"></div>
           <h2 className="loading-title">Infrastructure Builders Program</h2>
           <p className="loading-subtitle">
-            {pageLevel ? 'Downloading API Data...' : 'Loading...'}
+            {progress < 90 || !dataReady ? 'Downloading API Data...' : 'Almost ready...'}
           </p>
           <div className="loading-progress">
             <div 
