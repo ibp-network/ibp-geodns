@@ -199,15 +199,18 @@
 }
 
 .member-status.status-operational {
-  @extend .badge.success;
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
 }
 
 .member-status.status-degraded {
-  @extend .badge.warning;
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
 }
 
 .member-status.status-offline {
-  @extend .badge.error;
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
 }
 
 .status-icon {
