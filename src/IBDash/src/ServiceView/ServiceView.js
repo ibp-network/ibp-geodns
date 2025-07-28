@@ -139,7 +139,7 @@ console.log('Network:', network);`
             className="service-search"
           />
         </div>
-        <div className="services-horizontal-list">
+        <div className="services-grid-list">
           {filteredServices.map(service => (
             <div
               key={service.name}
@@ -164,9 +164,8 @@ console.log('Network:', network);`
                 {service.display_name?.substring(0, 2).toUpperCase()}
               </div>
               <div className="service-nav-name">{service.display_name || service.name}</div>
-              <div className={`service-type-badge ${service.service_type?.toLowerCase()}`}>
-                {getServiceTypeIcon(service.service_type)}
-              </div>
+              <div className={`service-type-indicator ${service.service_type?.toLowerCase()}`} 
+                   title={getServiceTypeLabel(service.service_type)}></div>
             </div>
           ))}
         </div>

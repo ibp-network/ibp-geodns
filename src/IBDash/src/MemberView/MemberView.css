@@ -103,15 +103,23 @@
   cursor: pointer;
 }
 
+.members-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+
 .level-section {
-  margin-bottom: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .level-header {
   font-size: 20px;
   font-weight: 600;
-  margin-bottom: 20px;
   color: var(--text-secondary);
+  margin: 0;
 }
 
 .members-list {
