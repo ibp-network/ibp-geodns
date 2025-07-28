@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ApiHelper from '../components/ApiHelper/ApiHelper';
 import Loading from '../components/Loading/Loading';
+import { getDownServices, getMemberHealth, getStatusClass, getStatusIcon } from '../utils/common';
 import './MemberView.css';
 
 const MemberView = () => {
@@ -24,7 +25,6 @@ const MemberView = () => {
       ]);
       setMembers(membersRes.data);
       setDowntime(downtimeRes.data);
-      // Add delay to ensure smooth animation
       setTimeout(() => setLoading(false), 1500);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -32,67 +32,8 @@ const MemberView = () => {
     }
   };
 
-  // Convert domain name to service name
-  const domainToServiceName = (domainName) => {
-    if (!domainName) return null;
-    
-    // Remove common suffixes
-    let serviceName = domainName
-      .replace('.ibp.network', '')
-      .replace('.dotters.network', '');
-    
-    // Convert to title case with hyphens
-    serviceName = serviceName.split('-').map(part => 
-      part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
-    ).join('-');
-    
-    return serviceName;
-  };
-
-  // Get unique services that are down for a member
-  const getDownServices = (memberName, memberServices) => {
-    const memberDowntime = downtime.filter(dt => dt.member_name === memberName);
-    const downServices = new Set();
-    
-    memberDowntime.forEach(dt => {
-      // For site-level downtime, all services are affected
-      if (dt.check_type === 'site') {
-        // Add all services as down
-        memberServices.forEach(service => downServices.add(service));
-      } else if (dt.domain_name) {
-        // Convert domain to service name
-        const serviceName = domainToServiceName(dt.domain_name);
-        
-        // Find matching service in member's service list
-        const matchingService = memberServices.find(s => 
-          s.toLowerCase() === serviceName.toLowerCase()
-        );
-        
-        if (matchingService) {
-          downServices.add(matchingService);
-        }
-      }
-    });
-    
-    return downServices;
-  };
-
-  // Calculate member health percentage
-  const getMemberHealth = (member) => {
-    if (!member.services || member.services.length === 0) return 100;
-    
-    const totalServices = member.services.length;
-    const downServices = getDownServices(member.name, member.services);
-    const servicesOnline = totalServices - downServices.size;
-    
-    return (servicesOnline / totalServices) * 100;
-  };
-
-  // Get member status based on health percentage
   const getMemberStatus = (member) => {
-    const health = getMemberHealth(member);
-    
-    // Check for active site-level downtime
+    const health = getMemberHealth(member, downtime);
     const hasSiteDowntime = downtime.some(dt => 
       dt.member_name === member.name && 
       dt.check_type === 'site' && 
@@ -102,19 +43,6 @@ const MemberView = () => {
     if (health === 0 || hasSiteDowntime) return 'offline';
     if (health < 100) return 'degraded';
     return 'operational';
-  };
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'operational':
-        return '✅';
-      case 'degraded':
-        return '⚠️';
-      case 'offline':
-        return '❌';
-      default:
-        return '❓';
-    }
   };
 
   const filteredMembers = members.filter(member => {
@@ -187,9 +115,8 @@ const MemberView = () => {
             <div className="members-list">
               {levelMembers.map(member => {
                 const status = getMemberStatus(member);
-                const health = getMemberHealth(member);
-                const memberDowntime = downtime.filter(dt => dt.member_name === member.name);
-                const downServices = getDownServices(member.name, member.services || []);
+                const health = getMemberHealth(member, downtime);
+                const downServices = getDownServices(member.name, member.services || [], downtime);
                 
                 return (
                   <div

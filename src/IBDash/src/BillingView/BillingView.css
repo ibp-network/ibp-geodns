@@ -1,3 +1,5 @@
+@import '../styles/common.css';
+
 .billing-view {
   max-width: 1400px;
   margin: 0 auto;
@@ -234,15 +236,6 @@
   margin-bottom: 32px;
 }
 
-.section-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 .current-month-stats {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -270,14 +263,6 @@
   background: var(--border-color);
 }
 
-.stat-card.success::before {
-  background: var(--success);
-}
-
-.stat-card.error::before {
-  background: var(--error);
-}
-
 .stat-label {
   font-size: 11px;
   color: var(--text-secondary);
@@ -293,90 +278,15 @@
   color: var(--text-primary);
 }
 
-.stat-value.success {
-  color: var(--success);
-}
-
-.stat-value.error {
-  color: var(--error);
-}
-
-.stat-value.warning {
-  color: var(--warning);
-}
-
 /* Service Breakdown */
 .services-breakdown {
   margin-bottom: 32px;
 }
 
 .service-table {
-  width: 100%;
-  border-collapse: collapse;
   background: var(--bg-tertiary);
   border-radius: 8px;
   overflow: hidden;
-}
-
-.service-table th {
-  background: var(--bg-secondary);
-  padding: 12px;
-  text-align: left;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
-
-.service-table td {
-  padding: 12px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.service-table tr:last-child td {
-  border-bottom: none;
-}
-
-.service-table tr:hover {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.uptime-badge {
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.uptime-badge.good {
-  background: rgba(16, 185, 129, 0.1);
-  color: var(--success);
-}
-
-.uptime-badge.warning {
-  background: rgba(245, 158, 11, 0.1);
-  color: var(--warning);
-}
-
-.uptime-badge.error {
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--error);
-}
-
-.sla-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.sla-status.pass {
-  color: var(--success);
-}
-
-.sla-status.fail {
-  color: var(--error);
 }
 
 /* Historical PDFs */
@@ -439,22 +349,6 @@
 .pdf-download:hover {
   background: #2563eb;
   transform: translateY(-1px);
-}
-
-/* Loading States */
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px;
-  color: var(--text-secondary);
-}
-
-.no-data {
-  text-align: center;
-  padding: 40px;
-  color: var(--text-secondary);
 }
 
 /* Scrollbar styling for horizontal lists */

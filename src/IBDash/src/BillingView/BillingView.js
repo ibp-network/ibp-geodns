@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ApiHelper from '../components/ApiHelper/ApiHelper';
 import Loading from '../components/Loading/Loading';
+import { formatMonth, getUptimeClass } from '../utils/common';
 import './BillingView.css';
 
 const BillingView = () => {
@@ -26,11 +27,9 @@ const BillingView = () => {
 
   const loadInitialData = async () => {
     try {
-      // Load members
       const membersRes = await ApiHelper.fetchMembers();
       setMembers(membersRes.data || []);
       
-      // Load overview PDFs
       const pdfsRes = await ApiHelper.fetchBillingPDFs();
       const overviews = [];
       if (pdfsRes.data && pdfsRes.data.data) {
@@ -45,7 +44,7 @@ const BillingView = () => {
           }
         });
       }
-      setOverviewPDFs(overviews.slice(0, 6)); // Show last 6 overview PDFs
+      setOverviewPDFs(overviews.slice(0, 6));
       
       setLoading(false);
     } catch (error) {
@@ -57,7 +56,6 @@ const BillingView = () => {
   const loadMemberBilling = async (memberName) => {
     setDetailLoading(true);
     try {
-      // Get current month billing
       const now = new Date();
       const currentMonth = now.getMonth() + 1;
       const currentYear = now.getFullYear();
@@ -95,7 +93,7 @@ const BillingView = () => {
         });
       }
       
-      setHistoricalPDFs(memberPDFs.slice(0, 10)); // Show last 10 PDFs
+      setHistoricalPDFs(memberPDFs.slice(0, 10));
     } catch (error) {
       console.error('Error loading member PDFs:', error);
     }
@@ -131,17 +129,6 @@ const BillingView = () => {
     .filter(member => member.name.toLowerCase().includes(searchTerm.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const formatMonth = (year, month) => {
-    const date = new Date(year, parseInt(month) - 1);
-    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  };
-
-  const getUptimeClass = (uptime) => {
-    if (uptime >= 99.99) return 'good';
-    if (uptime >= 99.9) return 'warning';
-    return 'error';
-  };
-
   if (loading) {
     return <Loading pageLevel={true} dataReady={true} />;
   }
@@ -152,7 +139,6 @@ const BillingView = () => {
         <h1>Billing Management</h1>
       </div>
 
-      {/* Overview PDFs Bar */}
       <div className="overview-pdfs-bar">
         <span className="overview-label">📊 Monthly Overviews:</span>
         {overviewPDFs.map((pdf, index) => (
@@ -166,7 +152,6 @@ const BillingView = () => {
         ))}
       </div>
 
-      {/* Members Navigation Bar */}
       <div className="members-nav-bar">
         <div className="members-nav-header">
           <h2>Select Member</h2>
@@ -186,7 +171,7 @@ const BillingView = () => {
               onClick={() => setSelectedMember(member)}
             >
               {member.logo ? (
-                <img 
+                <img
                   src={member.logo} 
                   alt={member.name} 
                   className="member-logo-small"
@@ -208,7 +193,6 @@ const BillingView = () => {
         </div>
       </div>
 
-      {/* Detail Panel */}
       <div className="detail-panel">
         {selectedMember ? (
           <>
@@ -241,6 +225,7 @@ const BillingView = () => {
                 </div>
               </div>
             </div>
+
             <div className="detail-content">
               {detailLoading ? (
                 <div className="loading-container">
@@ -249,7 +234,6 @@ const BillingView = () => {
                 </div>
               ) : memberBilling ? (
                 <>
-                  {/* Current Month Section */}
                   <div className="current-month-section">
                     <h3 className="section-title">
                       <span>💵</span>
@@ -257,7 +241,6 @@ const BillingView = () => {
                     </h3>
                     
                     {memberBilling.members?.filter(m => m.name === selectedMember.name).map(member => {
-                      // Calculate site uptime
                       const totalUptime = member.services?.reduce((sum, svc) => sum + (svc.uptime_percentage || 0), 0) || 0;
                       const avgUptime = member.services?.length > 0 ? totalUptime / member.services.length : 100;
                       
@@ -292,11 +275,10 @@ const BillingView = () => {
                             </div>
                           </div>
 
-                          {/* Service Breakdown */}
                           {member.services && member.services.length > 0 && (
                             <div className="services-breakdown">
                               <h4 className="section-title">Service Breakdown</h4>
-                              <table className="service-table">
+                              <table className="service-table data-table">
                                 <thead>
                                   <tr>
                                     <th>Service</th>
@@ -313,15 +295,15 @@ const BillingView = () => {
                                       <td>{service.name}</td>
                                       <td>${service.base_cost?.toFixed(2)}</td>
                                       <td>
-                                        <span className={`uptime-badge ${getUptimeClass(service.uptime_percentage)}`}>
+                                        <span className={`badge ${getUptimeClass(service.uptime_percentage)}`}>
                                           {service.uptime_percentage?.toFixed(2)}%
                                         </span>
                                       </td>
                                       <td>${service.billed_cost?.toFixed(2)}</td>
                                       <td>${service.credits?.toFixed(2)}</td>
                                       <td>
-                                        <span className={`sla-status ${service.meets_sla ? 'pass' : 'fail'}`}>
-                                          {service.meets_sla ? '✓ PASS' : '✗ FAIL'}
+                                        <span className={`badge ${service.meets_sla ? 'success' : 'error'}`}>
+                                          {service.meets_sla ? '✔ PASS' : '✗ FAIL'}
                                         </span>
                                       </td>
                                     </tr>
@@ -335,7 +317,6 @@ const BillingView = () => {
                     })}
                   </div>
 
-                  {/* Historical PDFs */}
                   <div className="historical-section">
                     <h3 className="section-title">
                       <span>📋</span>

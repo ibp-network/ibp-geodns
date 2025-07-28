@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Globe from 'globe.gl';
 import ApiHelper from '../components/ApiHelper/ApiHelper';
+import { domainToServiceName, getDownServices, getMemberHealth, getStatusClass } from '../utils/common';
 import './EarthView.css';
 
 const EarthView = () => {
@@ -21,7 +22,6 @@ const EarthView = () => {
     loadDowntimeData();
   }, []);
 
-  // Handle ESC key to close panel
   useEffect(() => {
     const handleKeyPress = (e) => {
       if (e.key === 'Escape') {
@@ -29,7 +29,6 @@ const EarthView = () => {
         setHoveredMember(null);
       }
     };
-
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
@@ -56,197 +55,110 @@ const EarthView = () => {
     }
   };
 
-  // Convert domain name to service name
-  const domainToServiceName = (domainName) => {
-    if (!domainName) return null;
-    
-    // Remove common suffixes
-    let serviceName = domainName
-      .replace('.ibp.network', '')
-      .replace('.dotters.network', '');
-    
-    // Convert to title case with hyphens
-    serviceName = serviceName.split('-').map(part => 
-      part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
-    ).join('-');
-    
-    return serviceName;
-  };
-
-  // Get unique services that are down for a member
-  const getDownServices = (memberName) => {
-    const member = members.find(m => m.name === memberName);
-    if (!member || !member.services || member.services.length === 0) return new Set();
-    
-    const memberDowntime = downtime.filter(dt => dt.member_name === memberName);
-    const downServices = new Set();
-    
-    memberDowntime.forEach(dt => {
-      // For site-level downtime, all services are affected
-      if (dt.check_type === 'site') {
-        // Add all services as down
-        member.services.forEach(service => downServices.add(service));
-      } else if (dt.domain_name) {
-        // Convert domain to service name
-        const serviceName = domainToServiceName(dt.domain_name);
-        
-        // Find matching service in member's service list
-        const matchingService = member.services.find(s => 
-          s.toLowerCase() === serviceName.toLowerCase()
-        );
-        
-        if (matchingService) {
-          downServices.add(matchingService);
-        }
-      }
-    });
-    
-    return downServices;
-  };
-
-  // Calculate member health percentage based on unique services online
-  const getMemberHealth = (memberName) => {
-    const member = members.find(m => m.name === memberName);
-    if (!member || !member.services || member.services.length === 0) return 100;
-    
-    const totalServices = member.services.length;
-    const downServices = getDownServices(memberName);
-    const servicesOnline = totalServices - downServices.size;
-    
-    return (servicesOnline / totalServices) * 100;
-  };
-
-  // Get member outages
   const getMemberOutages = (memberName) => {
     return downtime.filter(dt => dt.member_name === memberName);
   };
 
-  // Check if a specific service is down for a member
   const isServiceDown = (memberName, serviceName) => {
-    const downServices = getDownServices(memberName);
+    const downServices = getDownServices(memberName, members.find(m => m.name === memberName)?.services || [], downtime);
     return downServices.has(serviceName);
   };
 
-  // Get service status - only online or offline
   const getServiceStatus = (memberName, serviceName) => {
     return isServiceDown(memberName, serviceName) ? 'offline' : 'online';
   };
 
-  // Calculate total downtime hours
   const getTotalDowntimeHours = (memberName) => {
     const outages = getMemberOutages(memberName);
-    // Simplified calculation - assuming each outage is approximately 1 hour
     return outages.length;
   };
 
-  // Handle close button click
   const handleClosePanel = () => {
     setPinnedMember(null);
     setHoveredMember(null);
   };
 
-// Add these styles to prevent text selection and dragging in the useEffect where globe is created
-useEffect(() => {
-  if (!containerRef.current || !globeRef.current || members.length === 0) return;
+  useEffect(() => {
+    if (!containerRef.current || !globeRef.current || members.length === 0) return;
 
-  // Clean up previous instance
-  if (globeInstance.current) {
-    if (globeInstance.current._destructor) {
-      globeInstance.current._destructor();
+    if (globeInstance.current) {
+      if (globeInstance.current._destructor) {
+        globeInstance.current._destructor();
+      }
+      globeInstance.current = null;
     }
-    globeInstance.current = null;
-  }
 
-  // Prevent default drag behavior on the container
-  const container = containerRef.current;
-  container.addEventListener('dragstart', (e) => e.preventDefault());
-  container.addEventListener('selectstart', (e) => e.preventDefault());
+    const container = containerRef.current;
+    container.addEventListener('dragstart', (e) => e.preventDefault());
+    container.addEventListener('selectstart', (e) => e.preventDefault());
 
-  // Create new globe instance
-  const globe = Globe()(globeRef.current)
-    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
-    .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
-    .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
-    .showAtmosphere(true)
-    .atmosphereColor('lightskyblue')
-    .atmosphereAltitude(0.15)
-    .pointsData(members)
-    .pointLat(d => d.latitude)
-    .pointLng(d => d.longitude)
-    .pointRadius(0) // Hide the default points
-    .pointAltitude(0)
-    .htmlElementsData(members)
-    .htmlLat(d => d.latitude)
-    .htmlLng(d => d.longitude)
-    .htmlAltitude(0.01)
-    .htmlElement(d => {
-      const el = document.createElement('div');
-      el.className = 'member-marker';
-      el.style.pointerEvents = 'auto';
-      el.style.cursor = 'pointer';
-      
-      const health = getMemberHealth(d.name);
-      const status = health === 100 ? 'operational' : health >= 50 ? 'degraded' : 'offline';
-      
-      // Calculate number of active lights (1-5)
-      const activeLights = Math.ceil(health / 20);
-      
-      // Create member marker with logo
-      el.innerHTML = `
-        <div class="marker-container ${status}">
-          ${d.logo ?
-            `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'member-logo-placeholder\\'>${d.name.substring(0, 2).toUpperCase()}</div>'" />` :
-            `<div class="member-logo-placeholder">${d.name.substring(0, 2).toUpperCase()}</div>`
-          }
-          <div class="member-name-label">${d.name}</div>
-          <div class="health-lights">
-            ${Array.from({ length: 5 }, (_, i) =>
-              `<span class="health-light ${i < activeLights ? 'active' : 'inactive'}"></span>`
-            ).join('')}
+    const globe = Globe()(globeRef.current)
+      .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+      .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+      .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
+      .showAtmosphere(true)
+      .atmosphereColor('lightskyblue')
+      .atmosphereAltitude(0.15)
+      .pointsData(members)
+      .pointLat(d => d.latitude)
+      .pointLng(d => d.longitude)
+      .pointRadius(0)
+      .pointAltitude(0)
+      .htmlElementsData(members)
+      .htmlLat(d => d.latitude)
+      .htmlLng(d => d.longitude)
+      .htmlAltitude(0.01)
+      .htmlElement(d => {
+        const el = document.createElement('div');
+        el.className = 'member-marker';
+        el.style.pointerEvents = 'auto';
+        el.style.cursor = 'pointer';
+        
+        const health = getMemberHealth(d, downtime);
+        const status = getStatusClass(health);
+        const activeLights = Math.ceil(health / 20);
+        
+        el.innerHTML = `
+          <div class="marker-container ${status}">
+            ${d.logo ?
+              `<img src="${d.logo}" alt="${d.name}" class="member-logo-marker" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'member-logo-placeholder\\'>${d.name.substring(0, 2).toUpperCase()}</div>'" />` :
+              `<div class="member-logo-placeholder">${d.name.substring(0, 2).toUpperCase()}</div>`
+            }
+            <div class="member-name-label">${d.name}</div>
+            <div class="health-lights">
+              ${Array.from({ length: 5 }, (_, i) =>
+                `<span class="health-light ${i < activeLights ? 'active' : 'inactive'}"></span>`
+              ).join('')}
+            </div>
           </div>
-        </div>
-      `;
-      
-      // Handle mouse events - show popup on hover and keep it visible
-      el.onmouseenter = () => {
-        setHoveredMember(d);
-      };
-      
-      // Don't hide on mouse leave - panel stays visible
-      el.onmouseleave = () => {
-        // Do nothing - keep panel visible
-      };
-      
-      el.onclick = (e) => {
-        e.stopPropagation(); // Prevent globe click
-        // Navigate to member detail page on click
-        navigate(`/members/${d.name}`);
-      };
+        `;
+        
+        el.onmouseenter = () => setHoveredMember(d);
+        el.onclick = (e) => {
+          e.stopPropagation();
+          navigate(`/members/${d.name}`);
+        };
+        
+        return el;
+      })
+      .htmlTransitionDuration(1000);
 
-      return el;
-    })
-    .htmlTransitionDuration(1000);
-
-    // Add connection arcs based on member health
     const arcs = [];
     for (let i = 0; i < members.length; i++) {
       for (let j = i + 1; j < members.length; j++) {
-        const health1 = getMemberHealth(members[i].name);
-        const health2 = getMemberHealth(members[j].name);
-        
-        // Calculate connection probability based on combined health
+        const health1 = getMemberHealth(members[i], downtime);
+        const health2 = getMemberHealth(members[j], downtime);
         const connectionProbability = (health1 + health2) / 200;
         
         if (Math.random() < connectionProbability * 0.8) {
-          // Determine arc color based on average health
           const avgHealth = (health1 + health2) / 2;
           let color;
           if (avgHealth >= 80) {
-            color = ['rgba(16, 185, 129, 0.6)', 'rgba(16, 185, 129, 0.3)']; // Green
+            color = ['rgba(16, 185, 129, 0.6)', 'rgba(16, 185, 129, 0.3)'];
           } else if (avgHealth >= 50) {
-            color = ['rgba(245, 158, 11, 0.6)', 'rgba(245, 158, 11, 0.3)']; // Orange
+            color = ['rgba(245, 158, 11, 0.6)', 'rgba(245, 158, 11, 0.3)'];
           } else {
-            color = ['rgba(239, 68, 68, 0.6)', 'rgba(239, 68, 68, 0.3)']; // Red
+            color = ['rgba(239, 68, 68, 0.6)', 'rgba(239, 68, 68, 0.3)'];
           }
           
           arcs.push({
@@ -269,9 +181,8 @@ useEffect(() => {
       .arcStroke(0.5)
       .arcAltitudeAutoScale(0.3);
 
-    // Set up controls (disable auto-rotate)
     const controls = globe.controls();
-    controls.autoRotate = false; // Disable auto-rotation
+    controls.autoRotate = false;
     controls.enableDamping = true;
     controls.dampingFactor = 0.75;
     controls.enableZoom = true;
@@ -279,10 +190,8 @@ useEffect(() => {
     controls.minDistance = 150;
     controls.maxDistance = 400;
 
-    // Set initial camera position
     globe.pointOfView({ lat: 20, lng: 0, altitude: 2.5 }, 0);
 
-    // Handle window resize
     const handleResize = () => {
       if (containerRef.current && globeRef.current) {
         const { width, height } = containerRef.current.getBoundingClientRect();
@@ -291,19 +200,12 @@ useEffect(() => {
       }
     };
 
-    // Initial size
     handleResize();
-
-    // Add resize listener
     window.addEventListener('resize', handleResize);
-
-    // Add a small delay to ensure proper initial sizing
     setTimeout(handleResize, 100);
 
-    // Store the instance
     globeInstance.current = globe;
 
-    // Cleanup function
     return () => {
       container.removeEventListener('dragstart', (e) => e.preventDefault());
       container.removeEventListener('selectstart', (e) => e.preventDefault());
@@ -317,15 +219,14 @@ useEffect(() => {
 
   const stats = {
     total: members.length,
-    operational: members.filter(m => getMemberHealth(m.name) === 100).length,
+    operational: members.filter(m => getMemberHealth(m, downtime) === 100).length,
     degraded: members.filter(m => {
-      const health = getMemberHealth(m.name);
+      const health = getMemberHealth(m, downtime);
       return health > 0 && health < 100;
     }).length,
-    offline: members.filter(m => getMemberHealth(m.name) === 0).length
+    offline: members.filter(m => getMemberHealth(m, downtime) === 0).length
   };
 
-  // Determine which member to show in panel
   const displayMember = pinnedMember || hoveredMember;
 
   if (loading) {
@@ -344,7 +245,6 @@ useEffect(() => {
           <div ref={globeRef} className="globe"></div>
         </div>
         
-        {/* Header overlaid on top of globe */}
         <div className="earth-header">
           <h1>Global Infrastructure Map</h1>
           <div className="status-summary enhanced-glass">
@@ -363,7 +263,6 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* Fixed member info panel */}
         <div
           ref={panelRef}
           className={`member-info-panel enhanced-glass ${displayMember ? 'visible' : ''} ${pinnedMember ? 'pinned' : ''}`}
@@ -384,14 +283,13 @@ useEffect(() => {
                   <div className="panel-region">{displayMember.region}</div>
                 </div>
               </div>
-
               <div className="panel-content">
                 <div className="info-section">
                   <h3 className="section-title">Member Information</h3>
                   <div className="info-grid compact">
                     <div className="info-row">
                       <span className="info-label">Health:</span>
-                      <span className="info-value">{getMemberHealth(displayMember.name).toFixed(0)}%</span>
+                      <span className="info-value">{getMemberHealth(displayMember, downtime).toFixed(0)}%</span>
                     </div>
                     <div className="info-row">
                       <span className="info-label">Level:</span>
@@ -422,7 +320,6 @@ useEffect(() => {
                   </div>
                 </div>
 
-                {/* Active Events Alert */}
                 {getMemberOutages(displayMember.name).length > 0 && (
                   <div className="active-events">
                     <div className="active-events-title">Active Events</div>

@@ -1,9 +1,10 @@
+@import '../styles/common.css';
+
 .member-view {
   max-width: 1400px;
   margin: 0 auto;
   padding: 32px;
   min-height: 100vh;
-  /* Match EarthView background */
   background: transparent;
 }
 
@@ -198,18 +199,15 @@
 }
 
 .member-status.status-operational {
-  background: rgba(16, 185, 129, 0.1);
-  color: var(--success);
+  @extend .badge.success;
 }
 
 .member-status.status-degraded {
-  background: rgba(245, 158, 11, 0.1);
-  color: var(--warning);
+  @extend .badge.warning;
 }
 
 .member-status.status-offline {
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--error);
+  @extend .badge.error;
 }
 
 .status-icon {
