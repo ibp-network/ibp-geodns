@@ -28,10 +28,10 @@ const MemberView = () => {
       ]);
       setMembers(membersRes.data);
       setDowntime(downtimeRes.data);
-      setTimeout(() => setLoading(false), 1500);
+      setLoading(false);
     } catch (error) {
       console.error('Error loading data:', error);
-      setTimeout(() => setLoading(false), 1500);
+      setLoading(false);
     }
   };
 
