@@ -261,82 +261,82 @@ console.log('Network:', network);`
                     </div>
                     <div className="resource-item">
                       <div className="resource-value">{selectedService.resources.memory}</div>
-                     <div className="resource-label">GB RAM</div>
-                   </div>
-                   <div className="resource-item">
-                     <div className="resource-value">{selectedService.resources.disk}</div>
-                     <div className="resource-label">GB Disk</div>
-                   </div>
-                   <div className="resource-item">
-                     <div className="resource-value">{selectedService.resources.bandwidth}</div>
-                     <div className="resource-label">GB Bandwidth</div>
-                   </div>
-                   <div className="resource-item">
-                     <div className="resource-value">{selectedService.resources.nodes}</div>
-                     <div className="resource-label">Nodes</div>
-                   </div>
-                 </div>
-               </div>
-             )}
+                      <div className="resource-label">GB RAM</div>
+                    </div>
+                    <div className="resource-item">
+                      <div className="resource-value">{selectedService.resources.disk}</div>
+                      <div className="resource-label">GB Disk</div>
+                    </div>
+                    <div className="resource-item">
+                      <div className="resource-value">{selectedService.resources.bandwidth}</div>
+                      <div className="resource-label">GB Bandwidth</div>
+                    </div>
+                    <div className="resource-item">
+                      <div className="resource-value">{selectedService.resources.nodes}</div>
+                      <div className="resource-label">Nodes</div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-             {/* Usage Instructions */}
-             {generateUsageExample(selectedService) && (
-               <div className="usage-section">
-                 <h3>
-                   <span>📖</span>
-                   How to Use This Service
-                 </h3>
-                 <p style={{ marginBottom: '16px' }}>
-                   {generateUsageExample(selectedService).description}
-                 </p>
-                 {generateUsageExample(selectedService).examples.map((example, index) => (
-                   <div key={index}>
-                     <div className="code-header">
-                       {example.label}
-                       <button 
-                         className={`copy-button ${copiedEndpoint === index ? 'copied' : ''}`}
-                         onClick={() => copyToClipboard(example.code, index)}
-                       >
-                         {copiedEndpoint === index ? 'Copied!' : 'Copy'}
-                       </button>
-                     </div>
-                     <div className="code-block">
-                       <pre style={{ margin: 0 }}>{example.code}</pre>
-                     </div>
-                   </div>
-                 ))}
-               </div>
-             )}
+              {/* Usage Instructions */}
+              {generateUsageExample(selectedService) && (
+                <div className="usage-section">
+                  <h3>
+                    <span>📖</span>
+                    How to Use This Service
+                  </h3>
+                  <p style={{ marginBottom: '16px' }}>
+                    {generateUsageExample(selectedService).description}
+                  </p>
+                  {generateUsageExample(selectedService).examples.map((example, index) => (
+                    <div key={index}>
+                      <div className="code-header">
+                        {example.label}
+                        <button 
+                          className={`copy-button ${copiedEndpoint === index ? 'copied' : ''}`}
+                          onClick={() => copyToClipboard(example.code, index)}
+                        >
+                          {copiedEndpoint === index ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                      <div className="code-block">
+                        <pre style={{ margin: 0 }}>{example.code}</pre>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-             {/* Endpoints */}
-             {selectedService.providers && selectedService.providers.length > 0 && (
-               <div className="info-section">
-                 <h3>
-                   <span>🌐</span>
-                   Service Endpoints
-                 </h3>
-                 <div className="endpoints-list">
-                   {selectedService.providers.map((provider, index) => (
-                     <div key={index} className="endpoint-item">
-                       <div className="endpoint-header">
-                         <span className="endpoint-provider">{provider.name}</span>
-                         <button 
-                           className={`copy-button ${copiedEndpoint === `provider-${index}` ? 'copied' : ''}`}
-                           onClick={() => copyToClipboard(provider.rpc_urls.join('\n'), `provider-${index}`)}
-                         >
-                           {copiedEndpoint === `provider-${index}` ? 'Copied!' : 'Copy All'}
-                         </button>
-                       </div>
-                       {provider.rpc_urls.map((url, urlIndex) => (
-                         <div key={urlIndex} className="endpoint-url">{url}</div>
-                       ))}
-                     </div>
-                   ))}
-                 </div>
-               </div>
-             )}
+              {/* Endpoints */}
+              {selectedService.providers && selectedService.providers.length > 0 && (
+                <div className="info-section">
+                  <h3>
+                    <span>🌐</span>
+                    Service Endpoints
+                  </h3>
+                  <div className="endpoints-list">
+                    {selectedService.providers.map((provider, index) => (
+                      <div key={index} className="endpoint-item">
+                        <div className="endpoint-header">
+                          <span className="endpoint-provider">{provider.name}</span>
+                          <button 
+                            className={`copy-button ${copiedEndpoint === `provider-${index}` ? 'copied' : ''}`}
+                            onClick={() => copyToClipboard(provider.rpc_urls.join('\n'), `provider-${index}`)}
+                          >
+                            {copiedEndpoint === `provider-${index}` ? 'Copied!' : 'Copy All'}
+                          </button>
+                        </div>
+                        {provider.rpc_urls.map((url, urlIndex) => (
+                          <div key={urlIndex} className="endpoint-url">{url}</div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-             {/* Members Providing This Service */}
+              {/* Members Providing This Service */}
               <div className="members-section">
                 <h3>
                   <span>👥</span>
@@ -346,29 +346,38 @@ console.log('Network:', network);`
                   {getServiceMembers(selectedService.name).map(member => (
                     <div 
                       key={member.name} 
-                      className="member-card"
+                      className="service-member-card"
                       onClick={() => navigate(`/members/${member.name}`)}
                     >
-                      {member.logo ? (
-                        <img 
-                          src={member.logo} 
-                          alt={member.name} 
-                          className="member-logo-mini"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.nextSibling.style.display = 'flex';
-                          }}
-                        />
-                      ) : null}
-                      <div 
-                        className="service-logo-placeholder" 
-                        style={{ display: member.logo ? 'none' : 'flex', width: '36px', height: '36px' }}
-                      >
-                        {member.name.substring(0, 2).toUpperCase()}
+                      <div className="service-member-logo">
+                        {member.logo ? (
+                          <img 
+                            src={member.logo} 
+                            alt={member.name} 
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              e.target.parentElement.innerHTML = `<div class="service-member-placeholder">${member.name.substring(0, 2).toUpperCase()}</div>`;
+                            }}
+                          />
+                        ) : (
+                          <div className="service-member-placeholder">
+                            {member.name.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
                       </div>
-                      <div className="member-card-info">
-                        <div className="member-name">{member.name}</div>
-                        <div className="member-level">Level {member.level}</div>
+                      
+                      <div className="service-member-info">
+                        <div className="service-member-name">{member.name}</div>
+                        <div className="service-member-details">
+                          <div className="service-member-level">
+                            <span>🏆</span>
+                            <span>Level {member.level}</span>
+                          </div>
+                          <div className="service-member-region">
+                            <span>📍</span>
+                            <span>{member.region}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}

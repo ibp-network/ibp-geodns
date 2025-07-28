@@ -63,48 +63,52 @@ const MemberView = () => {
         className={`member-card card ${status}`}
         onClick={() => navigate(`/members/${member.name}`)}
       >
-        <div className="member-top-section">
+        <div className="member-header-row">
           <div className="member-logo">
             <MemberLogo member={member} size="medium" />
           </div>
           
-          <div className="member-core-info">
+          <div className="member-identity">
             <h3 className="member-name">{member.name}</h3>
             <p className="member-region">{member.region}</p>
           </div>
 
-          <div className="member-status-section">
-            <a href={member.website} target="_blank" rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()} className="member-website-btn">
+          <div className="member-actions">
+            <a 
+              href={member.website} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()} 
+              className="member-website-link"
+            >
               🌐
             </a>
-            <div className={`member-status status-${status}`}>
-              <span className="status-icon">{status === 'operational' ? '✓' : status === 'degraded' ? '!' : '✗'}</span>
-              <span>{health.toFixed(0)}%</span>
+            <div className={`member-status-badge ${status}`}>
+              <span>{health.toFixed(0)}% Online</span>
             </div>
           </div>
         </div>
 
-        <div className="member-bottom-section">
-          <div className="member-stats">
-            <div className="stat">
-              <span className="stat-icon">⚡</span>
-              <span className="stat-text">{member.services?.length || 0} services</span>
+        <div className="member-details-row">
+          <div className="detail-group">
+            <div className="detail-item">
+              <span className="detail-icon">⚡</span>
+              <span className="detail-text">{member.services?.length || 0} Services</span>
             </div>
-            <div className="stat">
-              <span className="stat-icon">📅</span>
-              <span className="stat-text">{member.joined_date}</span>
+            <div className="detail-item">
+              <span className="detail-icon">📅</span>
+              <span className="detail-text">{member.joined_date}</span>
             </div>
-            <div className="stat">
-              <span className="stat-icon">📍</span>
-              <span className="stat-text">{member.latitude?.toFixed(0)}°, {member.longitude?.toFixed(0)}°</span>
+            <div className="detail-item">
+              <span className="detail-icon">📍</span>
+              <span className="detail-text">{member.latitude?.toFixed(1)}°, {member.longitude?.toFixed(1)}°</span>
             </div>
           </div>
 
           {downServices.size > 0 && (
-            <div className="member-issues">
+            <div className="member-issues-badge">
               <span className="issues-icon">⚠️</span>
-              <span>{downServices.size} affected</span>
+              <span>{downServices.size} services affected</span>
             </div>
           )}
         </div>
