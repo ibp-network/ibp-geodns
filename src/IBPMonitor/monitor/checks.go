@@ -1,14 +1,11 @@
 package monitor
 
 import (
-	"net/url"
-	"strings"
-	"time"
-
 	cfg "ibp-geodns/src/common/config"
 	dat "ibp-geodns/src/common/data"
-	log "ibp-geodns/src/common/logging"
 	natsCommon "ibp-geodns/src/common/nats"
+	"net/url"
+	"strings"
 )
 
 var CheckRegistry = struct {
@@ -60,7 +57,6 @@ func RegisterEndpointCheckWithTypes(name string, fn CheckEndpointFunc, validType
 
 func isCheckValidForServiceType(checkName string, checkType string, serviceType string) bool {
 	var validTypes []string
-
 	switch checkType {
 	case "domain":
 		validTypes = ServiceTypeValidator.Domain[checkName]
@@ -86,53 +82,19 @@ func isCheckValidForServiceType(checkName string, checkType string, serviceType 
 	return false
 }
 
-func startChecks() {
-	go initSiteCheck()
-	go initDomainCheck()
-	go initEndpointCheck()
-}
-
 func getSiteCheck(name string) (CheckSiteFunc, bool) {
 	fn, ok := CheckRegistry.Site[name]
 	return fn, ok
 }
 
-func initSiteCheck() {
-	c := cfg.GetConfig()
-	for _, ch := range c.Local.Checks {
-		if ch.CheckType == "site" && ch.Enabled == 1 {
-			if fn, ok := getSiteCheck(ch.Name); ok {
-				go siteCheckTimer(ch, fn)
-			}
-		}
-	}
+func getDomainCheck(name string) (CheckDomainFunc, bool) {
+	fn, ok := CheckRegistry.Domain[name]
+	return fn, ok
 }
 
-func siteCheckTimer(ch cfg.Check, fn CheckSiteFunc) {
-	time.Sleep(2 * time.Second)
-	runSiteCheck(ch, fn)
-	ticker := time.NewTicker(time.Duration(ch.CheckInterval) * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		runSiteCheck(ch, fn)
-	}
-}
-
-func runSiteCheck(ch cfg.Check, fn CheckSiteFunc) {
-	c := cfg.GetConfig()
-	for _, m := range c.Members {
-		if m.Service.Active == 1 && !m.Override {
-			time.Sleep(25 * time.Millisecond)
-			go func(check cfg.Check, mem cfg.Member) {
-				defer func() {
-					if r := recover(); r != nil {
-						log.Log(log.Error, "SITE-check %s on %s panicked: %v", check.Name, mem.Details.Name, r)
-					}
-				}()
-				fn(check, mem)
-			}(ch, m)
-		}
-	}
+func getEndpointCheck(name string) (CheckEndpointFunc, bool) {
+	fn, ok := CheckRegistry.Endpoint[name]
+	return fn, ok
 }
 
 func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, errText string,
@@ -142,124 +104,11 @@ func UpdateSiteResultLocal(check cfg.Check, member cfg.Member, status bool, errT
 		status, errText, data, ipv6)
 }
 
-func getDomainCheck(name string) (CheckDomainFunc, bool) {
-	fn, ok := CheckRegistry.Domain[name]
-	return fn, ok
-}
-
-func initDomainCheck() {
-	c := cfg.GetConfig()
-	for _, ch := range c.Local.Checks {
-		if ch.CheckType == "domain" && ch.Enabled == 1 {
-			if fn, ok := getDomainCheck(ch.Name); ok {
-				go domainCheckTimer(ch, fn)
-			}
-		}
-	}
-}
-
-func domainCheckTimer(ch cfg.Check, fn CheckDomainFunc) {
-	time.Sleep(3 * time.Second)
-	runDomainCheck(ch, fn)
-	ticker := time.NewTicker(time.Duration(ch.CheckInterval) * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		runDomainCheck(ch, fn)
-	}
-}
-
-func runDomainCheck(ch cfg.Check, fn CheckDomainFunc) {
-	c := cfg.GetConfig()
-	for svcName, svc := range c.Services {
-		// Check if this check is valid for this service type
-		if !isCheckValidForServiceType(ch.Name, "domain", svc.Configuration.ServiceType) {
-			continue
-		}
-
-		for _, mem := range c.Members {
-			if mem.Service.Active == 1 && !mem.Override &&
-				mem.Membership.Level >= svc.Configuration.LevelRequired {
-				if assignedToService(svcName, mem) {
-					doms := extractDomains(svc)
-					for dom := range doms {
-						go func(check cfg.Check, domain string, s cfg.Service, m cfg.Member) {
-							defer func() {
-								if r := recover(); r != nil {
-									log.Log(log.Error, "DOMAIN-check %s on %s crashed: %v", check.Name, m.Details.Name, r)
-								}
-							}()
-							fn(check, domain, s, m)
-						}(ch, dom, svc, mem)
-						time.Sleep(25 * time.Millisecond)
-					}
-				}
-			}
-		}
-	}
-}
-
 func UpdateDomainResultLocal(check cfg.Check, domain string, service cfg.Service,
 	member cfg.Member, status bool, errText string, data map[string]interface{}, ipv6 bool) {
 	dat.UpdateLocalDomainResult(check, member, service, domain, status, errText, data, ipv6)
 	proposeIfStatusChanged("domain", check.Name, member.Details.Name, domain, "",
 		status, errText, data, ipv6)
-}
-
-func getEndpointCheck(name string) (CheckEndpointFunc, bool) {
-	fn, ok := CheckRegistry.Endpoint[name]
-	return fn, ok
-}
-
-func initEndpointCheck() {
-	c := cfg.GetConfig()
-	for _, ch := range c.Local.Checks {
-		if ch.CheckType == "endpoint" && ch.Enabled == 1 {
-			if fn, ok := getEndpointCheck(ch.Name); ok {
-				go endpointCheckTimer(ch, fn)
-			}
-		}
-	}
-}
-
-func endpointCheckTimer(ch cfg.Check, fn CheckEndpointFunc) {
-	time.Sleep(4 * time.Second)
-	runEndpointCheck(ch, fn)
-	ticker := time.NewTicker(time.Duration(ch.CheckInterval) * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		runEndpointCheck(ch, fn)
-	}
-}
-
-func runEndpointCheck(ch cfg.Check, fn CheckEndpointFunc) {
-	c := cfg.GetConfig()
-	for svcName, svc := range c.Services {
-		// Check if this check is valid for this service type
-		if !isCheckValidForServiceType(ch.Name, "endpoint", svc.Configuration.ServiceType) {
-			continue
-		}
-
-		for _, mem := range c.Members {
-			if mem.Service.Active == 1 && !mem.Override &&
-				mem.Membership.Level >= svc.Configuration.LevelRequired {
-				if assignedToService(svcName, mem) {
-					for _, prov := range svc.Providers {
-						for _, rpc := range prov.RpcUrls {
-							go func(check cfg.Check, endpoint string, s cfg.Service, m cfg.Member) {
-								defer func() {
-									if r := recover(); r != nil {
-										log.Log(log.Error, "ENDPOINT-check %s on %s crashed: %v", check.Name, m.Details.Name, r)
-									}
-								}()
-								fn(check, endpoint, s, m)
-							}(ch, rpc, svc, mem)
-							time.Sleep(25 * time.Millisecond)
-						}
-					}
-				}
-			}
-		}
-	}
 }
 
 func UpdateEndpointResultLocal(check cfg.Check, member cfg.Member, service cfg.Service,
@@ -276,6 +125,7 @@ func proposeIfStatusChanged(checkType, checkName, memberName, domainName, endpoi
 		found bool
 		cur   bool
 	)
+
 	switch checkType {
 	case "site":
 		found, cur = dat.GetOfficialSiteStatus(checkName, memberName, ipv6)
@@ -284,6 +134,7 @@ func proposeIfStatusChanged(checkType, checkName, memberName, domainName, endpoi
 	case "endpoint":
 		found, cur = dat.GetOfficialEndpointStatus(checkName, memberName, domainName, endpoint, ipv6)
 	}
+
 	if !found || cur != status {
 		natsCommon.ProposeCheckStatus(
 			checkType,

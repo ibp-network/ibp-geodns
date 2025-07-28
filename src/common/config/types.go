@@ -21,17 +21,23 @@ type Config struct {
 }
 
 type LocalConfig struct {
-	System      SystemConfig  `json:"System"`
-	Maxmind     MaxmindConfig `json:"Maxmind"`
-	Nats        NatsConfig    `json:"Nats"`
-	Mysql       MysqlConfig   `json:"Mysql"`
-	DnsApi      ApiConfig     `json:"DnsApi"`
-	CollatorApi ApiConfig     `json:"CollatorApi"`
-	MonitorApi  ApiConfig     `json:"MonitorApi"`
-	MgmtApi     ApiConfig     `json:"MgmtApi"`
-	Discord     DiscordConfig
-	Matrix      MatrixConfig
-	Checks      []Check `json:"Checks"`
+	System       SystemConfig  `json:"System"`
+	Maxmind      MaxmindConfig `json:"Maxmind"`
+	Nats         NatsConfig    `json:"Nats"`
+	Mysql        MysqlConfig   `json:"Mysql"`
+	DnsApi       ApiConfig     `json:"DnsApi"`
+	CollatorApi  ApiConfig     `json:"CollatorApi"`
+	MonitorApi   ApiConfig     `json:"MonitorApi"`
+	MgmtApi      ApiConfig     `json:"MgmtApi"`
+	Discord      DiscordConfig
+	Matrix       MatrixConfig
+	CheckWorkers CheckWorkers `json:"CheckWorkers"`
+	Checks       []Check      `json:"Checks"`
+}
+
+type CheckWorkers struct {
+	NumWorkers         int `json:"numWorkers"`
+	SeparationInterval int `json:"separationInterval"`
 }
 
 type DiscordConfig struct {
@@ -79,12 +85,12 @@ type MatrixConfig struct {
 }
 
 type Check struct {
-	Name          string                 `json:"Name"`
-	Enabled       int                    `json:"Enabled"`
-	CheckType     string                 `json:"CheckType"`
-	Timeout       int                    `json:"Timeout"`
-	CheckInterval int                    `json:"CheckInterval"`
-	ExtraOptions  map[string]interface{} `json:"ExtraOptions"`
+	Name            string                 `json:"Name"`
+	Enabled         int                    `json:"Enabled"`
+	CheckType       string                 `json:"CheckType"`
+	Timeout         int                    `json:"Timeout"`
+	MinimumInterval int                    `json:"minimumInterval"`
+	ExtraOptions    map[string]interface{} `json:"ExtraOptions"`
 }
 
 type DNSRecord struct {

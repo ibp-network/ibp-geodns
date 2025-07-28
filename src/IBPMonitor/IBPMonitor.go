@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	api "ibp-geodns/src/IBPMonitor/api"
@@ -55,7 +57,12 @@ func main() {
 	monitor.Init()
 	api.Init()
 
-	for {
-		time.Sleep(60 * time.Second)
-	}
+	// Set up signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	<-sigChan
+	log.Log(log.Info, "Shutdown signal received, cleaning up...")
+	monitor.Shutdown()
+	time.Sleep(1 * time.Second) // Give time for cleanup
 }
