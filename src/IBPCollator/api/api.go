@@ -93,10 +93,6 @@ func Init() {
 	mux.HandleFunc("/api/members", corsMiddleware(handleMembers))
 	mux.HandleFunc("/api/members/stats", corsMiddleware(handleMemberStats))
 
-	// Service endpoints (NEW)
-	mux.HandleFunc("/api/services", corsMiddleware(handleServices))
-	mux.HandleFunc("/api/services/summary", corsMiddleware(handleServicesSummary))
-
 	// Billing endpoints
 	mux.HandleFunc("/api/billing/breakdown", corsMiddleware(handleBillingBreakdown))
 	mux.HandleFunc("/api/billing/summary", corsMiddleware(handleBillingSummary))
