@@ -4,7 +4,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: #000000; /* Pure black to match the GIF background */
+  background: rgba(0, 0, 0, 0.5); /* Changed from #000000 to 50% transparent */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -121,14 +121,14 @@
   transition: width 0.3s ease;
 }
 
-/* Page-level loading container with pure black background */
+/* Page-level loading container with 50% transparent background */
 .page-loading-container {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: #000000; /* Pure black to match EarthView */
+  background: rgba(0, 0, 0, 0.5); /* Changed from #000000 to 50% transparent */
   display: flex;
   align-items: center;
   justify-content: center;
