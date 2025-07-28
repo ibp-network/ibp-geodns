@@ -60,58 +60,72 @@ const MemberView = () => {
     return (
       <div
         key={member.name}
-        className={`member-card card ${status}`}
+        className={`member-card ${status}`}
         onClick={() => navigate(`/members/${member.name}`)}
       >
-        <div className="member-header-row">
-          <div className="member-logo">
-            <MemberLogo member={member} size="medium" />
-          </div>
-          
-          <div className="member-identity">
-            <h3 className="member-name">{member.name}</h3>
-            <p className="member-region">{member.region}</p>
+        <div className="member-status-strip"></div>
+        
+        <a 
+          href={member.website} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()} 
+          className="member-website-btn"
+        >
+          🌐
+        </a>
+
+        <div className="member-content">
+          <div className="member-main-row">
+            <div className="member-logo-wrapper">
+              <div className="member-logo">
+                <MemberLogo member={member} size="medium" />
+              </div>
+              <div className={`online-badge ${status}`}>
+                {health.toFixed(0)}%
+              </div>
+            </div>
+            
+            <div className="member-header-info">
+              <div className="member-name-row">
+                <h3 className="member-name">{member.name}</h3>
+                <span className="member-level-badge">Level {member.level}</span>
+              </div>
+              <div className="member-meta-info">
+                <div className="meta-item">
+                  <span>📍</span>
+                  <span>{member.region}</span>
+                </div>
+                <div className="meta-item">
+                  <span>📅</span>
+                  <span>{member.joined_date}</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="member-actions">
-            <a 
-              href={member.website} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()} 
-              className="member-website-link"
-            >
-              🌐
-            </a>
-            <div className={`member-status-badge ${status}`}>
-              <span>{health.toFixed(0)}% Online</span>
+          <div className="member-stats-row">
+            <div className="stat-block">
+              <div className="stat-block-value">{member.services?.length || 0}</div>
+              <div className="stat-block-label">Services</div>
+            </div>
+            <div className="stat-block">
+              <div className="stat-block-value">{member.latitude?.toFixed(0)}°</div>
+              <div className="stat-block-label">Latitude</div>
+            </div>
+            <div className="stat-block">
+              <div className="stat-block-value">{member.longitude?.toFixed(0)}°</div>
+              <div className="stat-block-label">Longitude</div>
             </div>
           </div>
         </div>
 
-        <div className="member-details-row">
-          <div className="detail-group">
-            <div className="detail-item">
-              <span className="detail-icon">⚡</span>
-              <span className="detail-text">{member.services?.length || 0} Services</span>
-            </div>
-            <div className="detail-item">
-              <span className="detail-icon">📅</span>
-              <span className="detail-text">{member.joined_date}</span>
-            </div>
-            <div className="detail-item">
-              <span className="detail-icon">📍</span>
-              <span className="detail-text">{member.latitude?.toFixed(1)}°, {member.longitude?.toFixed(1)}°</span>
-            </div>
+        {downServices.size > 0 && (
+          <div className="member-issues-footer">
+            <span className="issues-icon">⚠️</span>
+            <span>{downServices.size} of {member.services?.length || 0} services currently affected</span>
           </div>
-
-          {downServices.size > 0 && (
-            <div className="member-issues-badge">
-              <span className="issues-icon">⚠️</span>
-              <span>{downServices.size} services affected</span>
-            </div>
-          )}
-        </div>
+        )}
       </div>
     );
   };
