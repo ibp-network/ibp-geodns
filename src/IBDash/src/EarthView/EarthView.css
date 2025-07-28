@@ -7,15 +7,6 @@
   overflow: hidden;
 }
 
-.earth-view-loading {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-}
-
 /* Header is now absolute positioned over the globe */
 .earth-header {
   position: absolute;

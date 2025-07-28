@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ApiHelper from '../components/ApiHelper/ApiHelper';
 import Loading from '../components/Loading/Loading';
-import MemberLogo from '../components/MemberLogo/MemberLogo';
 import { formatMonth, getUptimeClass } from '../utils/common';
 import './BillingView.css';
 
@@ -136,8 +135,23 @@ const BillingView = () => {
 
   return (
     <div className="billing-view fade-in">
-      {/* ... header and overview PDFs bar remain the same ... */}
-      
+      <div className="billing-header">
+        <h1>Billing Management</h1>
+      </div>
+
+      <div className="overview-pdfs-bar">
+        <span className="overview-label">📊 Monthly Overviews:</span>
+        {overviewPDFs.map((pdf, index) => (
+          <button
+            key={index}
+            className="overview-pdf-button"
+            onClick={() => downloadPDF(pdf, true)}
+          >
+            📄 {formatMonth(pdf.year, pdf.month)}
+          </button>
+        ))}
+      </div>
+
       <div className="members-nav-bar">
         <div className="members-nav-header">
           <h2>Select Member</h2>
@@ -156,18 +170,50 @@ const BillingView = () => {
               className={`member-nav-item ${selectedMember?.name === member.name ? 'active' : ''}`}
               onClick={() => setSelectedMember(member)}
             >
-              <MemberLogo member={member} size="small" className="member-logo-small" />
+              {member.logo ? (
+                <img
+                  src={member.logo} 
+                  alt={member.name} 
+                  className="member-logo-small"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div 
+                className="member-logo-placeholder" 
+                style={{ display: member.logo ? 'none' : 'flex' }}
+              >
+                {member.name.substring(0, 2).toUpperCase()}
+              </div>
               <div className="member-nav-name">{member.name}</div>
             </div>
           ))}
         </div>
       </div>
-      
+
       <div className="detail-panel">
         {selectedMember ? (
           <>
             <div className="detail-header">
-              <MemberLogo member={selectedMember} size="medium" className="detail-header-logo" />
+              {selectedMember.logo ? (
+                <img 
+                  src={selectedMember.logo} 
+                  alt={selectedMember.name} 
+                  className="detail-header-logo"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div 
+                className="detail-header-logo-placeholder" 
+                style={{ display: selectedMember.logo ? 'none' : 'flex' }}
+              >
+                {selectedMember.name.substring(0, 2).toUpperCase()}
+              </div>
               <div className="detail-header-info">
                 <h2>{selectedMember.name}</h2>
                 <div className="detail-subtitle">
@@ -179,13 +225,9 @@ const BillingView = () => {
                 </div>
               </div>
             </div>
-
             <div className="detail-content">
               {detailLoading ? (
-                <div className="loading-container">
-                  <div className="loading-spinner"></div>
-                  <p>Loading billing details...</p>
-                </div>
+                <Loading pageLevel={true} dataReady={false} />
               ) : memberBilling ? (
                 <>
                   <div className="current-month-section">

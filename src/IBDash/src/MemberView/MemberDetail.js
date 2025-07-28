@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ApiHelper from '../components/ApiHelper/ApiHelper';
 import Charts from '../components/Charts/Charts';
+import Loading from '../components/Loading/Loading';
 import './MemberDetail.css';
 
 const MemberDetail = () => {
@@ -406,16 +407,11 @@ const MemberDetail = () => {
       'CN': '🇨🇳', 'IN': '🇮🇳', 'BR': '🇧🇷', 'CA': '🇨🇦', 'AU': '🇦🇺',
       'NL': '🇳🇱', 'SG': '🇸🇬', 'KR': '🇰🇷', 'ES': '🇪🇸', 'IT': '🇮🇹'
     };
-    return flags[countryCode] || '🌐';
+    return flags[countryCode] || '🌍';
   };
 
   if (loading) {
-    return (
-      <div className="member-detail-loading">
-        <div className="loading-spinner"></div>
-        <p>Loading member details...</p>
-      </div>
-    );
+    return <Loading pageLevel={true} dataReady={false} />;
   }
 
   if (!member) {
@@ -522,14 +518,14 @@ const MemberDetail = () => {
                     </div>
                   </div>
                   <div className="info-item">
-                    <span className="info-icon">📢</span>
+                    <span className="info-icon">🔢</span>
                     <div className="info-content">
                       <span className="info-label">IPv4 Address</span>
                       <span className="info-value">{member.service_ipv4 || 'Not configured'}</span>
                     </div>
                   </div>
                   <div className="info-item">
-                    <span className="info-icon">📢</span>
+                    <span className="info-icon">🔢</span>
                     <div className="info-content">
                       <span className="info-label">IPv6 Address</span>
                       <span className="info-value">{member.service_ipv6 || 'Not configured'}</span>
