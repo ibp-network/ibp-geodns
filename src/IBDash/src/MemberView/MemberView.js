@@ -9,9 +9,31 @@ import { getMemberStatus } from '../utils/memberUtils';
 import './MemberView.css';
 
 const MemberView = () => {
-  // ... state declarations remain the same ...
+  const [members, setMembers] = useState([]);
+  const [downtime, setDowntime] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterLevel, setFilterLevel] = useState('all');
+  const navigate = useNavigate();
 
-  // ... useEffect and loadData remain the same ...
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [membersRes, downtimeRes] = await Promise.all([
+        ApiHelper.fetchMembers(),
+        ApiHelper.fetchCurrentDowntime()
+      ]);
+      setMembers(membersRes.data);
+      setDowntime(downtimeRes.data);
+      setTimeout(() => setLoading(false), 1500);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setTimeout(() => setLoading(false), 1500);
+    }
+  };
 
   const filteredMembers = members.filter(member => {
     const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -41,7 +63,7 @@ const MemberView = () => {
             <span className="stat-label">Total Members</span>
           </div>
           <div className="stat-item">
-            <span className="stat-value">{members.filter(m => getMemberStatus(m) === 'operational').length}</span>
+            <span className="stat-value">{members.filter(m => getMemberStatus(m, downtime) === 'operational').length}</span>
             <span className="stat-label">Operational</span>
           </div>
           <div className="stat-item">
@@ -102,7 +124,43 @@ const MemberView = () => {
                       </div>
                       <StatusBadge status={status} value={health} type="uptime" />
                     </div>
-                    {/* ... rest of member card remains the same ... */}
+                    <div className="member-details">
+                      <div className="detail-item">
+                        <span className="detail-label">
+                          <span className="detail-icon">⚡</span>
+                          Services
+                        </span>
+                        <span className="detail-value">{member.services?.length || 0}</span>
+                      </div>
+                      <div className="detail-item">
+                        <span className="detail-label">
+                          <span className="detail-icon">📅</span>
+                          Joined
+                        </span>
+                        <span className="detail-value">{member.joined_date}</span>
+                      </div>
+                      <div className="detail-item">
+                        <span className="detail-label">
+                          <span className="detail-icon">📍</span>
+                          Location
+                        </span>
+                        <span className="detail-value">{member.latitude?.toFixed(2)}, {member.longitude?.toFixed(2)}</span>
+                      </div>
+                    </div>
+                    {downServices.size > 0 && (
+                      <div className="member-issues">
+                        <span className="issues-icon">⚠️</span>
+                        <p className="issues-text">
+                          {downServices.size} of {member.services?.length || 0} services affected
+                        </p>
+                      </div>
+                    )}
+                    <div className="member-footer">
+                      <a href={member.website} target="_blank" rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()} className="member-website">
+                        🌐 Visit Website
+                      </a>
+                    </div>
                   </div>
                 );
               })}
