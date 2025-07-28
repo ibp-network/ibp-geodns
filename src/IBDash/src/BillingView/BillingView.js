@@ -225,6 +225,7 @@ const BillingView = () => {
                 </div>
               </div>
             </div>
+
             <div className="detail-content">
               {detailLoading ? (
                 <Loading pageLevel={true} dataReady={false} />
@@ -245,7 +246,7 @@ const BillingView = () => {
                           <div className="current-month-stats">
                             <div className="stat-card">
                               <div className="stat-label">Base Cost</div>
-                              <div className="stat-value">${member.total_base_cost?.toFixed(2)}</div>
+                              <div className="stat-value primary">${member.total_base_cost?.toFixed(2)}</div>
                             </div>
                             <div className="stat-card">
                               <div className="stat-label">Billed Amount</div>
@@ -257,7 +258,7 @@ const BillingView = () => {
                                 ${member.total_credits?.toFixed(2)}
                               </div>
                             </div>
-                            <div className={`stat-card ${avgUptime >= 99.9 ? 'success' : 'error'}`}>
+                            <div className={`stat-card ${avgUptime >= 99.9 ? 'success' : avgUptime >= 99 ? 'warning' : 'error'}`}>
                               <div className="stat-label">Site Uptime</div>
                               <div className={`stat-value ${avgUptime >= 99.9 ? 'success' : avgUptime >= 99 ? 'warning' : 'error'}`}>
                                 {avgUptime.toFixed(2)}%
@@ -296,10 +297,12 @@ const BillingView = () => {
                                         </span>
                                       </td>
                                       <td>${service.billed_cost?.toFixed(2)}</td>
-                                      <td>${service.credits?.toFixed(2)}</td>
+                                      <td className={service.credits > 0 ? 'success' : ''}>
+                                        ${service.credits?.toFixed(2)}
+                                      </td>
                                       <td>
                                         <span className={`badge ${service.meets_sla ? 'success' : 'error'}`}>
-                                          {service.meets_sla ? '✔ PASS' : '✗ FAIL'}
+                                          {service.meets_sla ? '✓ PASS' : '✗ FAIL'}
                                         </span>
                                       </td>
                                     </tr>

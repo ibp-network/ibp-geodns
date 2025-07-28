@@ -127,11 +127,11 @@
 
 .members-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 20px;
 }
 
-/* Member Card - Fixed internal layout */
+/* Member Card - Compact design */
 .member-card {
   cursor: pointer;
   transition: all 0.3s ease;
@@ -139,11 +139,12 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  padding: 20px;
 }
 
 .member-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 .member-card.degraded {
@@ -154,18 +155,18 @@
   border-color: var(--error);
 }
 
-/* Member header - horizontal layout for logo, name, and status */
+/* Member header - more compact */
 .member-header {
   display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 20px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .member-logo {
-  width: 60px;
-  height: 60px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -183,7 +184,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--accent-primary);
 }
@@ -192,29 +193,30 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .member-name {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   margin: 0;
+  line-height: 1.2;
 }
 
 .member-region {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary);
   margin: 0;
 }
 
-/* Status badge - positioned in header */
+/* Status badge - smaller and integrated */
 .member-status {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 12px;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 11px;
   font-weight: 500;
   margin-left: auto;
   flex-shrink: 0;
@@ -236,88 +238,101 @@
 }
 
 .status-icon {
-  font-size: 16px;
+  font-size: 14px;
 }
 
-/* Member details - vertical sections below header */
+/* Member details - inline style */
 .member-details {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  padding: 16px;
-  background: var(--bg-tertiary);
-  border-radius: 8px;
-  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 12px;
 }
 
 .detail-item {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.detail-label {
-  font-size: 12px;
-  color: var(--text-secondary);
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 6px;
+  font-size: 13px;
 }
 
 .detail-icon {
   font-size: 14px;
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
 .detail-value {
-  font-size: 14px;
   font-weight: 500;
+  color: var(--text-primary);
 }
 
-/* Issues section */
+/* Issues section - more subtle */
 .member-issues {
-  padding: 12px;
-  background: rgba(245, 158, 11, 0.1);
-  border-radius: 8px;
-  margin-bottom: 16px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--warning);
 }
 
 .issues-icon {
-  font-size: 16px;
-  color: var(--warning);
+  font-size: 14px;
 }
 
 .issues-text {
-  font-size: 13px;
-  color: var(--warning);
-  flex: 1;
   margin: 0;
 }
 
-/* Footer section */
+/* Footer section - integrated with header */
 .member-footer {
-  text-align: center;
-  margin-top: auto;
+  position: absolute;
+  top: 20px;
+  right: 20px;
 }
 
 .member-website {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  color: var(--accent-primary);
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  color: var(--text-secondary);
   text-decoration: none;
-  font-size: 14px;
+  font-size: 16px;
   transition: all 0.2s ease;
+  border: 1px solid var(--border-color);
 }
 
 .member-website:hover {
-  color: #2563eb;
-  transform: translateX(2px);
+  background: var(--accent-primary);
+  color: white;
+  border-color: var(--accent-primary);
+  transform: scale(1.1);
+}
+
+/* Alternative compact layout for the footer */
+.member-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.view-details {
+  font-size: 12px;
+  color: var(--accent-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.view-details:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 768px) {
@@ -332,5 +347,11 @@
   
   .member-controls {
     flex-direction: column;
+  }
+  
+  .member-details {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 }

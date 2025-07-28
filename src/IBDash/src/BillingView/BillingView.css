@@ -263,6 +263,19 @@
   background: var(--border-color);
 }
 
+/* Color variants for stat cards */
+.stat-card.success::before {
+  background: var(--success);
+}
+
+.stat-card.error::before {
+  background: var(--error);
+}
+
+.stat-card.warning::before {
+  background: var(--warning);
+}
+
 .stat-label {
   font-size: 11px;
   color: var(--text-secondary);
@@ -278,6 +291,23 @@
   color: var(--text-primary);
 }
 
+/* Colored stat values */
+.stat-value.success {
+  color: var(--success);
+}
+
+.stat-value.error {
+  color: var(--error);
+}
+
+.stat-value.warning {
+  color: var(--warning);
+}
+
+.stat-value.primary {
+  color: var(--accent-primary);
+}
+
 /* Service Breakdown */
 .services-breakdown {
   margin-bottom: 32px;
@@ -287,6 +317,32 @@
   background: var(--bg-tertiary);
   border-radius: 8px;
   overflow: hidden;
+}
+
+/* Table styles with colored badges */
+.data-table .badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge.success {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+}
+
+.badge.warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+}
+
+.badge.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
 }
 
 /* Historical PDFs */
@@ -351,6 +407,13 @@
   transform: translateY(-1px);
 }
 
+/* No data state */
+.no-data {
+  text-align: center;
+  padding: 60px;
+  color: var(--text-secondary);
+}
+
 /* Scrollbar styling for horizontal lists */
 .members-horizontal-list::-webkit-scrollbar,
 .overview-pdfs-bar::-webkit-scrollbar {
@@ -384,5 +447,9 @@
   
   .member-search {
     width: 100%;
+  }
+  
+  .current-month-stats {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
 }

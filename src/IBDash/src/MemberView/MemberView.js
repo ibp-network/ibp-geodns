@@ -53,6 +53,62 @@ const MemberView = () => {
     return <Loading pageLevel={true} dataReady={true} />;
   }
 
+  const renderMemberCard = (member) => {
+    const status = getMemberStatus(member, downtime);
+    const health = getMemberHealth(member, downtime);
+    const downServices = getDownServices(member.name, member.services || [], downtime);
+    
+    return (
+      <div
+        key={member.name}
+        className={`member-card card ${status}`}
+        onClick={() => navigate(`/members/${member.name}`)}
+      >
+        <div className="member-footer">
+          <a href={member.website} target="_blank" rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()} className="member-website">
+            🌐
+          </a>
+        </div>
+
+        <div className="member-header">
+          <div className="member-logo">
+            <MemberLogo member={member} size="medium" />
+          </div>
+          <div className="member-info">
+            <h3 className="member-name">{member.name}</h3>
+            <p className="member-region">{member.region}</p>
+          </div>
+          <StatusBadge status={status} value={health} type="uptime" />
+        </div>
+
+        <div className="member-details">
+          <div className="detail-item">
+            <span className="detail-icon">⚡</span>
+            <span className="detail-value">{member.services?.length || 0} services</span>
+          </div>
+          <div className="detail-item">
+            <span className="detail-icon">📅</span>
+            <span className="detail-value">{member.joined_date}</span>
+          </div>
+          <div className="detail-item">
+            <span className="detail-icon">📍</span>
+            <span className="detail-value">{member.latitude?.toFixed(2)}, {member.longitude?.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {downServices.size > 0 && (
+          <div className="member-issues">
+            <span className="issues-icon">⚠️</span>
+            <p className="issues-text">
+              {downServices.size} of {member.services?.length || 0} services affected
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="member-view fade-in">
       <div className="view-header">
@@ -104,70 +160,7 @@ const MemberView = () => {
           <div className="level-section">
             <h2 className="level-header">Level 6 Members</h2>
             <div className="members-list">
-              {groupedMembers[6].map(member => {
-                const status = getMemberStatus(member, downtime);
-                const health = getMemberHealth(member, downtime);
-                const downServices = getDownServices(member.name, member.services || [], downtime);
-                
-                return (
-                  <div
-                    key={member.name}
-                    className={`member-card card ${status}`}
-                    onClick={() => navigate(`/members/${member.name}`)}
-                  >
-                    <div className="member-header">
-                      <div className="member-logo">
-                        <MemberLogo member={member} size="medium" />
-                      </div>
-                      <div className="member-info">
-                        <h3 className="member-name">{member.name}</h3>
-                        <p className="member-region">{member.region}</p>
-                      </div>
-                      <StatusBadge status={status} value={health} type="uptime" />
-                    </div>
-
-                    <div className="member-details">
-                      <div className="detail-item">
-                        <span className="detail-label">
-                          <span className="detail-icon">⚡</span>
-                          Services
-                        </span>
-                        <span className="detail-value">{member.services?.length || 0}</span>
-                      </div>
-                      <div className="detail-item">
-                        <span className="detail-label">
-                          <span className="detail-icon">📅</span>
-                          Joined
-                        </span>
-                        <span className="detail-value">{member.joined_date}</span>
-                      </div>
-                      <div className="detail-item">
-                        <span className="detail-label">
-                          <span className="detail-icon">📍</span>
-                          Location
-                        </span>
-                        <span className="detail-value">{member.latitude?.toFixed(2)}, {member.longitude?.toFixed(2)}</span>
-                      </div>
-                    </div>
-
-                    {downServices.size > 0 && (
-                      <div className="member-issues">
-                        <span className="issues-icon">⚠️</span>
-                        <p className="issues-text">
-                          {downServices.size} of {member.services?.length || 0} services affected
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="member-footer">
-                      <a href={member.website} target="_blank" rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()} className="member-website">
-                        🌐 Visit Website
-                      </a>
-                    </div>
-                  </div>
-                );
-              })}
+              {groupedMembers[6].map(member => renderMemberCard(member))}
             </div>
           </div>
         )}
@@ -177,70 +170,7 @@ const MemberView = () => {
           <div className="level-section">
             <h2 className="level-header">Level 5 Members</h2>
             <div className="members-list">
-              {groupedMembers[5].map(member => {
-                const status = getMemberStatus(member, downtime);
-                const health = getMemberHealth(member, downtime);
-                const downServices = getDownServices(member.name, member.services || [], downtime);
-                
-                return (
-                  <div
-                    key={member.name}
-                    className={`member-card card ${status}`}
-                    onClick={() => navigate(`/members/${member.name}`)}
-                  >
-                    <div className="member-header">
-                      <div className="member-logo">
-                        <MemberLogo member={member} size="medium" />
-                      </div>
-                      <div className="member-info">
-                        <h3 className="member-name">{member.name}</h3>
-                        <p className="member-region">{member.region}</p>
-                      </div>
-                      <StatusBadge status={status} value={health} type="uptime" />
-                    </div>
-
-                    <div className="member-details">
-                      <div className="detail-item">
-                        <span className="detail-label">
-                          <span className="detail-icon">⚡</span>
-                          Services
-                        </span>
-                        <span className="detail-value">{member.services?.length || 0}</span>
-                      </div>
-                      <div className="detail-item">
-                        <span className="detail-label">
-                          <span className="detail-icon">📅</span>
-                          Joined
-                        </span>
-                        <span className="detail-value">{member.joined_date}</span>
-                      </div>
-                      <div className="detail-item">
-                        <span className="detail-label">
-                          <span className="detail-icon">📍</span>
-                          Location
-                        </span>
-                        <span className="detail-value">{member.latitude?.toFixed(2)}, {member.longitude?.toFixed(2)}</span>
-                      </div>
-                    </div>
-
-                    {downServices.size > 0 && (
-                      <div className="member-issues">
-                        <span className="issues-icon">⚠️</span>
-                        <p className="issues-text">
-                          {downServices.size} of {member.services?.length || 0} services affected
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="member-footer">
-                      <a href={member.website} target="_blank" rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()} className="member-website">
-                        🌐 Visit Website
-                      </a>
-                    </div>
-                  </div>
-                );
-              })}
+              {groupedMembers[5].map(member => renderMemberCard(member))}
             </div>
           </div>
         )}
@@ -250,70 +180,7 @@ const MemberView = () => {
           <div className="level-section">
             <h2 className="level-header">Level 3 Members</h2>
             <div className="members-list">
-              {groupedMembers[3].map(member => {
-                const status = getMemberStatus(member, downtime);
-                const health = getMemberHealth(member, downtime);
-                const downServices = getDownServices(member.name, member.services || [], downtime);
-                
-                return (
-                  <div
-                    key={member.name}
-                    className={`member-card card ${status}`}
-                    onClick={() => navigate(`/members/${member.name}`)}
-                  >
-                    <div className="member-header">
-                      <div className="member-logo">
-                        <MemberLogo member={member} size="medium" />
-                      </div>
-                      <div className="member-info">
-                        <h3 className="member-name">{member.name}</h3>
-                        <p className="member-region">{member.region}</p>
-                      </div>
-                      <StatusBadge status={status} value={health} type="uptime" />
-                    </div>
-
-                    <div className="member-details">
-                      <div className="detail-item">
-                        <span className="detail-label">
-                          <span className="detail-icon">⚡</span>
-                          Services
-                        </span>
-                        <span className="detail-value">{member.services?.length || 0}</span>
-                      </div>
-                      <div className="detail-item">
-                        <span className="detail-label">
-                          <span className="detail-icon">📅</span>
-                          Joined
-                        </span>
-                        <span className="detail-value">{member.joined_date}</span>
-                      </div>
-                      <div className="detail-item">
-                        <span className="detail-label">
-                          <span className="detail-icon">📍</span>
-                          Location
-                        </span>
-                        <span className="detail-value">{member.latitude?.toFixed(2)}, {member.longitude?.toFixed(2)}</span>
-                      </div>
-                    </div>
-
-                    {downServices.size > 0 && (
-                      <div className="member-issues">
-                        <span className="issues-icon">⚠️</span>
-                        <p className="issues-text">
-                          {downServices.size} of {member.services?.length || 0} services affected
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="member-footer">
-                      <a href={member.website} target="_blank" rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()} className="member-website">
-                        🌐 Visit Website
-                      </a>
-                    </div>
-                  </div>
-                );
-              })}
+              {groupedMembers[3].map(member => renderMemberCard(member))}
             </div>
           </div>
         )}
@@ -326,70 +193,7 @@ const MemberView = () => {
             <div key={level} className="level-section">
               <h2 className="level-header">Level {level} Members</h2>
               <div className="members-list">
-                {levelMembers.map(member => {
-                  const status = getMemberStatus(member, downtime);
-                  const health = getMemberHealth(member, downtime);
-                  const downServices = getDownServices(member.name, member.services || [], downtime);
-                  
-                  return (
-                    <div
-                      key={member.name}
-                      className={`member-card card ${status}`}
-                      onClick={() => navigate(`/members/${member.name}`)}
-                    >
-                      <div className="member-header">
-                        <div className="member-logo">
-                          <MemberLogo member={member} size="medium" />
-                        </div>
-                        <div className="member-info">
-                          <h3 className="member-name">{member.name}</h3>
-                          <p className="member-region">{member.region}</p>
-                        </div>
-                        <StatusBadge status={status} value={health} type="uptime" />
-                      </div>
-
-                      <div className="member-details">
-                        <div className="detail-item">
-                          <span className="detail-label">
-                            <span className="detail-icon">⚡</span>
-                            Services
-                          </span>
-                          <span className="detail-value">{member.services?.length || 0}</span>
-                        </div>
-                        <div className="detail-item">
-                          <span className="detail-label">
-                            <span className="detail-icon">📅</span>
-                            Joined
-                          </span>
-                          <span className="detail-value">{member.joined_date}</span>
-                        </div>
-                        <div className="detail-item">
-                          <span className="detail-label">
-                            <span className="detail-icon">📍</span>
-                            Location
-                          </span>
-                          <span className="detail-value">{member.latitude?.toFixed(2)}, {member.longitude?.toFixed(2)}</span>
-                        </div>
-                      </div>
-
-                      {downServices.size > 0 && (
-                        <div className="member-issues">
-                          <span className="issues-icon">⚠️</span>
-                          <p className="issues-text">
-                            {downServices.size} of {member.services?.length || 0} services affected
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="member-footer">
-                        <a href={member.website} target="_blank" rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()} className="member-website">
-                          🌐 Visit Website
-                        </a>
-                      </div>
-                    </div>
-                  );
-                })}
+                {levelMembers.map(member => renderMemberCard(member))}
               </div>
             </div>
           ))}
