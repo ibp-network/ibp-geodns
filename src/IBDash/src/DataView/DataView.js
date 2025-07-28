@@ -30,6 +30,7 @@ const DataView = () => {
     members: [],
     networks: []
   });
+  const [servicesData, setServicesData] = useState([]); // Store full service data for domain mapping
   const [showSuggestions, setShowSuggestions] = useState({
     country: false,
     service: false,
@@ -133,11 +134,12 @@ const DataView = () => {
         end: dateRange.end.toISOString().split('T')[0]
       };
 
-      const [countryRes, serviceRes, memberRes, asnRes] = await Promise.all([
+      const [countryRes, serviceRes, memberRes, asnRes, servicesFullRes] = await Promise.all([
         ApiHelper.fetchRequestsByCountry(params),
         ApiHelper.fetchRequestsByService(params),
         ApiHelper.fetchRequestsByMember(params),
-        ApiHelper.fetchRequestsByASN(params)
+        ApiHelper.fetchRequestsByASN(params),
+        ApiHelper.fetchServices() // Get full service data for domain mapping
       ]);
 
       const countriesMap = new Map();
@@ -150,8 +152,14 @@ const DataView = () => {
         }
       });
 
-      const services = [...new Set(serviceRes.data.map(item => item.service || item.domain))]
-        .filter(s => s)
+      // Store full services data for domain mapping
+      const fullServices = servicesFullRes.data?.services || [];
+      setServicesData(fullServices);
+
+      // Create service options from the full service data
+      const serviceOptions = fullServices
+        .filter(service => service.active)
+        .map(service => service.display_name || service.name)
         .sort();
 
       const members = [...new Set(memberRes.data.map(item => item.member))]
@@ -170,7 +178,7 @@ const DataView = () => {
 
       setFilterOptions({
         countries: Array.from(countriesMap.values()),
-        services,
+        services: serviceOptions,
         members,
         networks: Array.from(networksMap.values())
       });
@@ -182,6 +190,46 @@ const DataView = () => {
         setLoading(false);
       }
     }
+  };
+
+  // Helper function to extract domains from service
+  const extractDomainsFromService = (serviceName) => {
+    const service = servicesData.find(s => 
+      (s.display_name === serviceName) || (s.name === serviceName)
+    );
+    
+    if (!service || !service.providers) {
+      return [];
+    }
+
+    const domains = new Set();
+    
+    service.providers.forEach(provider => {
+      provider.rpc_urls.forEach(url => {
+        // Extract domain from URL
+        let domain = url;
+        
+        // Remove protocol
+        domain = domain.replace(/^(https?|wss?):\/\//, '');
+        
+        // Remove port
+        domain = domain.replace(/:\d+.*$/, '');
+        
+        // Remove path
+        domain = domain.replace(/\/.*$/, '');
+        
+        // Convert to lowercase
+        domain = domain.toLowerCase();
+        
+        // Skip system domains
+        const systemDomains = ['rpc.dotters.network', 'sys.dotters.network', 'rpc.ibp.network', 'sys.ibp.network'];
+        if (!systemDomains.includes(domain)) {
+          domains.add(domain);
+        }
+      });
+    });
+
+    return Array.from(domains);
   };
 
   const loadData = async (skipLoadingState = false) => {
@@ -200,9 +248,20 @@ const DataView = () => {
       if (selectedCountries.length > 0) {
         params.country = selectedCountries.join(',');
       }
+
+      // Convert selected services to domains
       if (selectedServices.length > 0) {
-        params.service = selectedServices.join(',');
+        const allDomains = [];
+        selectedServices.forEach(serviceName => {
+          const domains = extractDomainsFromService(serviceName);
+          allDomains.push(...domains);
+        });
+        
+        if (allDomains.length > 0) {
+          params.domain = allDomains.join(',');
+        }
       }
+
       if (selectedMembers.length > 0) {
         params.member = selectedMembers.join(',');
       }
@@ -250,7 +309,6 @@ const DataView = () => {
         start: dateRange.start.toISOString().split('T')[0],
         end: dateRange.end.toISOString().split('T')[0]
       };
-
       const response = await ApiHelper.fetchRequestsSummary(params);
       setSummary(response.data);
     } catch (error) {
@@ -459,8 +517,8 @@ const DataView = () => {
           <button
             className="clear-filters-btn"
             onClick={clearAllFilters}
-            disabled={selectedCountries.length === 0 && selectedServices.length === 0 && 
-                     selectedMembers.length === 0 && selectedNetworks.length === 0}
+            disabled={selectedCountries.length === 0 && selectedServices.length === 0 &&
+                      selectedMembers.length === 0 && selectedNetworks.length === 0}
           >
             Clear All Filters
           </button>
