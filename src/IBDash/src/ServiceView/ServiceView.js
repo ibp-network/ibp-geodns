@@ -337,55 +337,55 @@ console.log('Network:', network);`
              )}
 
              {/* Members Providing This Service */}
-             <div className="members-section">
-               <h3>
-                 <span>👥</span>
-                 Members Providing This Service ({getServiceMembers(selectedService.name).length})
-               </h3>
-               <div className="members-grid">
-                 {getServiceMembers(selectedService.name).map(member => (
-                   <div 
-                     key={member.name} 
-                     className="member-card"
-                     onClick={() => navigate(`/members/${member.name}`)}
-                   >
-                     {member.logo ? (
-                       <img 
-                         src={member.logo} 
-                         alt={member.name} 
-                         className="member-logo-mini"
-                         onError={(e) => {
-                           e.target.style.display = 'none';
-                           e.target.nextSibling.style.display = 'flex';
-                         }}
-                       />
-                     ) : null}
-                     <div 
-                       className="service-logo-placeholder" 
-                       style={{ display: member.logo ? 'none' : 'flex', width: '32px', height: '32px' }}
-                     >
-                       {member.name.substring(0, 2).toUpperCase()}
-                     </div>
-                     <div className="member-info">
-                       <div className="member-name">{member.name}</div>
-                       <div className="member-level">Level {member.level}</div>
-                     </div>
-                   </div>
-                 ))}
-               </div>
-             </div>
-           </div>
-         </>
-       ) : (
-         <div className="placeholder-content">
-           <div className="placeholder-icon">⚡</div>
-           <h3>Select a service to view details</h3>
-           <p>Choose from the list above to see service information and usage instructions</p>
-         </div>
-       )}
-     </div>
-   </div>
- );
+              <div className="members-section">
+                <h3>
+                  <span>👥</span>
+                  Members Providing This Service ({getServiceMembers(selectedService.name).length})
+                </h3>
+                <div className="members-grid">
+                  {getServiceMembers(selectedService.name).map(member => (
+                    <div 
+                      key={member.name} 
+                      className="member-card"
+                      onClick={() => navigate(`/members/${member.name}`)}
+                    >
+                      {member.logo ? (
+                        <img 
+                          src={member.logo} 
+                          alt={member.name} 
+                          className="member-logo-mini"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            e.target.nextSibling.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+                      <div 
+                        className="service-logo-placeholder" 
+                        style={{ display: member.logo ? 'none' : 'flex', width: '36px', height: '36px' }}
+                      >
+                        {member.name.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div className="member-card-info">
+                        <div className="member-name">{member.name}</div>
+                        <div className="member-level">Level {member.level}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="placeholder-content">
+            <div className="placeholder-icon">⚡</div>
+            <h3>Select a service to view details</h3>
+            <p>Choose from the list above to see service information and usage instructions</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 };
 
 export default ServiceView;

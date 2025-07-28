@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import ApiHelper from '../components/ApiHelper/ApiHelper';
 import Loading from '../components/Loading/Loading';
 import MemberLogo from '../components/MemberLogo/MemberLogo';
-import StatusBadge from '../components/StatusBadge/StatusBadge';
 import { getDownServices, getMemberHealth } from '../utils/common';
 import { getMemberStatus } from '../utils/memberUtils';
 import './MemberView.css';
@@ -64,45 +63,51 @@ const MemberView = () => {
         className={`member-card card ${status}`}
         onClick={() => navigate(`/members/${member.name}`)}
       >
-        <a href={member.website} target="_blank" rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()} className="member-website-icon">
-          🌐
-        </a>
-
-        <div className="member-header">
+        <div className="member-top-section">
           <div className="member-logo">
             <MemberLogo member={member} size="medium" />
           </div>
-          <div className="member-info">
+          
+          <div className="member-core-info">
             <h3 className="member-name">{member.name}</h3>
             <p className="member-region">{member.region}</p>
           </div>
-          <StatusBadge status={status} value={health} type="uptime" />
-        </div>
 
-        <div className="member-details">
-          <div className="detail-item">
-            <span className="detail-icon">⚡</span>
-            <span className="detail-value">{member.services?.length || 0}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-icon">📅</span>
-            <span className="detail-value">{member.joined_date}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-icon">📍</span>
-            <span className="detail-value">{member.latitude?.toFixed(1)}, {member.longitude?.toFixed(1)}</span>
+          <div className="member-status-section">
+            <a href={member.website} target="_blank" rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()} className="member-website-btn">
+              🌐
+            </a>
+            <div className={`member-status status-${status}`}>
+              <span className="status-icon">{status === 'operational' ? '✓' : status === 'degraded' ? '!' : '✗'}</span>
+              <span>{health.toFixed(0)}%</span>
+            </div>
           </div>
         </div>
 
-        {downServices.size > 0 && (
-          <div className="member-issues">
-            <span className="issues-icon">⚠️</span>
-            <p className="issues-text">
-              {downServices.size} of {member.services?.length || 0} services affected
-            </p>
+        <div className="member-bottom-section">
+          <div className="member-stats">
+            <div className="stat">
+              <span className="stat-icon">⚡</span>
+              <span className="stat-text">{member.services?.length || 0} services</span>
+            </div>
+            <div className="stat">
+              <span className="stat-icon">📅</span>
+              <span className="stat-text">{member.joined_date}</span>
+            </div>
+            <div className="stat">
+              <span className="stat-icon">📍</span>
+              <span className="stat-text">{member.latitude?.toFixed(0)}°, {member.longitude?.toFixed(0)}°</span>
+            </div>
           </div>
-        )}
+
+          {downServices.size > 0 && (
+            <div className="member-issues">
+              <span className="issues-icon">⚠️</span>
+              <span>{downServices.size} affected</span>
+            </div>
+          )}
+        </div>
       </div>
     );
   };
