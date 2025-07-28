@@ -1,0 +1,40 @@
+.member-logo,
+.logo-placeholder {
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.logo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  background: var(--bg-tertiary);
+  color: var(--accent-primary);
+}
+
+/* Size variants */
+.logo-small {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.logo-medium {
+  width: 60px;
+  height: 60px;
+  font-size: 20px;
+}
+
+.logo-large {
+  width: 80px;
+  height: 80px;
+  font-size: 24px;
+  border-radius: 16px;
+}
+
+.member-logo {
+  background: var(--bg-secondary);
+  padding: 6px;
+}

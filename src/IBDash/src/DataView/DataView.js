@@ -4,6 +4,7 @@ import DataTable from '../components/DataTable/DataTable';
 import StatsCard from '../components/Cards/StatsCard';
 import Charts from '../components/Charts/Charts';
 import Loading from '../components/Loading/Loading';
+import DateRangePicker from '../components/DateRangePicker/DateRangePicker';
 import './DataView.css';
 
 const DataView = () => {
@@ -340,7 +341,6 @@ const DataView = () => {
       <div className="view-header">
         <h1>Data Analytics</h1>
       </div>
-
       {summary && (
         <div className="stats-grid">
           <StatsCard
@@ -365,7 +365,6 @@ const DataView = () => {
           />
         </div>
       )}
-
       <div className="unified-controls-bar">
         <div className="controls-top-row">
           <div className="control-section">
@@ -383,21 +382,7 @@ const DataView = () => {
           
           <div className="control-section">
             <span className="control-label">Date Range:</span>
-            <div className="date-controls">
-              <input
-                type="date"
-                value={dateRange.start.toISOString().split('T')[0]}
-                onChange={(e) => setDateRange({ ...dateRange, start: new Date(e.target.value) })}
-                className="date-input"
-              />
-              <span className="date-separator">to</span>
-              <input
-                type="date"
-                value={dateRange.end.toISOString().split('T')[0]}
-                onChange={(e) => setDateRange({ ...dateRange, end: new Date(e.target.value) })}
-                className="date-input"
-              />
-            </div>
+            <DateRangePicker dateRange={dateRange} onChange={setDateRange} />
           </div>
 
           <button
