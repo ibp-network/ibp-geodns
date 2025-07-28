@@ -103,12 +103,14 @@
   cursor: pointer;
 }
 
-.members-grid {
+/* Main container for all members */
+.members-container {
   display: flex;
   flex-direction: column;
   gap: 48px;
 }
 
+/* Each level section */
 .level-section {
   display: flex;
   flex-direction: column;
@@ -120,6 +122,7 @@
   font-weight: 600;
   color: var(--text-secondary);
   margin: 0;
+  padding: 0;
 }
 
 .members-list {
@@ -298,4 +301,10 @@
 .member-website:hover {
   color: #2563eb;
   transform: translateX(2px);
+}
+
+@media (max-width: 768px) {
+  .members-list {
+    grid-template-columns: 1fr;
+  }
 }
