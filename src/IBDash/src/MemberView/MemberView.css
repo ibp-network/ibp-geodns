@@ -131,11 +131,14 @@
   gap: 24px;
 }
 
+/* Member Card - Fixed internal layout */
 .member-card {
   cursor: pointer;
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .member-card:hover {
@@ -151,9 +154,10 @@
   border-color: var(--error);
 }
 
+/* Member header - horizontal layout for logo, name, and status */
 .member-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
   margin-bottom: 20px;
 }
@@ -186,19 +190,24 @@
 
 .member-info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .member-name {
   font-size: 18px;
   font-weight: 600;
-  margin-bottom: 4px;
+  margin: 0;
 }
 
 .member-region {
   font-size: 14px;
   color: var(--text-secondary);
+  margin: 0;
 }
 
+/* Status badge - positioned in header */
 .member-status {
   display: flex;
   align-items: center;
@@ -207,6 +216,8 @@
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .member-status.status-operational {
@@ -228,6 +239,7 @@
   font-size: 16px;
 }
 
+/* Member details - vertical sections below header */
 .member-details {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -240,13 +252,14 @@
 
 .detail-item {
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .detail-label {
-  display: block;
   font-size: 12px;
   color: var(--text-secondary);
-  margin-bottom: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -263,6 +276,7 @@
   font-weight: 500;
 }
 
+/* Issues section */
 .member-issues {
   padding: 12px;
   background: rgba(245, 158, 11, 0.1);
@@ -282,10 +296,13 @@
   font-size: 13px;
   color: var(--warning);
   flex: 1;
+  margin: 0;
 }
 
+/* Footer section */
 .member-footer {
   text-align: center;
+  margin-top: auto;
 }
 
 .member-website {
@@ -306,5 +323,14 @@
 @media (max-width: 768px) {
   .members-list {
     grid-template-columns: 1fr;
+  }
+  
+  .view-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .member-controls {
+    flex-direction: column;
   }
 }
