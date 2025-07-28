@@ -248,9 +248,9 @@ const BillingView = () => {
                               <div className="stat-label">Base Cost</div>
                               <div className="stat-value primary">${member.total_base_cost?.toFixed(2)}</div>
                             </div>
-                            <div className="stat-card">
+                            <div className="stat-card primary">
                               <div className="stat-label">Billed Amount</div>
-                              <div className="stat-value">${member.total_billed?.toFixed(2)}</div>
+                              <div className="stat-value primary">${member.total_billed?.toFixed(2)}</div>
                             </div>
                             <div className="stat-card success">
                               <div className="stat-label">SLA Credits</div>
@@ -290,14 +290,14 @@ const BillingView = () => {
                                   {member.services.map(service => (
                                     <tr key={service.name}>
                                       <td>{service.name}</td>
-                                      <td>${service.base_cost?.toFixed(2)}</td>
+                                      <td className="cost-value">${service.base_cost?.toFixed(2)}</td>
                                       <td>
                                         <span className={`badge ${getUptimeClass(service.uptime_percentage)}`}>
                                           {service.uptime_percentage?.toFixed(2)}%
                                         </span>
                                       </td>
-                                      <td>${service.billed_cost?.toFixed(2)}</td>
-                                      <td className={service.credits > 0 ? 'success' : ''}>
+                                      <td className="billed-value">${service.billed_cost?.toFixed(2)}</td>
+                                      <td className={`credits-value ${service.credits > 0 ? 'has-credits' : ''}`}>
                                         ${service.credits?.toFixed(2)}
                                       </td>
                                       <td>

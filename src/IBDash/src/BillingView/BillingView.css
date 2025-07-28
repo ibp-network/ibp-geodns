@@ -276,6 +276,10 @@
   background: var(--warning);
 }
 
+.stat-card.primary::before {
+  background: var(--accent-primary);
+}
+
 .stat-label {
   font-size: 11px;
   color: var(--text-secondary);
@@ -319,6 +323,25 @@
   overflow: hidden;
 }
 
+/* Table cell colors */
+.data-table td.cost-value {
+  font-weight: 500;
+  color: var(--accent-primary);
+}
+
+.data-table td.billed-value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.data-table td.credits-value {
+  font-weight: 500;
+}
+
+.data-table td.credits-value.has-credits {
+  color: var(--success);
+}
+
 /* Table styles with colored badges */
 .data-table .badge {
   padding: 4px 12px;
@@ -330,17 +353,25 @@
   gap: 6px;
 }
 
-.badge.success {
+.badge.success,
+.badge.excellent {
   background: rgba(16, 185, 129, 0.1);
   color: var(--success);
 }
 
-.badge.warning {
+.badge.good {
+  background: rgba(74, 222, 128, 0.1);
+  color: #4ade80;
+}
+
+.badge.warning,
+.badge.fair {
   background: rgba(245, 158, 11, 0.1);
   color: var(--warning);
 }
 
-.badge.error {
+.badge.error,
+.badge.poor {
   background: rgba(239, 68, 68, 0.1);
   color: var(--error);
 }

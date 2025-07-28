@@ -64,12 +64,10 @@ const MemberView = () => {
         className={`member-card card ${status}`}
         onClick={() => navigate(`/members/${member.name}`)}
       >
-        <div className="member-footer">
-          <a href={member.website} target="_blank" rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()} className="member-website">
-            🌐
-          </a>
-        </div>
+        <a href={member.website} target="_blank" rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()} className="member-website-icon">
+          🌐
+        </a>
 
         <div className="member-header">
           <div className="member-logo">
@@ -85,7 +83,7 @@ const MemberView = () => {
         <div className="member-details">
           <div className="detail-item">
             <span className="detail-icon">⚡</span>
-            <span className="detail-value">{member.services?.length || 0} services</span>
+            <span className="detail-value">{member.services?.length || 0}</span>
           </div>
           <div className="detail-item">
             <span className="detail-icon">📅</span>
@@ -93,7 +91,7 @@ const MemberView = () => {
           </div>
           <div className="detail-item">
             <span className="detail-icon">📍</span>
-            <span className="detail-value">{member.latitude?.toFixed(2)}, {member.longitude?.toFixed(2)}</span>
+            <span className="detail-value">{member.latitude?.toFixed(1)}, {member.longitude?.toFixed(1)}</span>
           </div>
         </div>
 
