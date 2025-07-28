@@ -93,7 +93,7 @@ const DataView = () => {
       setDataReady(true);
     } finally {
       // Wait a bit for data ready state to propagate
-      setTimeout(() => setInitialLoading(false), 100);
+      setInitialLoading(false)
     }
   };
 
@@ -117,7 +117,7 @@ const DataView = () => {
       setDataReady(true);
     } finally {
       // Wait a bit for data ready state to propagate
-      setTimeout(() => setLoading(false), 100);
+      setLoading(false)
     }
   };
 
@@ -179,7 +179,7 @@ const DataView = () => {
     } finally {
       if (!skipLoadingState) {
         setDataReady(true);
-        setTimeout(() => setLoading(false), 100);
+        setLoading(false);
       }
     }
   };
@@ -234,7 +234,7 @@ const DataView = () => {
     } finally {
       if (!skipLoadingState) {
         setDataReady(true);
-        setTimeout(() => setLoading(false), 100);
+        setLoading(false);
       }
     }
   };
@@ -258,7 +258,7 @@ const DataView = () => {
     } finally {
       if (!skipLoadingState) {
         setDataReady(true);
-        setTimeout(() => setLoading(false), 100);
+        setLoading(false)
       }
     }
   };
