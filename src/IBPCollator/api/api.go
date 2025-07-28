@@ -49,13 +49,20 @@ var (
 	monthDirPattern = regexp.MustCompile(`^\d{4}-\d{2}$`)
 )
 
-// CORS middleware
+// CORS middleware - Updated to be more permissive
 func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Get origin from request
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			origin = "*"
+		}
+
 		// Set CORS headers
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Max-Age", "3600")
 
 		// Handle preflight requests
@@ -125,12 +132,21 @@ func Init() {
 		// Start certificate watcher
 		go watchCertificates()
 
-		// Create HTTPS server
+		// Create HTTPS server with custom TLS config
 		server := &http.Server{
 			Addr:    addr + ":" + port,
 			Handler: mux,
 			TLSConfig: &tls.Config{
 				GetCertificate: getCertificate,
+				MinVersion:     tls.VersionTLS12,
+				CipherSuites: []uint16{
+					tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+					tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+					tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+					tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+					tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+					tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+				},
 			},
 		}
 
@@ -161,6 +177,7 @@ func loadTLSConfig() error {
 	tlsMutex.Lock()
 	tlsConfig = &tls.Config{
 		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
 	}
 	tlsMutex.Unlock()
 
