@@ -39,6 +39,7 @@ const DataView = () => {
   const [selectedServices, setSelectedServices] = useState([]);
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [selectedNetworks, setSelectedNetworks] = useState([]);
+
   const countryRef = useRef(null);
   const serviceRef = useRef(null);
   const memberRef = useRef(null);
@@ -200,6 +201,7 @@ const DataView = () => {
         start: dateRange.start.toISOString().split('T')[0],
         end: dateRange.end.toISOString().split('T')[0]
       };
+
       const response = await ApiHelper.fetchRequestsSummary(params);
       setSummary(response.data);
     } catch (error) {
@@ -330,8 +332,9 @@ const DataView = () => {
     { id: 'member', label: 'By Member', icon: '👥' }
   ];
 
-  if (initialLoading) {
-    return <Loading pageLevel={true} dataReady={true} />;
+  // Show full-screen loading for initial load or when loading data
+  if (initialLoading || loading) {
+    return <Loading pageLevel={true} dataReady={!loading} />;
   }
 
   return (
@@ -402,8 +405,8 @@ const DataView = () => {
           <button
             className="clear-filters-btn"
             onClick={clearAllFilters}
-            disabled={selectedCountries.length === 0 && selectedServices.length === 0 &&
-                      selectedMembers.length === 0 && selectedNetworks.length === 0}
+            disabled={selectedCountries.length === 0 && selectedServices.length === 0 && 
+                     selectedMembers.length === 0 && selectedNetworks.length === 0}
           >
             Clear All Filters
           </button>
@@ -583,10 +586,9 @@ const DataView = () => {
             </button>
           ))}
         </div>
+
         <div className="tab-content">
-          {loading ? (
-            <Loading pageLevel={true} dataReady={false} />
-          ) : data && data.length > 0 ? (
+          {data && data.length > 0 ? (
             <>
               <Charts data={data} type={activeTab} />
               <DataTable data={data} type={activeTab} aggregateView={aggregateView} />
