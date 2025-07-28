@@ -153,6 +153,10 @@ type ServiceConfiguration struct {
 	Active        int    `json:"Active"`
 	LevelRequired int    `json:"LevelRequired"`
 	NetworkName   string `json:"NetworkName"`
+	DisplayName   string `json:"DisplayName"`
+	WebsiteURL    string `json:"WebsiteURL"`
+	LogoURL       string `json:"LogoURL"`
+	Description   string `json:"Description"`
 	StateRootHash string `json:"StateRootHash"`
 }
 
