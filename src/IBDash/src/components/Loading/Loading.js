@@ -67,16 +67,14 @@ const Loading = ({ onAnimationComplete, dataReady, pageLevel = false, minDuratio
           </div>
           <h2 className="loading-title">Infrastructure Builders Program</h2>
           <p className="loading-subtitle">
-            {progress < 100 ? (pageLevel ? 'Loading data...' : 'Loading dashboard...') : 'Ready'}
+            {pageLevel ? 'Downloading API Data...' : 'Loading dashboard...'}
           </p>
-          {!pageLevel && (
-            <div className="loading-progress">
-              <div 
-                className="loading-progress-bar" 
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          )}
+          <div className="loading-progress">
+            <div 
+              className="loading-progress-bar" 
+              style={{ width: `${progress}%` }}
+            />
+          </div>
           {progress >= 100 && !dataReady && !pageLevel && (
             <p className="loading-waiting">Waiting for data...</p>
           )}
@@ -87,7 +85,15 @@ const Loading = ({ onAnimationComplete, dataReady, pageLevel = false, minDuratio
           <img src="/static/imgs/ibp.png" alt="IBP" className="loading-logo" />
           <div className="loading-spinner"></div>
           <h2 className="loading-title">Infrastructure Builders Program</h2>
-          <p className="loading-subtitle">Loading...</p>
+          <p className="loading-subtitle">
+            {pageLevel ? 'Downloading API Data...' : 'Loading...'}
+          </p>
+          <div className="loading-progress">
+            <div 
+              className="loading-progress-bar" 
+              style={{ width: `${progress}%` }}
+            />
+          </div>
         </>
       )}
     </>
