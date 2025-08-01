@@ -12,7 +12,7 @@ import (
 
 func Init() {
 	c := cfg.GetConfig()
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&loc=UTC",
 		c.Local.Mysql.User,
 		c.Local.Mysql.Pass,
 		c.Local.Mysql.Host,

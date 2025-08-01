@@ -11,17 +11,16 @@ import (
 )
 
 func init() {
-	RegisterDomainCheck("ssl", SslCheck)
+	// SSL check is valid for both RPC and ETHRPC service types
+	RegisterDomainCheckWithTypes("ssl", SslCheck, []string{"RPC", "ETHRPC"})
 }
 
 func SslCheck(check cfg.Check, domain string, service cfg.Service, member cfg.Member) {
 	ip4 := member.Service.ServiceIPv4
 	ip6 := member.Service.ServiceIPv6
-
 	if ip4 != "" {
 		dialAndCheckTLS(check, domain, service, member, ip4, false)
 	}
-
 	if ip6 != "" {
 		dialAndCheckTLS(check, domain, service, member, ip6, true)
 	}
@@ -64,7 +63,6 @@ func dialAndCheckTLS(
 
 	cert := certs[0]
 	daysUntilExpiry := int(time.Until(cert.NotAfter).Hours() / 24)
-
 	success := true
 	errText := ""
 	if daysUntilExpiry < 5 {
