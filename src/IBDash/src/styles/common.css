@@ -1,0 +1,155 @@
+/* Status Colors - Used across multiple components */
+.status-operational,
+.status-online,
+.uptime-badge.good,
+.stat-card.success::before,
+.service-status.operational .service-status-icon,
+.sla-badge.pass,
+.text-success,
+.month-uptime.excellent,
+.month-uptime.good {
+  color: var(--success);
+}
+
+.status-degraded,
+.status-warning,
+.uptime-badge.warning,
+.stat-card.warning::before,
+.service-status.degraded .service-status-icon,
+.text-warning,
+.month-uptime.fair {
+  color: var(--warning);
+}
+
+.status-offline,
+.status-error,
+.uptime-badge.error,
+.stat-card.error::before,
+.service-status.offline .service-status-icon,
+.sla-badge.fail,
+.text-error,
+.month-uptime.poor {
+  color: var(--error);
+}
+
+/* Common Badge Styles */
+.badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge.success {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+}
+
+.badge.warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+}
+
+.badge.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+}
+
+/* Common Loading Styles */
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--bg-tertiary);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+  color: var(--text-secondary);
+}
+
+/* Common Table Styles */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.data-table th {
+  background: var(--bg-secondary);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.data-table tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Common Form Controls */
+.form-input {
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Common Section Styles */
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-icon {
+  font-size: 20px;
+}
+
+/* Common No Data States */
+.no-data {
+  text-align: center;
+  padding: 60px;
+  color: var(--text-secondary);
+}
+
+/* Enhanced Glass Effect - Used in multiple places */
+.enhanced-glass {
+  background: rgba(20, 20, 20, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}

@@ -1,61 +1,62 @@
 package billing
 
-// ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-// ┃  Stake Plus Inc. – IBPCollator Billing PDF helpers  (v0.4.8)       ┃
-// ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-//
-// Change log (excerpt)
-// --------------------
-// • v0.4.8 – Ensure report headers have breathing‑room: every page now
-//   starts ordinary content at Y = 32 mm, preventing the previously observed
-//   “title sitting on top of boxes” issue.
-// • v0.4.7 – Watermark logo scale 62.5 %, alpha 0.25; titles only in header.
-// • v0.4.6 – GoFPDF 4‑value GetMargins() compatibility.
-// • Earlier – initial implementation.
-//
-
 import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
-	"strconv"
 	"time"
 
 	cfg "ibp-geodns/src/common/config"
+	data2 "ibp-geodns/src/common/data2"
 	log "ibp-geodns/src/common/logging"
 
 	"github.com/phpdave11/gofpdf"
 )
 
-/* ---------------------------------------------------------------------
-                            watermark helpers
---------------------------------------------------------------------- */
+/*
+	---------------------------------------------------------------------
+	                            watermark helpers
 
+---------------------------------------------------------------------
+*/
 func findLogo(baseDir string) string {
-	p := filepath.Join(baseDir, "assets", "ibp.png")
-	if _, err := os.Stat(p); err == nil {
-		return p
+	// Try multiple possible locations for the logo
+	possiblePaths := []string{
+		filepath.Join(baseDir, "public", "static", "imgs", "ibp.png"),
+		filepath.Join(baseDir, "ibp.png"),
+		filepath.Join(baseDir, "..", "assets", "ibp.png"),
+		filepath.Join(baseDir, "..", "ibp.png"),
+		"/opt/ibp-geodns/assets/ibp.png",
 	}
+
+	for _, p := range possiblePaths {
+		if _, err := os.Stat(p); err == nil {
+			log.Log(log.Debug, "[billing] Found logo at: %s", p)
+			return p
+		}
+	}
+
+	log.Log(log.Warn, "[billing] Logo not found in any of the expected locations")
 	return ""
 }
 
-// addPageWithWatermark creates a new page, draws the centred logo (62.5 %
-// width, 25 % transparency) and **moves Y to 32 mm** so subsequent content
+// addPageWithWatermark creates a new page, draws the centred logo (62.5%
+// width, 25% transparency) and **moves Y to 32mm** so subsequent content
 // never collides with the header/title.
 func addPageWithWatermark(pdf *gofpdf.Fpdf, logo string) {
 	pdf.AddPage()
 
 	if logo != "" {
 		pageW, pageH := pdf.GetPageSize()
-		imgW := pageW * 0.625 // 62.5 %
+		imgW := pageW * 0.625 // 62.5%
 
 		info := pdf.RegisterImageOptions(logo,
 			gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: true})
 		nativeW, nativeH := info.Extent()
 		scale := imgW / nativeW
 		imgH := nativeH * scale
+
 		imgX := (pageW - imgW) / 2
 		imgY := (pageH - imgH) / 2
 
@@ -69,55 +70,17 @@ func addPageWithWatermark(pdf *gofpdf.Fpdf, logo string) {
 	pdf.SetY(32.0)
 }
 
-/* ---------------------------------------------------------------------
-                         reflection convenience
---------------------------------------------------------------------- */
+/*
+	---------------------------------------------------------------------
+	                     "cost by service" — PDF report
 
-func lookupString(obj interface{}, field string) (string, bool) {
-	v := reflect.ValueOf(obj)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-	if v.Kind() != reflect.Struct {
-		return "", false
-	}
-	f := v.FieldByName(field)
-	if f.IsValid() && f.Kind() == reflect.String {
-		return f.String(), true
-	}
-	return "", false
-}
-
-func lookupInt64(obj interface{}, field string) (int64, bool) {
-	v := reflect.ValueOf(obj)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-	if v.Kind() != reflect.Struct {
-		return 0, false
-	}
-	f := v.FieldByName(field)
-	if f.IsValid() {
-		switch f.Kind() {
-		case reflect.Int, reflect.Int32, reflect.Int64:
-			return f.Int(), true
-		case reflect.Uint, reflect.Uint32, reflect.Uint64:
-			return int64(f.Uint()), true
-		}
-	}
-	return 0, false
-}
-
-/* ---------------------------------------------------------------------
-                     “cost by service”  –  PDF report
---------------------------------------------------------------------- */
-
+---------------------------------------------------------------------
+*/
 func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 	c := cfg.GetConfig()
 	logoPath := findLogo(c.Local.System.WorkDir)
 
 	const title = "IBP Network - Cost by Service"
-
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.SetTitle(title, false)
 	pdf.SetAuthor("IBPCollator "+Version(), false)
@@ -137,8 +100,8 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 		pdf.CellFormat(0, 10,
 			fmt.Sprintf("page %d of {nb}", pdf.PageNo()), "", 0, "C", false, 0, "")
 	})
-	pdf.AliasNbPages("")
 
+	pdf.AliasNbPages("")
 	addPageWithWatermark(pdf, logoPath)
 
 	// deterministic ordering
@@ -157,9 +120,9 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 		colSvcW    = 100.0
 		colCostW   = 60.0
 	)
+
 	boxWidth := colSvcW + colCostW
 	leftMargin := (pageW - boxWidth) / 2
-
 	origLeft, _, _, _ := pdf.GetMargins()
 
 	for _, svc := range serviceNames {
@@ -209,6 +172,7 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 				pdf.CellFormat(boxWidth, rowH+2, svc+" (cont'd)", "",
 					1, "L", false, 0, "")
 				pdf.Ln(1)
+
 				pdf.SetFont("Helvetica", "B", 11)
 				pdf.CellFormat(colSvcW, rowH, "Member", "1", 0, "L", true, 0, "")
 				pdf.CellFormat(colCostW, rowH, "Cost (USD)", "1", 1, "R", true, 0, "")
@@ -233,7 +197,6 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 		endY := pdf.GetY()
 		pdf.Rect(leftMargin, startY-1, boxWidth, endY-startY+1, "D")
 		pdf.Ln(boxGap)
-
 		pdf.SetLeftMargin(origLeft)
 	}
 
@@ -242,9 +205,11 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 	for _, sc := range sum.Services {
 		grand += sc.Total
 	}
+
 	if pdf.GetY() > 260 {
 		addPageWithWatermark(pdf, logoPath)
 	}
+
 	pdf.SetLeftMargin(leftIndent)
 	pdf.SetX(leftIndent)
 	pdf.SetFont("Helvetica", "B", 12)
@@ -257,216 +222,117 @@ func writeServiceCostPDF(sum *Summary, tmpDir string) error {
 	if err := pdf.OutputFileAndClose(filename); err != nil {
 		return err
 	}
+
 	log.Log(log.Info, "[billing] service-cost PDF written → %s", filename)
 	return nil
 }
 
-/* ---------------------------------------------------------------------
-                 “billing by member”  –  PDF report
---------------------------------------------------------------------- */
+/*
+	---------------------------------------------------------------------
+	                 "billing by member" — PDF report
 
-func getUptimePercent(sla SLASummary, member, service string) float64 {
+---------------------------------------------------------------------
+*/
+func getSLABreakdown(sla SLASummary, member, service string) SLABreakdown {
 	if upm, ok := sla[member]; ok {
 		if bd, ok2 := upm[service]; ok2 {
-			return bd.Uptime
+			return bd
 		}
 	}
-	return 100.0
+
+	// Return default if not found
+	return SLABreakdown{
+		HoursTotal:   730, // Default month hours
+		HoursDown:    0,
+		HoursUp:      730,
+		Uptime:       100.0,
+		SLAThreshold: DefaultSLAPercentage,
+		SLAHours:     730 * (DefaultSLAPercentage / 100.0),
+		MeetsSLA:     true,
+	}
 }
 
-func writeMemberBillingPDF(sum *Summary, sla SLASummary, tmpDir string, month time.Time) error {
-	baseDir := filepath.Dir(tmpDir)
-	logoPath := findLogo(baseDir)
+// MemberStats holds DNS request statistics for a member
+type MemberStats struct {
+	RequestCount int
+}
 
-	const titleFmt = "IBP Network - Member Billing (%s %d)"
-	title := fmt.Sprintf(titleFmt, month.Format("January"), month.Year())
+// calculateMemberStats queries the database for member request statistics
+// Updated to use member's Details.Name for database lookup
+func calculateMemberStats(month time.Time) map[string]MemberStats {
+	stats := make(map[string]MemberStats)
 
-	pdf := gofpdf.New("P", "mm", "A4", "")
-	pdf.SetTitle(title, false)
-	pdf.SetAuthor("IBPCollator "+Version(), false)
-
-	// Global header
-	pdf.SetHeaderFuncMode(func() {
-		pdf.SetFont("Helvetica", "B", 15)
-		pdf.CellFormat(0, 10, title, "", 1, "C", false, 0, "")
-		pdf.SetFont("Helvetica", "", 10)
-		pdf.CellFormat(0, 6, time.Now().UTC().Format("02 Jan 2006 15:04 UTC"),
-			"", 0, "C", false, 0, "")
-	}, true)
-
-	pdf.SetFooterFunc(func() {
-		pdf.SetY(-15)
-		pdf.SetFont("Helvetica", "I", 9)
-		pdf.CellFormat(0, 10,
-			fmt.Sprintf("page %d of {nb}", pdf.PageNo()), "", 0, "C", false, 0, "")
-	})
-	pdf.AliasNbPages("")
-
-	addPageWithWatermark(pdf, logoPath)
-
-	// deterministic order
-	memberNames := make([]string, 0, len(sum.Members))
-	for m := range sum.Members {
-		memberNames = append(memberNames, m)
+	// Check if database is initialized
+	if data2.DB == nil {
+		log.Log(log.Error, "[billing] Database not initialized for member stats calculation")
+		return stats
 	}
-	sort.Strings(memberNames)
 
-	// geometry
-	pageW, _ := pdf.GetPageSize()
-	const (
-		boxGap      = 8.0
-		rowH        = 6.0
-		colServiceW = 60.0
-		colBaseW    = 30.0
-		colUptimeW  = 30.0
-		colBillW    = 40.0
-	)
-	boxWidth := colServiceW + colBaseW + colUptimeW + colBillW
-	leftMargin := (pageW - boxWidth) / 2
+	// Get configuration to map member IDs to their Details.Name
+	c := cfg.GetConfig()
+	nameToMemberID := make(map[string]string)
 
-	origLeft, _, _, _ := pdf.GetMargins()
+	// Build reverse mapping from Details.Name to member ID
+	for memberID, member := range c.Members {
+		if member.Details.Name != "" {
+			nameToMemberID[member.Details.Name] = memberID
+		} else {
+			// Fallback to member ID if Details.Name is empty
+			nameToMemberID[memberID] = memberID
+		}
+	}
 
-	grandTotal := 0.0
+	// Calculate the time range for the month
+	startDate := month.Format("2006-01-02")
+	endDate := month.AddDate(0, 1, 0).Add(-24 * time.Hour).Format("2006-01-02")
 
-	for _, mem := range memberNames {
-		startY := pdf.GetY()
-		if startY > 210 {
-			addPageWithWatermark(pdf, logoPath)
-			startY = pdf.GetY()
+	// Query for member request counts
+	query := `
+		SELECT 
+			COALESCE(member_name, '(none)') as member_name,
+			SUM(hits) as total_hits
+		FROM requests
+		WHERE date >= ? AND date <= ?
+		GROUP BY member_name
+	`
+
+	rows, err := data2.DB.Query(query, startDate, endDate)
+	if err != nil {
+		log.Log(log.Error, "[billing] Failed to query member stats: %v", err)
+		return stats
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var memberName string
+		var totalHits int
+
+		err := rows.Scan(&memberName, &totalHits)
+		if err != nil {
+			log.Log(log.Error, "[billing] Failed to scan member stats row: %v", err)
+			continue
 		}
 
-		pdf.SetLeftMargin(leftMargin)
-		pdf.SetX(leftMargin)
-
-		// Member title
-		pdf.SetFont("Helvetica", "B", 12)
-		pdf.CellFormat(boxWidth, rowH+3, mem, "", 1, "L", false, 0, "")
-
-		// metadata lines
-		pdf.SetFont("Helvetica", "", 9)
-		metaLines := make([]string, 0, 6)
-
-		if web, ok := lookupString(sum.Members[mem], "Website"); ok && web != "" {
-			metaLines = append(metaLines, "Website: "+web)
-		}
-		metaLines = append(metaLines,
-			"Billing period: "+month.Format("January 2006"))
-
-		if lvl, ok := lookupString(sum.Members[mem], "Level"); ok && lvl != "" {
-			metaLines = append(metaLines, "IBP member level: "+lvl)
-		}
-
-		if joined, ok := lookupString(sum.Members[mem], "Joined"); ok && joined != "" {
-			metaLines = append(metaLines, "Joined: "+joined)
-		}
-
-		if req, ok := lookupInt64(sum.Members[mem], "DNSRequests"); ok && req > 0 {
-			metaLines = append(metaLines,
-				"DNS requests (period): "+strconv.FormatInt(req, 10))
-		}
-
-		for _, ln := range metaLines {
-			pdf.CellFormat(boxWidth, rowH, ln, "", 1, "L", false, 0, "")
-		}
-		pdf.Ln(1)
-
-		// table header
-		pdf.SetFont("Helvetica", "B", 11)
-		pdf.SetFillColor(240, 240, 240)
-		pdf.CellFormat(colServiceW, rowH, "Service", "1", 0, "L", true, 0, "")
-		pdf.CellFormat(colBaseW, rowH, "Base (USD)", "1", 0, "R", true, 0, "")
-		pdf.CellFormat(colUptimeW, rowH, "Uptime %", "1", 0, "R", true, 0, "")
-		pdf.CellFormat(colBillW, rowH, "Billed (USD)", "1", 1, "R", true, 0, "")
-		pdf.SetFont("Helvetica", "", 10)
-
-		memberTotal := 0.0
-		svcNames := make([]string, 0, len(sum.Members[mem].ServiceCosts))
-		for s := range sum.Members[mem].ServiceCosts {
-			svcNames = append(svcNames, s)
-		}
-		sort.Strings(svcNames)
-
-		fillToggle := false
-		for _, svc := range svcNames {
-			if pdf.GetY() > 260 {
-				// close rectangle, new page
-				endY := pdf.GetY()
-				pdf.Rect(leftMargin, startY-1, boxWidth, endY-startY+1, "D")
-				addPageWithWatermark(pdf, logoPath)
-				startY = pdf.GetY()
-
-				pdf.SetLeftMargin(leftMargin)
-				pdf.SetX(leftMargin)
-
-				pdf.SetFont("Helvetica", "B", 12)
-				pdf.CellFormat(boxWidth, rowH+3, mem+" (cont'd)", "",
-					1, "L", false, 0, "")
-				pdf.Ln(1)
-
-				// re‑header
-				pdf.SetFont("Helvetica", "B", 11)
-				pdf.CellFormat(colServiceW, rowH, "Service", "1", 0, "L", true, 0, "")
-				pdf.CellFormat(colBaseW, rowH, "Base (USD)", "1", 0, "R", true, 0, "")
-				pdf.CellFormat(colUptimeW, rowH, "Uptime %", "1", 0, "R", true, 0, "")
-				pdf.CellFormat(colBillW, rowH, "Billed (USD)", "1", 1, "R", true, 0, "")
-				pdf.SetFont("Helvetica", "", 10)
+		if memberName != "(none)" {
+			// Store stats using the Details.Name as key
+			stats[memberName] = MemberStats{
+				RequestCount: totalHits,
 			}
 
-			baseCost := sum.Members[mem].ServiceCosts[svc]
-			uptime := getUptimePercent(sla, mem, svc)
-			billed := baseCost * (uptime / 100.0)
-
-			fillToggle = !fillToggle
-			pdf.CellFormat(colServiceW, rowH, svc, "1", 0, "L", fillToggle, 0, "")
-			pdf.CellFormat(colBaseW, rowH, fmt.Sprintf("$%.2f", baseCost),
-				"1", 0, "R", fillToggle, 0, "")
-			pdf.CellFormat(colUptimeW, rowH, fmt.Sprintf("%.4f", uptime),
-				"1", 0, "R", fillToggle, 0, "")
-			pdf.CellFormat(colBillW, rowH, fmt.Sprintf("$%.2f", billed),
-				"1", 1, "R", fillToggle, 0, "")
-
-			memberTotal += billed
-			grandTotal += billed
+			// Also store using member ID if we have a mapping
+			if memberID, exists := nameToMemberID[memberName]; exists && memberID != memberName {
+				stats[memberID] = MemberStats{
+					RequestCount: totalHits,
+				}
+			}
 		}
-
-		// subtotal
-		pdf.SetFont("Helvetica", "B", 10)
-		pdf.CellFormat(colServiceW+colBaseW+colUptimeW, rowH, "Member Total",
-			"1", 0, "R", false, 0, "")
-		pdf.CellFormat(colBillW, rowH, fmt.Sprintf("$%.2f", memberTotal),
-			"1", 1, "R", false, 0, "")
-		pdf.SetFont("Helvetica", "", 10)
-
-		// border
-		endY := pdf.GetY()
-		pdf.Rect(leftMargin, startY-1, boxWidth, endY-startY+1, "D")
-
-		pdf.Ln(boxGap)
-		pdf.SetLeftMargin(origLeft)
 	}
 
-	// grand total
-	if pdf.GetY() > 260 {
-		addPageWithWatermark(pdf, logoPath)
-	}
-	pdf.SetLeftMargin(leftMargin)
-	pdf.SetX(leftMargin)
-	pdf.SetFont("Helvetica", "B", 12)
-	pdf.CellFormat(colServiceW+colBaseW+colUptimeW, rowH+1, "Grand Total",
-		"1", 0, "R", false, 0, "")
-	pdf.CellFormat(colBillW, rowH+1, fmt.Sprintf("$%.2f", grandTotal),
-		"1", 1, "R", false, 0, "")
-	pdf.SetLeftMargin(origLeft)
-
-	filename := filepath.Join(tmpDir,
-		fmt.Sprintf("member_billing_%s.pdf", month.Format("200601")))
-	if err := pdf.OutputFileAndClose(filename); err != nil {
-		return err
-	}
-	log.Log(log.Info, "[billing] member-billing PDF written → %s", filename)
-	return nil
+	return stats
 }
 
 /* --------------------------------------------------------------------- */
 
-func Version() string { return "v0.4.8" }
+func Version() string {
+	return "v0.4.8"
+}

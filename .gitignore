@@ -25,3 +25,17 @@ go.sum
 
 # Ignore files in maxmind directory but keep structure
 /tmp/maxmind/*
+/.github
+/.github/*
+/.github/workflows
+/.github/workflows/*
+/bin
+/bin/*
+/tmp
+/tmp/*
+/src/IBDash/node_modules
+/src/IBDash/node_modules/*
+/src/IBDash/package-lock.json
+/public
+/public/*
+

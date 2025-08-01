@@ -15,8 +15,7 @@ var DB *sql.DB
 
 func Init() {
 	c := cfg.GetConfig()
-
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4",
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&loc=UTC",
 		c.Local.Mysql.User,
 		c.Local.Mysql.Pass,
 		c.Local.Mysql.Host,
@@ -35,14 +34,15 @@ func Init() {
 	DB.SetMaxOpenConns(40)
 	DB.SetConnMaxLifetime(4 * time.Hour)
 
-	// retry loop (30 s max)
+	// retry loop (30 s max)
 	for i := 0; i < 30; i++ {
 		if err = DB.Ping(); err == nil {
 			log.Log(log.Info, "[data2] Connected to MySQL (%s)", c.Local.Mysql.Host)
 			return
 		}
-		log.Log(log.Warn, "[data2] MySQL ping failed (%v) – retry %d/30", err, i+1)
+		log.Log(log.Warn, "[data2] MySQL ping failed (%v) — retry %d/30", err, i+1)
 		time.Sleep(time.Second)
 	}
-	log.Log(log.Fatal, "[data2] Unable to connect to MySQL after 30 s: %v", err)
+
+	log.Log(log.Fatal, "[data2] Unable to connect to MySQL after 30 s: %v", err)
 }

@@ -1,0 +1,28 @@
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge.status-operational {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+}
+
+.status-badge.status-degraded {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+}
+
+.status-badge.status-offline {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+}
+
+.status-icon {
+  font-size: 16px;
+}

@@ -3,14 +3,14 @@ package data2
 import (
 	"database/sql"
 	"encoding/json"
-	"time"
-
 	"ibp-geodns/src/common/matrix"
+	"time"
 )
 
 // -----------------------------------------------------------------------------
 // TYPES
 // -----------------------------------------------------------------------------
+
 type NetStatusRecord struct {
 	CheckType int
 	CheckName string
@@ -29,6 +29,7 @@ type NetStatusRecord struct {
 // -----------------------------------------------------------------------------
 // HELPERS
 // -----------------------------------------------------------------------------
+
 func ctToString(ct int) string {
 	switch ct {
 	case 1:
@@ -57,11 +58,17 @@ func nullOrString(s string) sql.NullString {
 }
 
 // -----------------------------------------------------------------------------
-// DB OPERATIONS + MATRIX NOTIFICATIONS
+// DB OPERATIONS + MATRIX NOTIFICATIONS
 // -----------------------------------------------------------------------------
+
 func InsertNetStatus(rec NetStatusRecord) error {
 	jVotes, _ := json.Marshal(rec.VoteData)
 	jExtra, _ := json.Marshal(rec.Extra)
+
+	// Ensure StartTime is UTC
+	if rec.StartTime.Location() != time.UTC {
+		rec.StartTime = rec.StartTime.UTC()
+	}
 
 	q := `INSERT INTO member_events
 		(check_type,check_name,endpoint,domain_name,member_name,status,is_ipv6,start_time,error,vote_data,additional_data)
@@ -69,7 +76,7 @@ func InsertNetStatus(rec NetStatusRecord) error {
 		ON DUPLICATE KEY UPDATE
 		  status      = VALUES(status),
 		  vote_data   = VALUES(vote_data),
-		  end_time    = IF(VALUES(status)=1,NOW(),NULL)`
+		  end_time    = IF(VALUES(status)=1,UTC_TIMESTAMP(),NULL)`
 
 	_, err := DB.Exec(q,
 		rec.CheckType,
@@ -84,6 +91,7 @@ func InsertNetStatus(rec NetStatusRecord) error {
 		string(jVotes),
 		string(jExtra),
 	)
+
 	if err == nil && !rec.Status {
 		// New outage ⇒ alert
 		matrix.NotifyMemberOffline(
@@ -96,13 +104,15 @@ func InsertNetStatus(rec NetStatusRecord) error {
 			rec.Error,
 		)
 	}
+
 	return err
 }
 
 func CloseOpenEvent(rec NetStatusRecord) error {
 	q := `UPDATE member_events
-		SET end_time = NOW(), status = 1
+		SET end_time = UTC_TIMESTAMP(), status = 1
 		WHERE check_type=? AND check_name=? AND endpoint=? AND domain_name=? AND member_name=? AND is_ipv6=? AND status=0 AND end_time IS NULL`
+
 	_, err := DB.Exec(q,
 		rec.CheckType,
 		rec.CheckName,
@@ -111,6 +121,7 @@ func CloseOpenEvent(rec NetStatusRecord) error {
 		rec.Member,
 		boolToTiny(rec.IsIPv6),
 	)
+
 	if err == nil {
 		// Outage resolved ⇒ notify
 		matrix.NotifyMemberOnline(
@@ -122,5 +133,6 @@ func CloseOpenEvent(rec NetStatusRecord) error {
 			rec.IsIPv6,
 		)
 	}
+
 	return err
 }
