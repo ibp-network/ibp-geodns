@@ -23,25 +23,24 @@ CREATE TABLE `members` (
 
 DROP TABLE IF EXISTS `member_events`;
 CREATE TABLE `member_events` (
-  `id`              INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-  `check_type`      varchar(12)       DEFAULT NULL,
-  `check_name`      VARCHAR(32)   DEFAULT NULL,
-  `endpoint`       VARCHAR(128)  DEFAULT NULL,
-  `member_name`     VARCHAR(48)   DEFAULT NULL,
-  `domain_name`     VARCHAR(96)   DEFAULT NULL,
-  `status`          TINYINT       DEFAULT NULL,
-  `is_ipv6`         TINYINT       DEFAULT NULL,
-  `start_time`      DATETIME      NOT NULL NULL DEFAULT CURRENT_TIMESTAMP,
-  `end_time`        DATETIME      DEFAULT NULL,
-  `error`           TEXT          DEFAULT NULL,
-  `vote_data`       JSON          DEFAULT NULL,
-  `additional_data` JSON          DEFAULT NULL,
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `check_type` varchar(24) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `check_name` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `endpoint` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `member_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `domain_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `status` tinyint DEFAULT NULL,
+  `is_ipv6` tinyint DEFAULT NULL,
+  `start_time` datetime DEFAULT CURRENT_TIMESTAMP,
+  `end_time` datetime DEFAULT NULL,
+  `error` text COLLATE utf8mb4_general_ci,
+  `vote_data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
+  `additional_data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_member_event` (
-        `check_type`,`check_name`,`endpoint`,
-        `member_name`,`domain_name`,`is_ipv6`
-  )
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  UNIQUE KEY `uniq_member_event` (`check_type`,`check_name`,`endpoint`,`member_name`,`domain_name`,`is_ipv6`),
+  CONSTRAINT `member_events_chk_1` CHECK (json_valid(`vote_data`)),
+  CONSTRAINT `member_events_chk_2` CHECK (json_valid(`additional_data`))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
 
 DROP TABLE IF EXISTS `services`;
 CREATE TABLE `services` (
