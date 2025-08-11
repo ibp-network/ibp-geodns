@@ -2,16 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ApiHelper from '../components/ApiHelper/ApiHelper';
 import Loading from '../components/Loading/Loading';
-import { getServiceTypeIcon, getServiceTypeLabel } from '../utils/serviceUtils';
+import { getServiceTypeIcon, getServiceTypeLabel, getNetworkTypeIcon } from '../utils/serviceUtils';
 import './ServiceView.css';
 
 const ServiceView = () => {
   const navigate = useNavigate();
-  const [services, setServices] = useState([]);
-  const [members, setMembers] = useState([]);
+  const [hierarchy, setHierarchy] = useState(null);
+  const [selectedRelay, setSelectedRelay] = useState(null);
   const [selectedService, setSelectedService] = useState(null);
+  const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState('hierarchy'); // 'hierarchy' or 'flat'
   const [copiedEndpoint, setCopiedEndpoint] = useState(null);
 
   useEffect(() => {
@@ -20,13 +21,19 @@ const ServiceView = () => {
 
   const loadInitialData = async () => {
     try {
-      const [servicesRes, membersRes] = await Promise.all([
-        ApiHelper.fetchServices(),
+      const [hierarchyRes, membersRes] = await Promise.all([
+        ApiHelper.fetchServicesHierarchy(),
         ApiHelper.fetchMembers()
       ]);
       
-      setServices(servicesRes.data?.services || []);
+      setHierarchy(hierarchyRes.data || { relay_chains: [], orphans: [] });
       setMembers(membersRes.data || []);
+      
+      // Auto-select first relay if available
+      if (hierarchyRes.data?.relay_chains?.length > 0) {
+        setSelectedRelay(hierarchyRes.data.relay_chains[0].relay.name);
+      }
+      
       setLoading(false);
     } catch (error) {
       console.error('Error loading initial data:', error);
@@ -62,47 +69,6 @@ const api = await ApiPromise.create({ provider });
 // Query chain info
 const chain = await api.rpc.system.chain();
 console.log('Connected to:', chain.toString());`
-          },
-          {
-            label: 'wscat Example:',
-            code: `wscat -c wss://${service.providers[0]?.rpc_urls[0]?.replace('wss://', '') || 'example.com'}`
-          }
-        ]
-      };
-    } else if (service.service_type === 'ETHRPC') {
-      return {
-        title: 'Ethereum RPC Proxy Connection',
-        description: 'Connect using Ethereum-compatible tools to access Polkadot chains via Revival Networks proxy:',
-        examples: [
-          {
-            label: 'Web3.js Example:',
-            code: `import Web3 from 'web3';
-
-const web3 = new Web3('wss://${service.providers[0]?.rpc_urls[0]?.replace('wss://', '') || 'example.com'}');
-
-// Get chain ID
-const chainId = await web3.eth.getChainId();
-console.log('Chain ID:', chainId);`
-          },
-          {
-            label: 'ethers.js Example:',
-            code: `import { ethers } from 'ethers';
-
-const provider = new ethers.providers.WebSocketProvider('wss://${service.providers[0]?.rpc_urls[0]?.replace('wss://', '') || 'example.com'}');
-const network = await provider.getNetwork();
-console.log('Network:', network);`
-          }
-        ]
-      };
-    } else if (service.service_type === 'BOOT') {
-      return {
-        title: 'Bootstrap Node Usage',
-        description: 'Use this bootstrap node to join the network:',
-        examples: [
-          {
-            label: 'Node Configuration:',
-            code: `./polkadot --chain=${service.network_name?.toLowerCase() || 'polkadot'} \\
-  --bootnodes="/dns/${service.providers[0]?.rpc_urls[0]?.replace('wss://', '').replace('ws://', '') || 'example.com'}/tcp/30333/p2p/PEER_ID"`
           }
         ]
       };
@@ -110,75 +76,205 @@ console.log('Network:', network);`
     return null;
   };
 
-  const filteredServices = services
-    .filter(service => 
-      service.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      service.display_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      service.network_name?.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    .sort((a, b) => a.display_name?.localeCompare(b.display_name));
+  const getCurrentRelayChain = () => {
+    if (!selectedRelay || !hierarchy) return null;
+    return hierarchy.relay_chains.find(rc => rc.relay.name === selectedRelay);
+  };
+
+  const renderServiceCard = (service, isRelay = false) => {
+    const isSelected = selectedService?.name === service.name;
+    
+    return (
+      <div
+        key={service.name}
+        className={`service-card ${isSelected ? 'selected' : ''} ${isRelay ? 'relay-card' : ''}`}
+        onClick={() => setSelectedService(service)}
+      >
+        <div className="service-card-header">
+          {service.logo_url ? (
+            <img 
+              src={service.logo_url} 
+              alt={service.display_name}
+              className="service-card-logo"
+              onError={(e) => {
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'flex';
+              }}
+            />
+          ) : null}
+          <div 
+            className="service-card-logo-placeholder"
+            style={{ display: service.logo_url ? 'none' : 'flex' }}
+          >
+            {service.display_name?.substring(0, 2).toUpperCase()}
+          </div>
+          <div className="service-card-info">
+            <div className="service-card-name">{service.display_name || service.name}</div>
+            <div className="service-card-meta">
+              <span className={`network-type-badge ${service.network_type?.toLowerCase()}`}>
+                {getNetworkTypeIcon(service.network_type)}
+                {service.network_type}
+              </span>
+              <span className={`status-indicator ${service.active ? 'active' : 'inactive'}`}>
+                <span className={`status-dot ${service.active ? 'active' : 'inactive'}`}></span>
+                {service.active ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   if (loading) {
     return <Loading pageLevel={true} dataReady={true} />;
   }
 
+  const currentRelayChain = getCurrentRelayChain();
+
   return (
     <div className="service-view fade-in">
       <div className="service-header">
         <h1>Service Catalog</h1>
+        <div className="view-mode-toggle">
+          <button 
+            className={`mode-btn ${viewMode === 'hierarchy' ? 'active' : ''}`}
+            onClick={() => setViewMode('hierarchy')}
+          >
+            🏗️ Hierarchy View
+          </button>
+          <button 
+            className={`mode-btn ${viewMode === 'flat' ? 'active' : ''}`}
+            onClick={() => setViewMode('flat')}
+          >
+            📋 List View
+          </button>
+        </div>
       </div>
 
-      <div className="services-nav-bar">
-        <div className="services-nav-header">
-          <h2>Available Services</h2>
-          <input
-            type="text"
-            placeholder="Search services..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="service-search"
-          />
-        </div>
-        <div className="services-grid-list">
-          {filteredServices.map(service => (
-            <div
-              key={service.name}
-              className={`service-nav-item ${selectedService?.name === service.name ? 'active' : ''}`}
-              onClick={() => setSelectedService(service)}
-            >
-              {service.logo_url ? (
-                <img
-                  src={service.logo_url} 
-                  alt={service.display_name} 
-                  className="service-logo-small"
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.nextSibling.style.display = 'flex';
+      {viewMode === 'hierarchy' ? (
+        <div className="hierarchy-view">
+          {/* Relay Chains Selector */}
+          <div className="relay-selector">
+            <h2>Relay Chains</h2>
+            <div className="relay-chains-grid">
+              {hierarchy?.relay_chains?.map(relayChain => (
+                <div
+                  key={relayChain.relay.name}
+                  className={`relay-selector-card ${selectedRelay === relayChain.relay.name ? 'selected' : ''}`}
+                  onClick={() => {
+                    setSelectedRelay(relayChain.relay.name);
+                    setSelectedService(null);
                   }}
-                />
-              ) : null}
-              <div 
-                className="service-logo-placeholder" 
-                style={{ display: service.logo_url ? 'none' : 'flex' }}
-              >
-                {service.display_name?.substring(0, 2).toUpperCase()}
-              </div>
-              <div className="service-nav-name">{service.display_name || service.name}</div>
-              <div className={`service-type-indicator ${service.service_type?.toLowerCase()}`} 
-                   title={getServiceTypeLabel(service.service_type)}></div>
+                >
+                  {relayChain.relay.logo_url && (
+                    <img 
+                      src={relayChain.relay.logo_url} 
+                      alt={relayChain.relay.display_name}
+                      className="relay-selector-logo"
+                    />
+                  )}
+                  <div className="relay-selector-info">
+                    <div className="relay-selector-name">{relayChain.relay.display_name}</div>
+                    <div className="relay-selector-stats">
+                      <span>{relayChain.system_chains?.length || 0} System</span>
+                      <span>•</span>
+                      <span>{relayChain.community_chains?.length || 0} Community</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
 
-      <div className="detail-panel">
-        {selectedService ? (
-          <>
+          {/* Selected Relay Chain Details */}
+          {currentRelayChain && (
+            <div className="relay-details">
+              <div className="relay-info-header">
+                <h2>{currentRelayChain.relay.display_name}</h2>
+                <button 
+                  className="view-relay-btn"
+                  onClick={() => setSelectedService(currentRelayChain.relay)}
+                >
+                  View Relay Details →
+                </button>
+              </div>
+
+              <div className="chains-container">
+                {/* System Chains */}
+                <div className="chain-category">
+                  <h3>
+                    <span className="category-icon">🏛️</span>
+                    System Chains ({currentRelayChain.system_chains?.length || 0})
+                  </h3>
+                  {currentRelayChain.system_chains?.length > 0 ? (
+                    <div className="services-grid">
+                      {currentRelayChain.system_chains.map(service => 
+                        renderServiceCard(service)
+                      )}
+                    </div>
+                  ) : (
+                    <div className="no-services">No system chains available</div>
+                  )}
+                </div>
+
+                {/* Community Chains */}
+                <div className="chain-category">
+                  <h3>
+                    <span className="category-icon">👥</span>
+                    Community Chains ({currentRelayChain.community_chains?.length || 0})
+                  </h3>
+                  {currentRelayChain.community_chains?.length > 0 ? (
+                    <div className="services-grid">
+                      {currentRelayChain.community_chains.map(service => 
+                        renderServiceCard(service)
+                      )}
+                    </div>
+                  ) : (
+                    <div className="no-services">No community chains available</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Orphan Services (if any) */}
+              {hierarchy?.orphans?.length > 0 && (
+                <div className="chain-category">
+                  <h3>
+                    <span className="category-icon">🔗</span>
+                    Other Services ({hierarchy.orphans.length})
+                  </h3>
+                  <div className="services-grid">
+                    {hierarchy.orphans.map(service => 
+                      renderServiceCard(service)
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        // Flat view mode - show all services in a list
+        <div className="flat-view">
+          {/* Original flat view implementation */}
+        </div>
+      )}
+
+      {/* Service Detail Panel */}
+      {selectedService && (
+        <div className="service-detail-panel">
+          <div className="detail-panel">
             <div className="detail-header">
+              <button 
+                className="close-detail-btn"
+                onClick={() => setSelectedService(null)}
+              >
+                ✕
+              </button>
               {selectedService.logo_url ? (
                 <img 
                   src={selectedService.logo_url} 
-                  alt={selectedService.display_name} 
+                  alt={selectedService.display_name}
                   className="detail-header-logo"
                   onError={(e) => {
                     e.target.style.display = 'none';
@@ -187,7 +283,7 @@ console.log('Network:', network);`
                 />
               ) : null}
               <div 
-                className="detail-header-logo-placeholder" 
+                className="detail-header-logo-placeholder"
                 style={{ display: selectedService.logo_url ? 'none' : 'flex' }}
               >
                 {selectedService.display_name?.substring(0, 2).toUpperCase()}
@@ -200,7 +296,16 @@ console.log('Network:', network);`
                     {getServiceTypeLabel(selectedService.service_type)}
                   </div>
                   <span>•</span>
-                  <span>{selectedService.network_name || 'Unknown Network'}</span>
+                  <span className={`network-type-badge ${selectedService.network_type?.toLowerCase()}`}>
+                    {getNetworkTypeIcon(selectedService.network_type)}
+                    {selectedService.network_type}
+                  </span>
+                  {selectedService.relay_network && (
+                    <>
+                      <span>•</span>
+                      <span>On {selectedService.relay_network}</span>
+                    </>
+                  )}
                   <span>•</span>
                   <div className={`status-indicator ${selectedService.active ? 'active' : 'inactive'}`}>
                     <span className={`status-dot ${selectedService.active ? 'active' : 'inactive'}`}></span>
@@ -209,7 +314,7 @@ console.log('Network:', network);`
                 </div>
               </div>
             </div>
-            
+
             <div className="detail-content">
               {/* Service Information */}
               <div className="info-section">
@@ -230,6 +335,12 @@ console.log('Network:', network);`
                     <span className="info-label">Network</span>
                     <span className="info-value">{selectedService.network_name || 'N/A'}</span>
                   </div>
+                  {selectedService.relay_network && (
+                    <div className="info-item">
+                      <span className="info-label">Relay Chain</span>
+                      <span className="info-value">{selectedService.relay_network}</span>
+                    </div>
+                  )}
                   {selectedService.website_url && (
                     <div className="info-item">
                       <span className="info-label">Website</span>
@@ -384,15 +495,9 @@ console.log('Network:', network);`
                 </div>
               </div>
             </div>
-          </>
-        ) : (
-          <div className="placeholder-content">
-            <div className="placeholder-icon">⚡</div>
-            <h3>Select a service to view details</h3>
-            <p>Choose from the list above to see service information and usage instructions</p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

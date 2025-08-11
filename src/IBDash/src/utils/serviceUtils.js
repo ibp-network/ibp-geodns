@@ -23,3 +23,29 @@ export const getServiceTypeLabel = (type) => {
       return type || 'Unknown';
   }
 };
+
+export const getNetworkTypeIcon = (type) => {
+  switch (type?.toLowerCase()) {
+    case 'relay':
+      return '🏗️';
+    case 'system':
+      return '🏛️';
+    case 'community':
+      return '👥';
+    default:
+      return '🔗';
+  }
+};
+
+export const getNetworkTypeLabel = (type) => {
+  switch (type?.toLowerCase()) {
+    case 'relay':
+      return 'Relay Chain';
+    case 'system':
+      return 'System Chain';
+    case 'community':
+      return 'Community Chain';
+    default:
+      return type || 'Unknown';
+  }
+};

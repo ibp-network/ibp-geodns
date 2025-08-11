@@ -158,18 +158,19 @@ type ServiceProvider struct {
 }
 
 type ServiceConfiguration struct {
-	Name          string `json:"Name"`
-	ServiceType   string `json:"ServiceType"`
-	Active        int    `json:"Active"`
-	LevelRequired int    `json:"LevelRequired"`
-	NetworkName   string `json:"NetworkName"`
-	DisplayName   string `json:"DisplayName"`
-	WebsiteURL    string `json:"WebsiteURL"`
-	LogoURL       string `json:"LogoURL"`
-	Description   string `json:"Description"`
-	StateRootHash string `json:"StateRootHash"`
+	Name          string `json:"name" yaml:"name"`
+	ServiceType   string `json:"service_type" yaml:"service_type"`
+	Active        int    `json:"active" yaml:"active"`
+	LevelRequired int    `json:"level_required" yaml:"level_required"`
+	NetworkName   string `json:"network_name" yaml:"network_name"`
+	RelayNetwork  string `json:"relay_network" yaml:"relay_network"`
+	NetworkType   string `json:"network_type" yaml:"network_type"`
+	DisplayName   string `json:"display_name" yaml:"display_name"`
+	WebsiteURL    string `json:"website_url" yaml:"website_url"`
+	LogoURL       string `json:"logo_url" yaml:"logo_url"`
+	Description   string `json:"description" yaml:"description"`
+	StateRootHash string `json:"state_root_hash" yaml:"state_root_hash"`
 }
-
 type Resources struct {
 	Nodes     int     `json:"nodes"`
 	Cores     float64 `json:"cores"`

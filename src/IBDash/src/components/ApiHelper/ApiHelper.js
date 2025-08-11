@@ -50,6 +50,7 @@ const ApiHelper = {
   
   // Service endpoints
   fetchServices: () => api.get('/services'),
+  fetchServicesHierarchy: () => api.get('/services?hierarchy=true'),
   fetchServicesSummary: () => api.get('/services/summary'),
   
   // Billing endpoints
