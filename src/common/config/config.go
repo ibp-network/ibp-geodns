@@ -36,6 +36,32 @@ func loadConfig(cfgFile string, initialLoad bool) {
 	loadServicesConfig(cfg.data.Local.System.ConfigUrls.ServicesConfig, initialLoad)
 	loadIaasPricing(cfg.data.Local.System.ConfigUrls.IaasPricingConfig, initialLoad)
 	loadServiceRequestsConfig(cfg.data.Local.System.ConfigUrls.ServicesRequestsConfig, initialLoad)
+	loadAlertsConfig(cfg.data.Local.System.ConfigUrls.AlertsConfig, initialLoad)
+}
+
+func loadAlertsConfig(url string, initialLoad bool) {
+	if url == "" {
+		// default to hardcoded URL if not specified
+		url = "https://raw.githubusercontent.com/ibp-network/config/refs/heads/main/alerts.json"
+	}
+
+	data := downloadConfig(url, initialLoad)
+	if data == nil {
+		return
+	}
+
+	var alerts AlertsConfig
+	if err := json.Unmarshal(data, &alerts); err != nil {
+		log.Log(log.Error, "Failed to unmarshal Alerts config: %v", err)
+		if initialLoad {
+			log.Log(log.Fatal, "Terminating program due to critical error on initial load.")
+			os.Exit(1)
+		}
+		return
+	}
+
+	cfg.data.Alerts = alerts
+	log.Log(log.Debug, "Alerts configuration loaded from %s", url)
 }
 
 func loadSystemConfig(configPath string, initialLoad bool) {

@@ -3,6 +3,7 @@ package matrix
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -81,23 +82,87 @@ func makeKey(member, checkType, checkName, domain, endpoint string, ipv6 bool) s
 		member, checkType, checkName, domain, endpoint, ipv6)
 }
 
-// sendText posts a plain‑text message and returns the resulting event ID.
-func sendText(ctx context.Context, body string) (id.EventID, error) {
-	resp, err := client.SendText(ctx, roomID, body)
+func getMemberMentions(memberName string) []string {
+	c := cfg.GetConfig()
+
+	memberKey := strings.ToLower(memberName)
+	if users, ok := c.Alerts.Matrix.Members[memberKey]; ok {
+		return users
+	}
+
+	return nil
+}
+
+// formatAlert creates both plain text and HTML versions of an alert message.
+func formatAlert(isOffline bool, member, checkType, checkName, domain, endpoint string, ipv6 bool, errText string, mentions []string) (body, html string) {
+	// Build mention prefix if needed
+	mentionText := ""
+	mentionHTML := ""
+	if len(mentions) > 0 {
+		mentionText = strings.Join(mentions, " ") + "\n"
+		mentionHTML = strings.Join(mentions, " ") + "<br/>"
+	}
+
+	// Common fields for both online and offline
+	status := "✅  *ONLINE*"
+	statusHTML := "✅  <strong>ONLINE</strong>"
+	fields := fmt.Sprintf(
+		"• Member: **%s**\n"+
+			"• Check:  %s / %s\n"+
+			"• Domain: %s\n"+
+			"• Endpoint: %s\n"+
+			"• IPv6:   %v",
+		member, checkType, checkName, domain, endpoint, ipv6)
+	fieldsHTML := fmt.Sprintf(
+		"• Member: <strong>%s</strong><br/>"+
+			"• Check:  %s / %s<br/>"+
+			"• Domain: %s<br/>"+
+			"• Endpoint: %s<br/>"+
+			"• IPv6:   %v",
+		member, checkType, checkName, domain, endpoint, ipv6)
+
+	// Add offline-specific fields
+	if isOffline {
+		status = "⚠️  *OFFLINE*"
+		statusHTML = "⚠️  <strong>OFFLINE</strong>"
+		fields += fmt.Sprintf("\n• Error:  %s", errText)
+		fieldsHTML += fmt.Sprintf("<br/>• Error:  %s", errText)
+	}
+
+	body = mentionText + status + "\n" + fields
+	html = mentionHTML + statusHTML + "<br/>" + fieldsHTML
+
+	return body, html
+}
+
+// sendFormattedText posts an HTML formatted message.
+func sendFormattedText(ctx context.Context, body, formattedBody string) (id.EventID, error) {
+	content := map[string]interface{}{
+		"msgtype":        "m.text",
+		"body":           body,
+		"format":         "org.matrix.custom.html",
+		"formatted_body": formattedBody,
+	}
+
+	resp, err := client.SendMessageEvent(ctx, roomID, event.EventMessage, content)
 	if err != nil {
 		return "", err
 	}
 	return resp.EventID, nil
 }
 
-// editText performs an *in‑place* edit (MSC‑2674) of an existing event.
-func editText(ctx context.Context, target id.EventID, body string) error {
+// editFormattedText performs an *in‑place* edit with HTML content.
+func editFormattedText(ctx context.Context, target id.EventID, body, formattedBody string) error {
 	content := map[string]interface{}{
-		"msgtype": "m.text",
-		"body":    body,
+		"msgtype":        "m.text",
+		"body":           body,
+		"format":         "org.matrix.custom.html",
+		"formatted_body": formattedBody,
 		"m.new_content": map[string]interface{}{
-			"msgtype": "m.text",
-			"body":    body,
+			"msgtype":        "m.text",
+			"body":           body,
+			"format":         "org.matrix.custom.html",
+			"formatted_body": formattedBody,
 		},
 		"m.relates_to": map[string]interface{}{
 			"rel_type": "m.replace",
@@ -144,17 +209,11 @@ func NotifyMemberOffline(
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	body := fmt.Sprintf(
-		"⚠️  *OFFLINE*\n"+
-			"• Member: **%s**\n"+
-			"• Check:  %s / %s\n"+
-			"• Domain: %s\n"+
-			"• Endpoint: %s\n"+
-			"• IPv6:   %v\n"+
-			"• Error:  %s",
-		member, checkType, checkName, domain, endpoint, ipv6, errText)
+	// Get member mentions and format message
+	mentions := getMemberMentions(member)
+	body, formattedBody := formatAlert(true, member, checkType, checkName, domain, endpoint, ipv6, errText, mentions)
 
-	evID, err := sendText(ctx, body)
+	evID, err := sendFormattedText(ctx, body, formattedBody)
 	if err != nil {
 		// Clean‑up sentinel so future attempts can retry.
 		offlineMap.Delete(key)
@@ -181,19 +240,13 @@ func NotifyMemberOnline(
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	body := fmt.Sprintf(
-		"✅  *ONLINE*\n"+
-			"• Member: **%s**\n"+
-			"• Check:  %s / %s\n"+
-			"• Domain: %s\n"+
-			"• Endpoint: %s\n"+
-			"• IPv6:   %v",
-		member, checkType, checkName, domain, endpoint, ipv6)
+	// Format message (no mentions for online alerts)
+	body, formattedBody := formatAlert(false, member, checkType, checkName, domain, endpoint, ipv6, "", nil)
 
 	if raw, ok := offlineMap.Load(key); ok {
 		if evID, ok2 := raw.(id.EventID); ok2 && evID != "" {
 			// Attempt edit‑in‑place.
-			editErr := editText(ctx, evID, body)
+			editErr := editFormattedText(ctx, evID, body, formattedBody)
 			if editErr == nil {
 				offlineMap.Delete(key)
 				return
@@ -203,6 +256,6 @@ func NotifyMemberOnline(
 	}
 
 	// Either we had no cached event or the edit did not work – send a fresh one.
-	_, _ = sendText(ctx, body)
+	_, _ = sendFormattedText(ctx, body, formattedBody)
 	offlineMap.Delete(key) // ensure future OFFLINE alerts are allowed again
 }
