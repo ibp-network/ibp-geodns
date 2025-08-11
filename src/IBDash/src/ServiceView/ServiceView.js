@@ -141,7 +141,7 @@ console.log('Connected to:', chain.toString());`
     return (
       <div
         key={service.name}
-        className={`service-card ${isSelected ? 'selected' : ''}`}
+        className={`service-card-inline ${isSelected ? 'selected' : ''}`}
         onClick={() => setSelectedService(service)}
       >
         <div className="service-card-header">
@@ -186,6 +186,7 @@ console.log('Connected to:', chain.toString());`
 
   const counts = getServiceCounts();
   const filteredServices = getFilteredServices();
+  const shouldHighlightSearch = filteredServices.length > 8;
 
   return (
     <div className="service-view fade-in">
@@ -193,14 +194,16 @@ console.log('Connected to:', chain.toString());`
         <h1>Service Catalog</h1>
       </div>
 
-      {/* Navigation Tabs with Counts */}
+      {/* Enhanced Navigation Container with Service Cards Inside */}
       <div className="service-nav-container">
+        {/* Service Tabs */}
         <div className="service-tabs">
           <button
             className={`service-tab ${activeTab === 'relay' ? 'active' : ''}`}
             onClick={() => {
               setActiveTab('relay');
               setSelectedRelayFilter('all');
+              setSearchTerm('');
             }}
           >
             <span className="tab-icon">🗿</span>
@@ -209,7 +212,10 @@ console.log('Connected to:', chain.toString());`
           </button>
           <button
             className={`service-tab ${activeTab === 'system' ? 'active' : ''}`}
-            onClick={() => setActiveTab('system')}
+            onClick={() => {
+              setActiveTab('system');
+              setSearchTerm('');
+            }}
           >
             <span className="tab-icon">🏛️</span>
             <span className="tab-label">System Chains</span>
@@ -217,7 +223,10 @@ console.log('Connected to:', chain.toString());`
           </button>
           <button
             className={`service-tab ${activeTab === 'community' ? 'active' : ''}`}
-            onClick={() => setActiveTab('community')}
+            onClick={() => {
+              setActiveTab('community');
+              setSearchTerm('');
+            }}
           >
             <span className="tab-icon">👥</span>
             <span className="tab-label">Community Chains</span>
@@ -227,16 +236,19 @@ console.log('Connected to:', chain.toString());`
 
         {/* Filters Bar */}
         <div className="service-filters">
-          {/* Search */}
-          <div className="search-container">
+          {/* Search - highlighted when needed */}
+          <div className={`search-container ${shouldHighlightSearch ? 'highlighted' : ''}`}>
             <span className="search-icon">🔍</span>
             <input
               type="text"
-              placeholder="Search services..."
+              placeholder={shouldHighlightSearch ? "Search to filter results..." : "Search services..."}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="service-search-input"
             />
+            {shouldHighlightSearch && (
+              <span className="search-hint">Too many results - use search to filter</span>
+            )}
           </div>
 
           {/* Relay Filter (only for system/community tabs) */}
@@ -255,23 +267,21 @@ console.log('Connected to:', chain.toString());`
             </select>
           )}
         </div>
+
+        {/* Services Grid Inside Navigation Container */}
+        <div className="services-grid-inline">
+          {filteredServices.length > 0 ? (
+            filteredServices.map(service => renderServiceCard(service))
+          ) : (
+            <div className="no-services-inline">
+              <span className="no-services-icon">📭</span>
+              <p>No services found</p>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Services Grid */}
-      <div className="services-grid-container">
-        {filteredServices.length > 0 ? (
-          <div className="services-grid">
-            {filteredServices.map(service => renderServiceCard(service))}
-          </div>
-        ) : (
-          <div className="no-services">
-            <span className="no-services-icon">📭</span>
-            <p>No services found</p>
-          </div>
-        )}
-      </div>
-
-      {/* Service Detail Panel */}
+      {/* Service Detail Section - Now properly expandable */}
       {selectedService && (
         <div className="service-detail-section">
           <div className="detail-header">
@@ -325,7 +335,7 @@ console.log('Connected to:', chain.toString());`
             </button>
           </div>
 
-          <div className="detail-content">
+          <div className="detail-content-expanded">
             {/* Service Information */}
             <div className="info-section">
               <h3>
