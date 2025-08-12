@@ -185,18 +185,32 @@
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-/* Services Grid Inside Navigation Container */
+/* Services Grid Inside Navigation Container - Updated with 15% width reduction */
 .services-grid-inline {
   padding: 20px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(255px, 1fr)); /* Reduced from 300px to 255px (15% reduction) */
   gap: 12px;
   max-height: 400px;
   overflow-y: auto;
   background: var(--bg-secondary);
+  position: relative;
 }
 
-/* Inline Service Card */
+/* Limited height class for grids with more than 10 items */
+.services-grid-inline.limited-height {
+  /* Calculate height based on card height (52px) + gap (12px) */
+  /* 2.5 rows = 2 full rows + half row */
+  /* Full row height = 52px, gap = 12px */
+  /* 2 rows = 52 + 12 + 52 = 116px */
+  /* Half row = 26px */
+  /* Total = 116 + 26 + 12 (gap) = 154px */
+  max-height: 154px;
+  overflow-y: auto;
+  padding-bottom: 8px; /* Reduced padding for scroll */
+}
+
+/* Inline Service Card - Updated to ensure proper sizing */
 .service-card-inline {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
@@ -205,6 +219,9 @@
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
+  height: 52px; /* Fixed height for consistent rows */
+  display: flex;
+  align-items: center;
 }
 
 .service-card-inline:hover {
@@ -223,11 +240,12 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  width: 100%;
 }
 
 .service-card-inline .service-card-logo {
-  width: 40px;
-  height: 40px;
+  width: 32px; /* Reduced from 40px */
+  height: 32px; /* Reduced from 40px */
   border-radius: 6px;
   object-fit: contain;
   background: var(--bg-secondary);
@@ -236,15 +254,15 @@
 }
 
 .service-card-inline .service-card-logo-placeholder {
-  width: 40px;
-  height: 40px;
+  width: 32px; /* Reduced from 40px */
+  height: 32px; /* Reduced from 40px */
   border-radius: 6px;
   background: var(--bg-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 12px; /* Reduced from 14px */
   color: var(--accent-primary);
   flex-shrink: 0;
 }
@@ -256,7 +274,7 @@
 
 .service-card-inline .service-card-name {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px; /* Reduced from 14px */
   margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -267,7 +285,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: 10px; /* Reduced from 11px */
   flex-wrap: wrap;
 }
 
@@ -732,29 +750,44 @@
   color: var(--success);
 }
 
-/* Scrollbar for inline services grid */
+/* Enhanced scrollbar for inline services grid */
 .services-grid-inline::-webkit-scrollbar {
-  width: 6px;
+  width: 8px; /* Increased from 6px for better visibility */
 }
 
 .services-grid-inline::-webkit-scrollbar-track {
   background: var(--bg-tertiary);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .services-grid-inline::-webkit-scrollbar-thumb {
   background: var(--border-color);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .services-grid-inline::-webkit-scrollbar-thumb:hover {
   background: var(--accent-primary);
 }
 
+/* Scrollbar for limited height grids */
+.services-grid-inline.limited-height::-webkit-scrollbar {
+  width: 10px; /* Slightly wider for limited height sections */
+}
+
+.services-grid-inline.limited-height::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.4); /* More visible for limited sections */
+}
+
 /* Responsive */
+@media (max-width: 1400px) {
+  .services-grid-inline {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+}
+
 @media (max-width: 1200px) {
   .services-grid-inline {
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   }
   
   .members-grid {
@@ -799,6 +832,10 @@
   .services-grid-inline {
     grid-template-columns: 1fr;
     max-height: 300px;
+  }
+  
+  .services-grid-inline.limited-height {
+    max-height: 300px; /* Keep mobile height consistent */
   }
   
   .members-grid {

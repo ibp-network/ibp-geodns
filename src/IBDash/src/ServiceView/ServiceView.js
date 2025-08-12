@@ -187,6 +187,8 @@ console.log('Connected to:', chain.toString());`
   const counts = getServiceCounts();
   const filteredServices = getFilteredServices();
   const shouldHighlightSearch = filteredServices.length > 8;
+  // Determine if we need to apply height limitation
+  const shouldLimitHeight = filteredServices.length > 10;
 
   return (
     <div className="service-view fade-in">
@@ -268,13 +270,13 @@ console.log('Connected to:', chain.toString());`
           )}
         </div>
 
-        {/* Services Grid Inside Navigation Container */}
-        <div className="services-grid-inline">
+        {/* Services Grid Inside Navigation Container - with conditional height limitation */}
+        <div className={`services-grid-inline ${shouldLimitHeight ? 'limited-height' : ''}`}>
           {filteredServices.length > 0 ? (
             filteredServices.map(service => renderServiceCard(service))
           ) : (
             <div className="no-services-inline">
-              <span className="no-services-icon">📭</span>
+              <span className="no-services-icon">🔭</span>
               <p>No services found</p>
             </div>
           )}
