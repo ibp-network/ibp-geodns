@@ -16,7 +16,7 @@ import (
 
 	cfg "github.com/ibp-network/ibp-geodns-libs/config"
 
-	api "github.com/ibp-network/ibp-geodns/src/IBPDns/api"
+	api "ibp-geodns/src/api"
 )
 
 var version = cfg.GetVersion()
