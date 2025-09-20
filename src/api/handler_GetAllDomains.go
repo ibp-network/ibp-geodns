@@ -3,7 +3,7 @@ package api
 import (
 	"time"
 
-	log "ibp-geodns/src/common/logging"
+	log "github.com/ibp-network/ibp-geodns-libs/logging"
 )
 
 func handle_GetAllDomains(req Request) Response {

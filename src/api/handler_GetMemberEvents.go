@@ -1,9 +1,10 @@
 package api
 
 import (
-	dat "ibp-geodns/src/common/data"
-	log "ibp-geodns/src/common/logging"
 	"time"
+
+	dat "github.com/ibp-network/ibp-geodns-libs/data"
+	log "github.com/ibp-network/ibp-geodns-libs/logging"
 )
 
 func handle_GetMemberEvents(req Request) Response {

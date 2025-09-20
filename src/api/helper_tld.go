@@ -4,7 +4,7 @@ import (
 	"hash/crc32"
 	"strings"
 
-	log "ibp-geodns/src/common/logging"
+	log "github.com/ibp-network/ibp-geodns-libs/logging"
 )
 
 func populateTLDRecords() {

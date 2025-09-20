@@ -3,7 +3,7 @@ package api
 import (
 	"sync"
 
-	cfg "ibp-geodns/src/common/config"
+	cfg "github.com/ibp-network/ibp-geodns-libs/config"
 )
 
 type StaticMap struct {

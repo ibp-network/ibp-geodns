@@ -1,8 +1,9 @@
 package api
 
 import (
-	log "ibp-geodns/src/common/logging"
 	"time"
+
+	log "github.com/ibp-network/ibp-geodns-libs/logging"
 )
 
 func handle_GetDomainInfo(req Request) Response {

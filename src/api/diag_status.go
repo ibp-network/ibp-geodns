@@ -1,7 +1,7 @@
 package api
 
 import (
-	log "ibp-geodns/src/common/logging"
+	log "github.com/ibp-network/ibp-geodns-libs/logging"
 )
 
 func DumpDomainStatus() {

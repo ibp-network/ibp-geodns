@@ -2,8 +2,9 @@ package api
 
 import (
 	"encoding/json"
-	log "ibp-geodns/src/common/logging"
 	"net/http"
+
+	log "github.com/ibp-network/ibp-geodns-libs/logging"
 )
 
 func dnsApiRouter(w http.ResponseWriter, r *http.Request) {

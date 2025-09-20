@@ -3,7 +3,7 @@ package api
 import (
 	"strings"
 
-	cfg "ibp-geodns/src/common/config"
+	cfg "github.com/ibp-network/ibp-geodns-libs/config"
 
 	"golang.org/x/net/publicsuffix"
 )

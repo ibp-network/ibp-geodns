@@ -1,8 +1,8 @@
 package api
 
 import (
-	cfg "ibp-geodns/src/common/config"
-	log "ibp-geodns/src/common/logging"
+	cfg "github.com/ibp-network/ibp-geodns-libs/config"
+	log "github.com/ibp-network/ibp-geodns-libs/logging"
 )
 
 func handle_GetDomainList(req Request) Response {

@@ -5,10 +5,11 @@ import (
 	"net"
 	"strings"
 
-	cfg "ibp-geodns/src/common/config"
-	dat "ibp-geodns/src/common/data"
-	log "ibp-geodns/src/common/logging"
-	max "ibp-geodns/src/common/maxmind"
+	log "github.com/ibp-network/ibp-geodns-libs/logging"
+	max "github.com/ibp-network/ibp-geodns-libs/maxmind"
+
+	cfg "github.com/ibp-network/ibp-geodns-libs/config"
+	dat "github.com/ibp-network/ibp-geodns-libs/data"
 )
 
 func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]cfg.DNSRecord, string) {

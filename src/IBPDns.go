@@ -9,12 +9,14 @@ import (
 	"os"
 	"time"
 
-	api "ibp-geodns/src/IBPDns/api"
-	cfg "ibp-geodns/src/common/config"
-	dat "ibp-geodns/src/common/data"
-	log "ibp-geodns/src/common/logging"
-	max "ibp-geodns/src/common/maxmind"
-	natsCommon "ibp-geodns/src/common/nats"
+	dat "github.com/ibp-network/ibp-geodns-libs/data"
+	log "github.com/ibp-network/ibp-geodns-libs/logging"
+	max "github.com/ibp-network/ibp-geodns-libs/maxmind"
+	natsCommon "github.com/ibp-network/ibp-geodns-libs/nats"
+
+	cfg "github.com/ibp-network/ibp-geodns-libs/config"
+
+	api "github.com/ibp-network/ibp-geodns/src/IBPDns/api"
 )
 
 var version = cfg.GetVersion()
