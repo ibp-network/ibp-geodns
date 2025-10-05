@@ -16,14 +16,20 @@ type UsageRecord struct {
 	Asn         string
 	NetworkName string
 	CountryName string
+	IsIPv6      bool
 	Hits        int
 }
 
 func UpsertUsageRecord(rec UsageRecord) error {
+	ipv6Flag := 0
+	if rec.IsIPv6 {
+		ipv6Flag = 1
+	}
+
 	q := `
 INSERT INTO requests
 (date, domain_name, member_name, country_code, network_asn, network_name, country_name, is_ipv6, hits)
-VALUES (?, ?, ?, ?, ?, ?, ?, '0', ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
   hits = hits + VALUES(hits)
 `
@@ -36,6 +42,7 @@ ON DUPLICATE KEY UPDATE
 		nullOrString(rec.Asn),
 		nullOrString(rec.NetworkName),
 		nullOrString(rec.CountryName),
+		ipv6Flag,
 		rec.Hits,
 	)
 	if err != nil {
@@ -57,11 +64,12 @@ SELECT
   IFNULL(network_asn,'') as network_asn,
   IFNULL(network_name,'') as network_name,
   IFNULL(country_name,'') as country_name,
+  IFNULL(is_ipv6, 0) as is_ipv6,
   SUM(hits) AS hits
 FROM requests
 WHERE domain_name = ?
   AND date BETWEEN ? AND ?
-GROUP BY date, domain_name, member_name, country_code, network_asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, network_asn, network_name, country_name, is_ipv6
 ORDER BY date
 `
 	rows, err := mysql.DB.Query(q, domain, startDate, endDate)
@@ -77,8 +85,9 @@ ORDER BY date
 
 		var dateStr, dom string
 		var hits int
+		var isIPv6 int
 
-		if err := rows.Scan(&dateStr, &dom, &mName, &cCode, &a, &netName, &cName, &hits); err != nil {
+		if err := rows.Scan(&dateStr, &dom, &mName, &cCode, &a, &netName, &cName, &isIPv6, &hits); err != nil {
 			return nil, fmt.Errorf("GetUsageByDomain scan error: %w", err)
 		}
 		r.Date = dateStr
@@ -88,6 +97,7 @@ ORDER BY date
 		r.Asn = a.String
 		r.NetworkName = netName.String
 		r.CountryName = cName.String
+		r.IsIPv6 = (isIPv6 != 0)
 		r.Hits = hits
 
 		results = append(results, r)
@@ -108,12 +118,13 @@ SELECT
   IFNULL(network_asn,'') as network_asn,
   IFNULL(network_name,'') as network_name,
   IFNULL(country_name,'') as country_name,
+  IFNULL(is_ipv6, 0) as is_ipv6,
   SUM(hits) AS hits
 FROM requests
 WHERE domain_name = ?
   AND member_name = ?
   AND date BETWEEN ? AND ?
-GROUP BY date, domain_name, member_name, country_code, network_asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, network_asn, network_name, country_name, is_ipv6
 ORDER BY date
 `
 	rows, err := mysql.DB.Query(q, domain, member, startDate, endDate)
@@ -129,8 +140,9 @@ ORDER BY date
 
 		var dateStr, dom string
 		var hits int
+		var isIPv6 int
 
-		if err := rows.Scan(&dateStr, &dom, &mName, &cCode, &a, &netName, &cName, &hits); err != nil {
+		if err := rows.Scan(&dateStr, &dom, &mName, &cCode, &a, &netName, &cName, &isIPv6, &hits); err != nil {
 			return nil, fmt.Errorf("GetUsageByMember scan error: %w", err)
 		}
 		r.Date = dateStr
@@ -140,6 +152,7 @@ ORDER BY date
 		r.Asn = a.String
 		r.NetworkName = netName.String
 		r.CountryName = cName.String
+		r.IsIPv6 = (isIPv6 != 0)
 		r.Hits = hits
 
 		results = append(results, r)
@@ -160,10 +173,11 @@ SELECT
   IFNULL(network_asn,'') as network_asn,
   IFNULL(network_name,'') as network_name,
   IFNULL(country_name,'') as country_name,
+  IFNULL(is_ipv6, 0) as is_ipv6,
   SUM(hits) AS hits
 FROM requests
 WHERE date BETWEEN ? AND ?
-GROUP BY date, domain_name, member_name, country_code, network_asn, network_name, country_name
+GROUP BY date, domain_name, member_name, country_code, network_asn, network_name, country_name, is_ipv6
 ORDER BY date
 `
 	rows, err := mysql.DB.Query(q, startDate, endDate)
@@ -179,8 +193,9 @@ ORDER BY date
 
 		var dateStr, dom string
 		var hits int
+		var isIPv6 int
 
-		if err := rows.Scan(&dateStr, &dom, &mName, &cCode, &a, &netName, &cName, &hits); err != nil {
+		if err := rows.Scan(&dateStr, &dom, &mName, &cCode, &a, &netName, &cName, &isIPv6, &hits); err != nil {
 			return nil, fmt.Errorf("GetUsageByCountry scan error: %w", err)
 		}
 		r.Date = dateStr
@@ -190,6 +205,7 @@ ORDER BY date
 		r.Asn = a.String
 		r.NetworkName = netName.String
 		r.CountryName = cName.String
+		r.IsIPv6 = (isIPv6 != 0)
 		r.Hits = hits
 
 		results = append(results, r)

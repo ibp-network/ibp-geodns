@@ -111,7 +111,7 @@ CREATE TABLE `requests` (
   UNIQUE KEY `uniq_traffic_dedupe` (
         `date`,`domain_name`,`member_name`,
         `network_asn`,`network_name`,
-        `country_code`,`country_name`
+        `country_code`,`country_name`,`is_ipv6`
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 

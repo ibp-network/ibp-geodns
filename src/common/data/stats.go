@@ -30,6 +30,7 @@ type dailyUsageKey struct {
 	Asn         string
 	NetworkName string
 	CountryName string
+	IsIPv6      bool
 }
 
 type usageMemory struct {
@@ -71,6 +72,7 @@ func RecordDnsHit(isIPv6 bool, clientIP, domain, memberName string) {
 		Asn:         asn,
 		NetworkName: netName,
 		CountryName: countryName,
+		IsIPv6:      isIPv6,
 	}
 
 	usageMem.mu.Lock()
@@ -111,13 +113,14 @@ func FlushUsageToDatabase(triggerDate string) {
 			Asn:         k.Asn,
 			NetworkName: k.NetworkName,
 			CountryName: k.CountryName,
+			IsIPv6:      k.IsIPv6,
 			Hits:        hits,
 		}
 
 		if err := UpsertUsageRecord(rec); err != nil {
 			log.Log(log.Error,
-				"[FlushUsageToDatabase] upsert error domain=%s member=%s date=%s: %v",
-				rec.Domain, rec.MemberName, rec.Date, err)
+				"[FlushUsageToDatabase] upsert error domain=%s member=%s date=%s isIPv6=%v: %v",
+				rec.Domain, rec.MemberName, rec.Date, rec.IsIPv6, err)
 			// continue even if one record fails
 			continue
 		}
