@@ -90,21 +90,24 @@ func FlushUsageToDatabase(triggerDate string) {
 	}
 
 	usageMem.mu.Lock()
-	defer usageMem.mu.Unlock()
-
 	if len(usageMem.data) == 0 {
+		usageMem.mu.Unlock()
 		log.Log(log.Info,
 			"[FlushUsageToDatabase] No usage to flush (triggerDate=%s)",
 			triggerDate)
 		return
 	}
 
+	snapshot := usageMem.data
+	usageMem.data = make(map[dailyUsageKey]int)
+	usageMem.mu.Unlock()
+
 	log.Log(log.Info,
 		"[FlushUsageToDatabase] Flushing %d usage records (triggerDate=%s)",
-		len(usageMem.data), triggerDate)
+		len(snapshot), triggerDate)
 
 	flushed := 0
-	for k, hits := range usageMem.data {
+	for k, hits := range snapshot {
 		rec := UsageRecord{
 			Date:        k.Date,
 			Domain:      k.Domain,
@@ -121,16 +124,12 @@ func FlushUsageToDatabase(triggerDate string) {
 			log.Log(log.Error,
 				"[FlushUsageToDatabase] upsert error domain=%s member=%s date=%s isIPv6=%v: %v",
 				rec.Domain, rec.MemberName, rec.Date, rec.IsIPv6, err)
-			// continue even if one record fails
 			continue
 		}
-
-		// remove the key after successful flush
-		delete(usageMem.data, k)
 		flushed++
 	}
 
 	log.Log(log.Info,
-		"[FlushUsageToDatabase] Completed flush: %d records written, map size now %d",
-		flushed, len(usageMem.data))
+		"[FlushUsageToDatabase] Completed flush: %d records written",
+		flushed)
 }
