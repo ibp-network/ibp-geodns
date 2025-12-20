@@ -40,7 +40,7 @@ CREATE TABLE `member_events` (
   UNIQUE KEY `uniq_member_event` (`check_type`,`check_name`,`endpoint`,`member_name`,`domain_name`,`is_ipv6`),
   CONSTRAINT `member_events_chk_1` CHECK (json_valid(`vote_data`)),
   CONSTRAINT `member_events_chk_2` CHECK (json_valid(`additional_data`))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 DROP TABLE IF EXISTS `services`;
 CREATE TABLE `services` (
