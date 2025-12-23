@@ -1,8 +1,8 @@
 [Unit]
-Description=IBP DNS
+Description=IBP Monitor
 
 [Service]
-ExecStart=/opt/ibp-geodns/bin/IBPDns -config /opt/ibp-geodns/config/ibpdns.json
+ExecStart=/opt/ibp-geodns-monitor/bin/ibp-monitor -config /etc/ibpdns/monitor.json
 WorkingDirectory=/opt/ibp-geodns
 User=ibp
 Group=ibp
@@ -10,6 +10,8 @@ Restart=always
 RestartSec=5
 Environment=PATH=/usr/bin:/usr/local/bin:/usr/sbin:/usr/local/sbin:/usr/local/go/bin/
 Environment=GO_ENV=production
+CapabilityBoundingSet=CAP_NET_RAW
+AmbientCapabilities=CAP_NET_RAW
 
 [Install]
 WantedBy=multi-user.target
