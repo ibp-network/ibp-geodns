@@ -17,7 +17,7 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 	chosenMemberName := ""
 
 	clientIP := net.ParseIP(params.Remote)
-	
+
 	// Check for country code override first
 	if clientIP != nil {
 		countryCode := getClientCountryCode(clientIP.String())
@@ -153,13 +153,13 @@ func getClientCountryCode(clientIP string) string {
 	// For now, we'll try to call it and handle gracefully if it doesn't exist
 	// Note: This may need to be updated based on the actual maxmind library API
 	var countryCode string
-	
+
 	// Check if GetClientCountry exists - if the library doesn't have it,
 	// we'll need to add it or use an alternative method
 	// For now, we'll assume it exists and call it
 	// TODO: Verify this function exists in the maxmind library
 	countryCode = max.GetClientCountry(clientIP)
-	
+
 	if countryCode != "" {
 		return strings.ToUpper(countryCode)
 	}

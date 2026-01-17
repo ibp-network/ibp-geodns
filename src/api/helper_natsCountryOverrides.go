@@ -13,7 +13,7 @@ import (
 // Expects a "GeoDNSOverrides" section in the config JSON
 func LoadCountryOverridesFromConfigFile() {
 	c := cfg.GetConfig()
-	
+
 	// Try to read the config file directly to get GeoDNSOverrides
 	// Since the config library may not expose this field, we'll read the file
 	var configPath string
@@ -30,38 +30,38 @@ func LoadCountryOverridesFromConfigFile() {
 			configPath = "config/ibpdns.json"
 		}
 	}
-	
+
 	configData, err := os.ReadFile(configPath)
 	if err != nil {
 		log.Log(log.Debug, "LoadCountryOverridesFromConfigFile: could not read config file: %v", err)
 		return
 	}
-	
+
 	var configJSON map[string]interface{}
 	if err := json.Unmarshal(configData, &configJSON); err != nil {
 		log.Log(log.Debug, "LoadCountryOverridesFromConfigFile: could not parse config JSON: %v", err)
 		return
 	}
-	
+
 	geoDNSOverridesRaw, exists := configJSON["GeoDNSOverrides"]
 	if !exists {
 		log.Log(log.Debug, "LoadCountryOverridesFromConfigFile: no GeoDNSOverrides section found in config")
 		return
 	}
-	
+
 	// Convert to the expected structure
 	overridesJSON, err := json.Marshal(geoDNSOverridesRaw)
 	if err != nil {
 		log.Log(log.Warn, "LoadCountryOverridesFromConfigFile: could not marshal overrides: %v", err)
 		return
 	}
-	
+
 	var overrides map[string]map[string]CountryOverride
 	if err := json.Unmarshal(overridesJSON, &overrides); err != nil {
 		log.Log(log.Warn, "LoadCountryOverridesFromConfigFile: could not unmarshal overrides: %v", err)
 		return
 	}
-	
+
 	LoadCountryOverridesFromConfig(overrides)
 }
 
@@ -72,10 +72,10 @@ func setupNatsCountryOverrideHandler() {
 		log.Log(log.Debug, "setupNatsCountryOverrideHandler: NATS not connected, skipping subscription")
 		return
 	}
-	
+
 	// Subscribe to country override update messages
 	subject := "geodns.override.update"
-	
+
 	// Note: The exact NATS API may vary. This assumes a standard NATS.go interface.
 	// If the library uses a different interface, this will need to be adjusted.
 	sub, err := natsCommon.NC.Subscribe(subject, func(msg *natsCommon.NatsMsg) {
@@ -83,12 +83,12 @@ func setupNatsCountryOverrideHandler() {
 			handleNatsCountryOverrideUpdate(msg.Data)
 		}
 	})
-	
+
 	if err != nil {
 		log.Log(log.Warn, "setupNatsCountryOverrideHandler: failed to subscribe to %s: %v", subject, err)
 		return
 	}
-	
+
 	if sub != nil {
 		log.Log(log.Info, "setupNatsCountryOverrideHandler: subscribed to NATS subject: %s", subject)
 	}
@@ -96,12 +96,13 @@ func setupNatsCountryOverrideHandler() {
 
 // handleNatsCountryOverrideUpdate processes NATS messages for country override updates
 // Expected message format:
-// {
-//   "action": "set" | "remove" | "clear",
-//   "domain": "example.com",
-//   "countryCode": "CN",
-//   "override": { "memberName": "...", "ipv4": "...", "ipv6": "..." }  // only for "set"
-// }
+//
+//	{
+//	  "action": "set" | "remove" | "clear",
+//	  "domain": "example.com",
+//	  "countryCode": "CN",
+//	  "override": { "memberName": "...", "ipv4": "...", "ipv6": "..." }  // only for "set"
+//	}
 func handleNatsCountryOverrideUpdate(data []byte) {
 	var msg struct {
 		Action      string          `json:"action"`
@@ -109,12 +110,12 @@ func handleNatsCountryOverrideUpdate(data []byte) {
 		CountryCode string          `json:"countryCode"`
 		Override    CountryOverride `json:"override,omitempty"`
 	}
-	
+
 	if err := json.Unmarshal(data, &msg); err != nil {
 		log.Log(log.Warn, "handleNatsCountryOverrideUpdate: failed to unmarshal message: %v", err)
 		return
 	}
-	
+
 	switch msg.Action {
 	case "set":
 		if msg.Domain == "" || msg.CountryCode == "" {
@@ -122,14 +123,14 @@ func handleNatsCountryOverrideUpdate(data []byte) {
 			return
 		}
 		CountryOverrides.SetCountryOverride(msg.Domain, msg.CountryCode, msg.Override)
-		
+
 	case "remove":
 		if msg.Domain == "" || msg.CountryCode == "" {
 			log.Log(log.Warn, "handleNatsCountryOverrideUpdate: missing domain or countryCode for remove action")
 			return
 		}
 		CountryOverrides.RemoveCountryOverride(msg.Domain, msg.CountryCode)
-		
+
 	case "clear":
 		if msg.Domain == "" {
 			log.Log(log.Warn, "handleNatsCountryOverrideUpdate: missing domain for clear action")
@@ -140,7 +141,7 @@ func handleNatsCountryOverrideUpdate(data []byte) {
 		delete(CountryOverrides.overrides, msg.Domain)
 		CountryOverrides.mu.Unlock()
 		log.Log(log.Info, "handleNatsCountryOverrideUpdate: cleared all overrides for domain=%s", msg.Domain)
-		
+
 	default:
 		log.Log(log.Warn, "handleNatsCountryOverrideUpdate: unknown action: %s", msg.Action)
 	}
