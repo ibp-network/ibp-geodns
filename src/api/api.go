@@ -18,6 +18,12 @@ func Init() {
 	StaticDNSEntries()
 	populateTLDRecords()
 	RebuildServiceRecords()
+	
+	// Load country code overrides from config if available
+	LoadCountryOverridesFromConfigFile()
+
+	// Setup NATS subscription for runtime override updates
+	setupNatsCountryOverrideHandler()
 
 	dnsApi := http.NewServeMux()
 	dnsApi.HandleFunc("/dns", dnsApiRouter)

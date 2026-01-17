@@ -84,3 +84,23 @@ type DomainInfo struct {
 	LastCheck      int      `json:"last_check"`
 	Kind           string   `json:"kind"`
 }
+
+// CountryOverride represents a country code override mapping
+type CountryOverride struct {
+	// MemberName is the name of the member to route to (takes precedence over IPs)
+	MemberName string `json:"memberName,omitempty"`
+	// IPv4 is the IPv4 address to route to (used if MemberName is empty)
+	IPv4 string `json:"ipv4,omitempty"`
+	// IPv6 is the IPv6 address to route to (used if MemberName is empty)
+	IPv6 string `json:"ipv6,omitempty"`
+}
+
+// CountryOverrideMap stores country code overrides per domain
+type CountryOverrideMap struct {
+	mu       sync.RWMutex
+	overrides map[string]map[string]CountryOverride // domain -> country code -> override
+}
+
+var CountryOverrides = &CountryOverrideMap{
+	overrides: make(map[string]map[string]CountryOverride),
+}
