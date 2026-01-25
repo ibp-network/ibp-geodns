@@ -34,10 +34,14 @@ func Init() {
 		c.Local.DnsApi.ListenPort,
 	)
 
-	go http.ListenAndServe(
-		c.Local.DnsApi.ListenAddress+":"+c.Local.DnsApi.ListenPort,
-		dnsApi,
-	)
+	go func() {
+		if err := http.ListenAndServe(
+			c.Local.DnsApi.ListenAddress+":"+c.Local.DnsApi.ListenPort,
+			dnsApi,
+		); err != nil {
+			log.Log(log.Fatal, "DNS API server failed to start: %v", err)
+		}
+	}()
 }
 
 func handleManualUsageProcess(w http.ResponseWriter, r *http.Request) {

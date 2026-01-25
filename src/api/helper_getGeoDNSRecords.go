@@ -24,7 +24,11 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 		if countryCode != "" {
 			override, hasOverride := CountryOverrides.GetCountryOverride(domain, countryCode)
 			if hasOverride {
-				return processCountryOverride(params, id, domain, useIPv6, override, countryCode)
+				overrideRecords, overrideMember := processCountryOverride(params, id, domain, useIPv6, override, countryCode)
+				if len(overrideRecords) > 0 {
+					return overrideRecords, overrideMember
+				}
+				log.Log(log.Debug, "ProcessDynamic: override unavailable for country=%s, falling back to geographic routing", countryCode)
 			}
 		}
 	}
@@ -147,19 +151,7 @@ func boolToStr(b bool) string {
 // getClientCountryCode retrieves the country code for a client IP
 // Returns empty string if country code cannot be determined
 func getClientCountryCode(clientIP string) string {
-	// Try to get country code from MaxMind
-	// The maxmind library should have a GetClientCountry function
-	// If it doesn't exist, this will need to be added to the library
-	// For now, we'll try to call it and handle gracefully if it doesn't exist
-	// Note: This may need to be updated based on the actual maxmind library API
-	var countryCode string
-
-	// Check if GetClientCountry exists - if the library doesn't have it,
-	// we'll need to add it or use an alternative method
-	// For now, we'll assume it exists and call it
-	// TODO: Verify this function exists in the maxmind library
-	countryCode = max.GetClientCountry(clientIP)
-
+	countryCode := max.GetClientCountry(clientIP)
 	if countryCode != "" {
 		return strings.ToUpper(countryCode)
 	}

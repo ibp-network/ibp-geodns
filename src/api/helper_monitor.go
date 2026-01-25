@@ -10,7 +10,7 @@ func offSite(sites []MonitorResultSite, member string, v6 *bool) bool {
 			continue
 		}
 		for _, r := range sr.Results {
-			if r.MemberName == member {
+			if r.MemberName == member && !r.Status {
 				return true
 			}
 		}
@@ -27,7 +27,7 @@ func offDomain(domains []MonitorResultDomain, member, dom string, v6 *bool) bool
 			continue
 		}
 		for _, r := range dr.Results {
-			if r.MemberName == member {
+			if r.MemberName == member && !r.Status {
 				return true
 			}
 		}
@@ -44,7 +44,7 @@ func offEndpoint(eps []MonitorResultEndpoint, member, dom string, v6 *bool) bool
 			continue
 		}
 		for _, r := range er.Results {
-			if r.MemberName == member {
+			if r.MemberName == member && !r.Status {
 				return true
 			}
 		}
