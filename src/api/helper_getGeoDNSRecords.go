@@ -17,6 +17,7 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 	chosenMemberName := ""
 
 	clientIP := net.ParseIP(params.Remote)
+	noClientIP := clientIP == nil
 
 	// Check for country code override first
 	if clientIP != nil {
@@ -57,6 +58,9 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 	if !found {
 		return nil, ""
 	}
+	if sc.Active == 0 {
+		return nil, ""
+	}
 
 	for _, member := range sc.Members {
 		if member.Override {
@@ -93,6 +97,11 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 		parsedIP := net.ParseIP(ipToUse)
 		if parsedIP == nil {
 			continue
+		}
+
+		if noClientIP {
+			closestMember = member
+			break
 		}
 
 		dist := max.Distance(clientLat, clientLon, member.Location.Latitude, member.Location.Longitude)

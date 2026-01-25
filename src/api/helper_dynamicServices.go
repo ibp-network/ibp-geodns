@@ -20,6 +20,9 @@ func RebuildServiceRecords() {
 	newMap := make(map[string]ServiceConfigs)
 
 	for _, svc := range c.Services {
+		if svc.Configuration.Active == 0 {
+			continue
+		}
 		for _, provider := range svc.Providers {
 			for _, rpcUrl := range provider.RpcUrls {
 				parsed := max.ParseUrl(rpcUrl)
