@@ -25,14 +25,15 @@ func ProcessSOA(params Parameters, id int, domain string) []cfg.DNSRecord {
 	if params.QType == "SOA" {
 		TLDRecords.mu.RLock()
 		defer TLDRecords.mu.RUnlock()
-		var domainFound int
+		found := false
 		for key, storedDomain := range TLDRecords.records {
 			if storedDomain == tld {
-				domainFound = key
+				id = key
+				found = true
 				break
 			}
 		}
-		if domainFound != 0 {
+		if found {
 			currentUnix := int(time.Now().UTC().Unix())
 			records = append(records, cfg.DNSRecord{
 				DomainID: id,

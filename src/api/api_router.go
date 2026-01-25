@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	log "github.com/ibp-network/ibp-geodns-libs/logging"
@@ -11,7 +12,8 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 	log.Log(log.Debug, "dnsApiRouter: Received HTTP %s from %s", r.Method, r.RemoteAddr)
 
 	var req Request
-	decoder := json.NewDecoder(r.Body)
+	const maxBodyBytes = 1 << 20 // 1MB guardrail
+	decoder := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes))
 	err := decoder.Decode(&req)
 	if err != nil {
 		log.Log(log.Warn, "dnsApiRouter: JSON decode error: %v", err)

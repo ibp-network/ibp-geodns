@@ -12,15 +12,27 @@ func handle_GetMemberEvents(req Request) Response {
 	log.Log(log.Debug, "handle_GetMemberEvents: memberName=%s, domain=%s, startTime=%s, endTime=%s",
 		p.MemberName, p.Domain, p.StartTime, p.EndTime)
 
-	start, err := time.Parse(time.RFC3339, p.StartTime)
-	if err != nil {
-		log.Log(log.Warn, "handle_GetMemberEvents: invalid startTime=%s", p.StartTime)
-		return Response{Result: "invalid startTime"}
+	var start, end time.Time
+	var err error
+
+	if p.EndTime == "" {
+		end = time.Now().UTC()
+	} else {
+		end, err = time.Parse(time.RFC3339, p.EndTime)
+		if err != nil {
+			log.Log(log.Warn, "handle_GetMemberEvents: invalid endTime=%s", p.EndTime)
+			return Response{Result: "invalid endTime"}
+		}
 	}
-	end, err := time.Parse(time.RFC3339, p.EndTime)
-	if err != nil {
-		log.Log(log.Warn, "handle_GetMemberEvents: invalid endTime=%s", p.EndTime)
-		return Response{Result: "invalid endTime"}
+
+	if p.StartTime == "" {
+		start = end.Add(-24 * time.Hour)
+	} else {
+		start, err = time.Parse(time.RFC3339, p.StartTime)
+		if err != nil {
+			log.Log(log.Warn, "handle_GetMemberEvents: invalid startTime=%s", p.StartTime)
+			return Response{Result: "invalid startTime"}
+		}
 	}
 
 	events, err := dat.GetMemberEvents(p.MemberName, p.Domain, start, end)

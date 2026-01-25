@@ -21,6 +21,15 @@ func populateTLDRecords() {
 	}
 	StaticRecords.mu.RUnlock()
 
+	// Include domains that exist only via dynamic services
+	ServiceRecords.mu.RLock()
+	for dom := range ServiceRecords.Services {
+		if dom != "" {
+			tmp[dom] = true
+		}
+	}
+	ServiceRecords.mu.RUnlock()
+
 	TLDRecords.mu.Lock()
 	defer TLDRecords.mu.Unlock()
 
@@ -29,7 +38,19 @@ func populateTLDRecords() {
 	count := 0
 	for domain := range tmp {
 		id := int(crc32.ChecksumIEEE([]byte(strings.ToLower(domain)))) & 0x7FFFFFFF
-		TLDRecords.records[id] = domain
+		origID := id
+		for {
+			if existing, exists := TLDRecords.records[id]; !exists || strings.EqualFold(existing, domain) {
+				TLDRecords.records[id] = domain
+				break
+			}
+			// resolve collision by linear probing
+			id = (id + 1) & 0x7FFFFFFF
+			if id == origID {
+				log.Log(log.Error, "populateTLDRecords: unable to place domain=%s due to id space exhaustion", domain)
+				break
+			}
+		}
 		count++
 		log.Log(log.Debug, "populateTLDRecords: TLDRecords[%d] = %s", id, domain)
 	}

@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"os"
+	"time"
 
 	cfg "github.com/ibp-network/ibp-geodns-libs/config"
 	log "github.com/ibp-network/ibp-geodns-libs/logging"
@@ -67,31 +68,34 @@ func LoadCountryOverridesFromConfigFile() {
 
 // setupNatsCountryOverrideHandler sets up a NATS subscription for runtime country override updates
 func setupNatsCountryOverrideHandler() {
-	// Check if NATS is connected
-	if natsCommon.NC == nil {
-		log.Log(log.Debug, "setupNatsCountryOverrideHandler: NATS not connected, skipping subscription")
-		return
-	}
+	// Retry until NATS is available to avoid missing runtime overrides
+	go func() {
+		for {
+			if natsCommon.NC == nil {
+				log.Log(log.Debug, "setupNatsCountryOverrideHandler: NATS not connected, retrying in 5s")
+				time.Sleep(5 * time.Second)
+				continue
+			}
 
-	// Subscribe to country override update messages
-	subject := "geodns.override.update"
+			subject := "geodns.override.update"
+			sub, err := natsCommon.NC.Subscribe(subject, func(msg *natsCommon.NatsMsg) {
+				if msg != nil && len(msg.Data) > 0 {
+					handleNatsCountryOverrideUpdate(msg.Data)
+				}
+			})
 
-	// Note: The exact NATS API may vary. This assumes a standard NATS.go interface.
-	// If the library uses a different interface, this will need to be adjusted.
-	sub, err := natsCommon.NC.Subscribe(subject, func(msg *natsCommon.NatsMsg) {
-		if msg != nil && len(msg.Data) > 0 {
-			handleNatsCountryOverrideUpdate(msg.Data)
+			if err != nil {
+				log.Log(log.Warn, "setupNatsCountryOverrideHandler: failed to subscribe to %s: %v; retrying in 5s", subject, err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			if sub != nil {
+				log.Log(log.Info, "setupNatsCountryOverrideHandler: subscribed to NATS subject: %s", subject)
+			}
+			return
 		}
-	})
-
-	if err != nil {
-		log.Log(log.Warn, "setupNatsCountryOverrideHandler: failed to subscribe to %s: %v", subject, err)
-		return
-	}
-
-	if sub != nil {
-		log.Log(log.Info, "setupNatsCountryOverrideHandler: subscribed to NATS subject: %s", subject)
-	}
+	}()
 }
 
 // handleNatsCountryOverrideUpdate processes NATS messages for country override updates

@@ -3,6 +3,7 @@ package api
 import (
 	"math"
 	"net"
+	"sort"
 	"strings"
 
 	log "github.com/ibp-network/ibp-geodns-libs/logging"
@@ -62,7 +63,15 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 		return nil, ""
 	}
 
-	for _, member := range sc.Members {
+	// deterministic iteration to avoid random selection when no client IP
+	memberKeys := make([]string, 0, len(sc.Members))
+	for k := range sc.Members {
+		memberKeys = append(memberKeys, k)
+	}
+	sort.Strings(memberKeys)
+
+	for _, mName := range memberKeys {
+		member := sc.Members[mName]
 		if member.Override {
 			continue
 		}

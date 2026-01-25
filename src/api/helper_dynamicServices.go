@@ -71,6 +71,9 @@ func RebuildServiceRecords() {
 	for dom, sc := range ServiceRecords.Services {
 		log.Log(log.Info, " - domain=%s => %d assigned members", dom, len(sc.Members))
 	}
+
+	// refresh TLD records to reflect dynamic domain changes
+	populateTLDRecords()
 }
 
 func isServiceAssignedToMember(serviceName string, member cfg.Member) bool {
