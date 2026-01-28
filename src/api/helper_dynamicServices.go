@@ -13,7 +13,6 @@ func RebuildServiceRecords() {
 	log.Log(log.Info, "RebuildServiceRecords: rebuilding dynamic ServiceRecords from config...")
 
 	ServiceRecords.mu.Lock()
-	defer ServiceRecords.mu.Unlock()
 
 	c := cfg.GetConfig()
 
@@ -72,7 +71,9 @@ func RebuildServiceRecords() {
 		log.Log(log.Info, " - domain=%s => %d assigned members", dom, len(sc.Members))
 	}
 
-	// refresh TLD records to reflect dynamic domain changes
+	ServiceRecords.mu.Unlock()
+
+	// refresh TLD records to reflect dynamic domain changes (must be after unlocking)
 	populateTLDRecords()
 }
 
