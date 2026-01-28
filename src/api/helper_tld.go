@@ -14,7 +14,10 @@ func populateTLDRecords() {
 
 	StaticRecords.mu.RLock()
 	for _, rec := range StaticRecords.records {
-		zone := extractTopLevelDomain(rec.QName)
+		if rec.QType != "NS" && rec.QType != "SOA" {
+			continue
+		}
+		zone := normalizeDomain(rec.QName)
 		if zone != "" {
 			tmp[zone] = true
 		}

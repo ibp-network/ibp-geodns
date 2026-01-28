@@ -20,7 +20,7 @@ func StaticDNSEntries() {
 
 func ProcessSOA(params Parameters, id int, domain string) []cfg.DNSRecord {
 	var records []cfg.DNSRecord
-	tld := extractTopLevelDomain(domain)
+	tld := normalizeDomain(domain)
 
 	if params.QType == "SOA" {
 		TLDRecords.mu.RLock()

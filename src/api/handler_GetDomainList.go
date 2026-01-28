@@ -14,7 +14,7 @@ func handle_GetDomainList(req Request) Response {
 
 	TLDRecords.mu.RLock()
 	for key, domain := range TLDRecords.records {
-		if extractTopLevelDomain(params.Zonename) == domain {
+		if normalizeDomain(params.Zonename) == domain {
 			id = key
 		}
 	}
@@ -24,7 +24,7 @@ func handle_GetDomainList(req Request) Response {
 	defer StaticRecords.mu.RUnlock()
 
 	for _, record := range StaticRecords.records {
-		if extractTopLevelDomain(params.Zonename) == extractTopLevelDomain(record.QName) {
+		if normalizeDomain(params.Zonename) == normalizeDomain(record.QName) {
 			records = append(records, cfg.DNSRecord{
 				DomainID: id,
 				QName:    record.QName,

@@ -41,3 +41,17 @@ func extractTopLevelDomain(domain string) string {
 	}
 	return eTLDPlusOne
 }
+
+// normalizeDomain lowercases, strips protocols/paths/trailing dots, and returns the full hostname.
+func normalizeDomain(domain string) string {
+	domain = strings.TrimSpace(strings.ToLower(domain))
+	domain = strings.TrimPrefix(domain, "https://")
+	domain = strings.TrimPrefix(domain, "http://")
+	domain = strings.TrimPrefix(domain, "wss://")
+	domain = strings.TrimPrefix(domain, "ws://")
+	if idx := strings.Index(domain, "/"); idx != -1 {
+		domain = domain[:idx]
+	}
+	domain = strings.TrimSuffix(domain, ".")
+	return domain
+}

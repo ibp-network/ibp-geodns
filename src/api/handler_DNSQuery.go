@@ -17,7 +17,7 @@ func handle_DNSQuery(req Request) Response {
 	var id int
 	TLDRecords.mu.RLock()
 	for key, tld := range TLDRecords.records {
-		if extractTopLevelDomain(qname) == strings.ToLower(tld) {
+		if normalizeDomain(qname) == strings.ToLower(tld) {
 			id = key
 			break
 		}

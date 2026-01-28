@@ -17,7 +17,7 @@ func handle_GetDomainInfo(req Request) Response {
 	defer TLDRecords.mu.RUnlock()
 
 	for key, domain := range TLDRecords.records {
-		if extractTopLevelDomain(params.QName) == domain {
+		if normalizeDomain(params.QName) == domain {
 			var Masters []string
 			dnsPrefixes := []string{"dns-01", "dns-02", "dns-03"}
 
