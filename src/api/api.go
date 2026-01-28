@@ -29,17 +29,17 @@ func Init() {
 	dnsApi.HandleFunc("/dns", dnsApiRouter)
 	dnsApi.HandleFunc("/process", handleManualUsageProcess)
 
-	log.Log(log.Info, "Starting DNS API server on %s:%s",
-		c.Local.DnsApi.ListenAddress,
-		c.Local.DnsApi.ListenPort,
-	)
+	addr := c.Local.DnsApi.ListenAddress + ":" + c.Local.DnsApi.ListenPort
+	log.Log(log.Info, "Starting DNS API server on %s", addr)
 
 	go func() {
-		if err := http.ListenAndServe(
-			c.Local.DnsApi.ListenAddress+":"+c.Local.DnsApi.ListenPort,
-			dnsApi,
-		); err != nil {
-			log.Log(log.Fatal, "DNS API server failed to start: %v", err)
+		for {
+			if err := http.ListenAndServe(addr, dnsApi); err != nil {
+				log.Log(log.Error, "DNS API server listen error on %s: %v (retrying in 5s)", addr, err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+			return
 		}
 	}()
 }
