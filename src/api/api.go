@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	cfg "github.com/ibp-network/ibp-geodns-libs/config"
@@ -29,7 +30,16 @@ func Init() {
 	dnsApi.HandleFunc("/dns", dnsApiRouter)
 	dnsApi.HandleFunc("/process", handleManualUsageProcess)
 
-	addr := c.Local.DnsApi.ListenAddress + ":" + c.Local.DnsApi.ListenPort
+	host := strings.TrimSpace(c.Local.DnsApi.ListenAddress)
+	port := strings.TrimSpace(c.Local.DnsApi.ListenPort)
+	if port == "" {
+		log.Log(log.Fatal, "DNS API ListenPort is empty in config; cannot start server")
+		return
+	}
+	if host == "" {
+		host = "0.0.0.0"
+	}
+	addr := host + ":" + port
 	log.Log(log.Info, "Starting DNS API server on %s", addr)
 
 	// Block here and fail fast if bind/listen fails; systemd will restart the service.
