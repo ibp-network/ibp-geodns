@@ -32,16 +32,10 @@ func Init() {
 	addr := c.Local.DnsApi.ListenAddress + ":" + c.Local.DnsApi.ListenPort
 	log.Log(log.Info, "Starting DNS API server on %s", addr)
 
-	go func() {
-		for {
-			if err := http.ListenAndServe(addr, dnsApi); err != nil {
-				log.Log(log.Error, "DNS API server listen error on %s: %v (retrying in 5s)", addr, err)
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			return
-		}
-	}()
+	// Block here and fail fast if bind/listen fails; systemd will restart the service.
+	if err := http.ListenAndServe(addr, dnsApi); err != nil {
+		log.Log(log.Fatal, "DNS API server failed to start on %s: %v", addr, err)
+	}
 }
 
 func handleManualUsageProcess(w http.ResponseWriter, r *http.Request) {
