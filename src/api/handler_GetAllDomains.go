@@ -60,7 +60,7 @@ func gatherMasters(domain string) []string {
 	for _, prefix := range dnsPrefixes {
 		dnsName := prefix + "." + domain
 		for _, dnsRecord := range StaticRecords.records {
-			if dnsRecord.QName == dnsName {
+			if normalizeDomain(dnsRecord.QName) == normalizeDomain(dnsName) {
 				masters = append(masters, dnsRecord.Content)
 				break
 			}

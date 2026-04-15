@@ -10,7 +10,7 @@ func offSite(sites []MonitorResultSite, member string, v6 *bool) bool {
 			continue
 		}
 		for _, r := range sr.Results {
-			if r.MemberName == member && !r.Status {
+			if strings.EqualFold(r.MemberName, member) && !r.Status {
 				return true
 			}
 		}
@@ -27,7 +27,7 @@ func offDomain(domains []MonitorResultDomain, member, dom string, v6 *bool) bool
 			continue
 		}
 		for _, r := range dr.Results {
-			if r.MemberName == member && !r.Status {
+			if strings.EqualFold(r.MemberName, member) && !r.Status {
 				return true
 			}
 		}
@@ -44,7 +44,7 @@ func offEndpoint(eps []MonitorResultEndpoint, member, dom string, v6 *bool) bool
 			continue
 		}
 		for _, r := range er.Results {
-			if r.MemberName == member && !r.Status {
+			if strings.EqualFold(r.MemberName, member) && !r.Status {
 				return true
 			}
 		}
@@ -52,8 +52,15 @@ func offEndpoint(eps []MonitorResultEndpoint, member, dom string, v6 *bool) bool
 	return false
 }
 
+func shouldApplyMonitorSnapshot(s OfficialResults) bool {
+	return HasOfficialSnapshot() && HasOfficialMonitorData(s)
+}
+
 func IsMemberOnlineForDomain(domain, member string) bool {
 	s := GetOfficialSnapshot()
+	if !shouldApplyMonitorSnapshot(s) {
+		return true
+	}
 	if offSite(s.SiteResults, member, nil) ||
 		offDomain(s.DomainResults, member, domain, nil) ||
 		offEndpoint(s.EndpointResults, member, domain, nil) {
@@ -65,6 +72,9 @@ func IsMemberOnlineForDomain(domain, member string) bool {
 func IsMemberOnlineForDomainIPv4(domain, member string) bool {
 	ipv6 := false
 	s := GetOfficialSnapshot()
+	if !shouldApplyMonitorSnapshot(s) {
+		return true
+	}
 	if offSite(s.SiteResults, member, &ipv6) ||
 		offDomain(s.DomainResults, member, domain, &ipv6) ||
 		offEndpoint(s.EndpointResults, member, domain, &ipv6) {
@@ -76,6 +86,9 @@ func IsMemberOnlineForDomainIPv4(domain, member string) bool {
 func IsMemberOnlineForDomainIPv6(domain, member string) bool {
 	ipv6 := true
 	s := GetOfficialSnapshot()
+	if !shouldApplyMonitorSnapshot(s) {
+		return true
+	}
 	if offSite(s.SiteResults, member, &ipv6) ||
 		offDomain(s.DomainResults, member, domain, &ipv6) ||
 		offEndpoint(s.EndpointResults, member, domain, &ipv6) {

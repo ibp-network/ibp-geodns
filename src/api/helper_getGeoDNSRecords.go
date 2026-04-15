@@ -17,16 +17,17 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 	var records []cfg.DNSRecord
 	chosenMemberName := ""
 
-	clientIP := net.ParseIP(params.Remote)
+	clientIP, clientIPStr := getEffectiveClientIP(params)
 	noClientIP := clientIP == nil
+	serviceDomain := normalizeDomain(domain)
 
 	// Check for country code override first
 	if clientIP != nil {
-		countryCode := getClientCountryCode(clientIP.String())
+		countryCode := getClientCountryCode(clientIPStr)
 		if countryCode != "" {
-			override, hasOverride := CountryOverrides.GetCountryOverride(domain, countryCode)
+			override, hasOverride := CountryOverrides.GetCountryOverride(serviceDomain, countryCode)
 			if hasOverride {
-				overrideRecords, overrideMember := processCountryOverride(params, id, domain, useIPv6, override, countryCode)
+				overrideRecords, overrideMember := processCountryOverride(params, id, serviceDomain, useIPv6, override, countryCode, clientIPStr)
 				if len(overrideRecords) > 0 {
 					return overrideRecords, overrideMember
 				}
@@ -45,15 +46,15 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 
 		if isClientIPv6 {
 			log.Log(log.Debug, "ProcessDynamic: Client is using IPv6: %s", clientIP.String())
-			clientLat, clientLon = max.GetClientCoordinates(clientIP.String())
+			clientLat, clientLon = max.GetClientCoordinates(clientIPStr)
 		} else {
 			log.Log(log.Debug, "ProcessDynamic: Client is using IPv4: %s", clientIP.String())
-			clientLat, clientLon = max.GetClientCoordinates(clientIP.String())
+			clientLat, clientLon = max.GetClientCoordinates(clientIPStr)
 		}
 	}
 
 	ServiceRecords.mu.RLock()
-	sc, found := ServiceRecords.Services[strings.ToLower(domain)]
+	sc, found := ServiceRecords.Services[serviceDomain]
 	ServiceRecords.mu.RUnlock()
 
 	if !found {
@@ -137,11 +138,11 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 		records = append(records, rec)
 		chosenMemberName = closestMember.Details.Name
 
-		dat.RecordDnsHit(true, params.Remote, domain, chosenMemberName)
+		dat.RecordDnsHit(true, clientIPStr, serviceDomain, chosenMemberName)
 	} else {
 		rec := cfg.DNSRecord{
 			DomainID: id,
-			QName:    domain,
+			QName:    serviceDomain,
 			QType:    "A",
 			Content:  closestMember.Service.ServiceIPv4,
 			TTL:      30,
@@ -150,11 +151,11 @@ func ProcessDynamic(params Parameters, id int, domain string, useIPv6 bool) ([]c
 		records = append(records, rec)
 		chosenMemberName = closestMember.Details.Name
 
-		dat.RecordDnsHit(false, params.Remote, domain, chosenMemberName)
+		dat.RecordDnsHit(false, clientIPStr, serviceDomain, chosenMemberName)
 	}
 
 	log.Log(log.Debug, "ProcessDynamic: selected member %s for %s query on domain %s",
-		chosenMemberName, boolToStr(useIPv6), domain)
+		chosenMemberName, boolToStr(useIPv6), serviceDomain)
 
 	return records, chosenMemberName
 }
@@ -177,7 +178,7 @@ func getClientCountryCode(clientIP string) string {
 }
 
 // processCountryOverride handles DNS routing when a country code override is active
-func processCountryOverride(params Parameters, id int, domain string, useIPv6 bool, override CountryOverride, countryCode string) ([]cfg.DNSRecord, string) {
+func processCountryOverride(params Parameters, id int, domain string, useIPv6 bool, override CountryOverride, countryCode, clientIP string) ([]cfg.DNSRecord, string) {
 	var records []cfg.DNSRecord
 	chosenMemberName := ""
 
@@ -187,65 +188,72 @@ func processCountryOverride(params Parameters, id int, domain string, useIPv6 bo
 		sc, found := ServiceRecords.Services[strings.ToLower(domain)]
 		ServiceRecords.mu.RUnlock()
 
-		if found {
-			for memberName, member := range sc.Members {
-				if memberName == override.MemberName {
-					// Check if member is online and has the required IP version
-					var ipToUse string
-					if useIPv6 {
-						ipToUse = member.Service.ServiceIPv6
-						if ipToUse == "" {
-							log.Log(log.Debug, "processCountryOverride: member %s has no IPv6, falling back to geographic routing", override.MemberName)
-							return nil, ""
-						}
-						if !IsMemberOnlineForDomainIPv6(domain, member.Details.Name) {
-							log.Log(log.Debug, "processCountryOverride: member %s is offline for IPv6, falling back to geographic routing", override.MemberName)
-							return nil, ""
-						}
-					} else {
-						ipToUse = member.Service.ServiceIPv4
-						if ipToUse == "" {
-							log.Log(log.Debug, "processCountryOverride: member %s has no IPv4, falling back to geographic routing", override.MemberName)
-							return nil, ""
-						}
-						if !IsMemberOnlineForDomainIPv4(domain, member.Details.Name) {
-							log.Log(log.Debug, "processCountryOverride: member %s is offline for IPv4, falling back to geographic routing", override.MemberName)
-							return nil, ""
-						}
-					}
-
-					var qtype string
-					if useIPv6 {
-						qtype = "AAAA"
-					} else {
-						qtype = "A"
-					}
-					rec := cfg.DNSRecord{
-						DomainID: id,
-						QName:    domain,
-						QType:    qtype,
-						Content:  ipToUse,
-						TTL:      30,
-						Auth:     true,
-					}
-					records = append(records, rec)
-					chosenMemberName = override.MemberName
-
-					if useIPv6 {
-						dat.RecordDnsHit(true, params.Remote, domain, chosenMemberName)
-					} else {
-						dat.RecordDnsHit(false, params.Remote, domain, chosenMemberName)
-					}
-
-					log.Log(log.Debug, "processCountryOverride: country=%s, domain=%s, member=%s, ip=%s",
-						countryCode, domain, chosenMemberName, ipToUse)
-					return records, chosenMemberName
-				}
-			}
-			log.Log(log.Warn, "processCountryOverride: member %s not found for domain %s, falling back to geographic routing",
-				override.MemberName, domain)
+		if !found {
+			log.Log(log.Warn, "processCountryOverride: domain %s not found for member override %s, falling back to geographic routing",
+				domain, override.MemberName)
 			return nil, ""
 		}
+
+		for memberName, member := range sc.Members {
+			if !strings.EqualFold(memberName, override.MemberName) && !strings.EqualFold(member.Details.Name, override.MemberName) {
+				continue
+			}
+
+			// Check if member is online and has the required IP version
+			var ipToUse string
+			if useIPv6 {
+				ipToUse = member.Service.ServiceIPv6
+				if ipToUse == "" {
+					log.Log(log.Debug, "processCountryOverride: member %s has no IPv6, falling back to geographic routing", override.MemberName)
+					return nil, ""
+				}
+				if !IsMemberOnlineForDomainIPv6(domain, member.Details.Name) {
+					log.Log(log.Debug, "processCountryOverride: member %s is offline for IPv6, falling back to geographic routing", override.MemberName)
+					return nil, ""
+				}
+			} else {
+				ipToUse = member.Service.ServiceIPv4
+				if ipToUse == "" {
+					log.Log(log.Debug, "processCountryOverride: member %s has no IPv4, falling back to geographic routing", override.MemberName)
+					return nil, ""
+				}
+				if !IsMemberOnlineForDomainIPv4(domain, member.Details.Name) {
+					log.Log(log.Debug, "processCountryOverride: member %s is offline for IPv4, falling back to geographic routing", override.MemberName)
+					return nil, ""
+				}
+			}
+
+			var qtype string
+			if useIPv6 {
+				qtype = "AAAA"
+			} else {
+				qtype = "A"
+			}
+			rec := cfg.DNSRecord{
+				DomainID: id,
+				QName:    domain,
+				QType:    qtype,
+				Content:  ipToUse,
+				TTL:      30,
+				Auth:     true,
+			}
+			records = append(records, rec)
+			chosenMemberName = member.Details.Name
+
+			if useIPv6 {
+				dat.RecordDnsHit(true, clientIP, domain, chosenMemberName)
+			} else {
+				dat.RecordDnsHit(false, clientIP, domain, chosenMemberName)
+			}
+
+			log.Log(log.Debug, "processCountryOverride: country=%s, domain=%s, member=%s, ip=%s",
+				countryCode, domain, chosenMemberName, ipToUse)
+			return records, chosenMemberName
+		}
+
+		log.Log(log.Warn, "processCountryOverride: member %s not found for domain %s, falling back to geographic routing",
+			override.MemberName, domain)
+		return nil, ""
 	}
 
 	// If override specifies direct IP addresses
@@ -290,9 +298,9 @@ func processCountryOverride(params Parameters, id int, domain string, useIPv6 bo
 	chosenMemberName = "override:" + countryCode
 
 	if useIPv6 {
-		dat.RecordDnsHit(true, params.Remote, domain, chosenMemberName)
+		dat.RecordDnsHit(true, clientIP, domain, chosenMemberName)
 	} else {
-		dat.RecordDnsHit(false, params.Remote, domain, chosenMemberName)
+		dat.RecordDnsHit(false, clientIP, domain, chosenMemberName)
 	}
 
 	log.Log(log.Debug, "processCountryOverride: country=%s, domain=%s, direct IP=%s",

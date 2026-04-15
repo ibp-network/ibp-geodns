@@ -3,9 +3,10 @@ package api
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
-	cfg "github.com/ibp-network/ibp-geodns-libs/config"
 	log "github.com/ibp-network/ibp-geodns-libs/logging"
 	natsCommon "github.com/ibp-network/ibp-geodns-libs/nats"
 )
@@ -13,28 +14,11 @@ import (
 // LoadCountryOverridesFromConfigFile loads country overrides from the config file
 // Expects a "GeoDNSOverrides" section in the config JSON
 func LoadCountryOverridesFromConfigFile() {
-	c := cfg.GetConfig()
-
-	// Try to read the config file directly to get GeoDNSOverrides
-	// Since the config library may not expose this field, we'll read the file
-	var configPath string
-	workDir := c.Local.System.WorkDir
-	if workDir != "" && workDir[len(workDir)-1] != '/' {
-		workDir += "/"
-	}
-	configPath = workDir + "ibpdns.json"
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		// Try current directory
-		configPath = "ibpdns.json"
-		if _, err := os.Stat(configPath); os.IsNotExist(err) {
-			// Try config directory
-			configPath = "config/ibpdns.json"
-		}
-	}
+	configPath := filepath.Clean(getConfigPath())
 
 	configData, err := os.ReadFile(configPath)
 	if err != nil {
-		log.Log(log.Debug, "LoadCountryOverridesFromConfigFile: could not read config file: %v", err)
+		log.Log(log.Debug, "LoadCountryOverridesFromConfigFile: could not read config file %s: %v", configPath, err)
 		return
 	}
 
@@ -141,10 +125,11 @@ func handleNatsCountryOverrideUpdate(data []byte) {
 			return
 		}
 		// Clear all overrides for a domain
+		domain := strings.ToLower(msg.Domain)
 		CountryOverrides.mu.Lock()
-		delete(CountryOverrides.overrides, msg.Domain)
+		delete(CountryOverrides.overrides, domain)
 		CountryOverrides.mu.Unlock()
-		log.Log(log.Info, "handleNatsCountryOverrideUpdate: cleared all overrides for domain=%s", msg.Domain)
+		log.Log(log.Info, "handleNatsCountryOverrideUpdate: cleared all overrides for domain=%s", domain)
 
 	default:
 		log.Log(log.Warn, "handleNatsCountryOverrideUpdate: unknown action: %s", msg.Action)

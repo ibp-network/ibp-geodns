@@ -32,6 +32,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	api.SetConfigPath(*cfgFile)
 	cfg.Init(*cfgFile)
 	c := cfg.GetConfig()
 	log.SetLogLevel(log.ParseLogLevel(c.Local.System.LogLevel))
@@ -100,6 +101,9 @@ func updateDNSMonitorSnapshot() {
 	if err := json.Unmarshal(body, &snap); err != nil {
 		log.Log(log.Error, "[Monitor Poller] decode JSON: %v", err)
 		return
+	}
+	if !api.HasOfficialMonitorData(snap) {
+		log.Log(log.Warn, "[Monitor Poller] received empty monitor snapshot; keeping permissive routing policy")
 	}
 	api.SetOfficialSnapshot(snap)
 }

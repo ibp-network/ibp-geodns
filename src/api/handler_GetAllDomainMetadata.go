@@ -1,5 +1,10 @@
 package api
 
 func handle_GetAllDomainMetadata(req Request) Response {
-	return Response{Result: []interface{}{}}
+	name := req.Parameters.Name
+	if name == "" {
+		name = req.Parameters.QName
+	}
+
+	return Response{Result: domainMetadataForZone(name)}
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -23,17 +24,8 @@ func ProcessSOA(params Parameters, id int, domain string) []cfg.DNSRecord {
 	tld := normalizeDomain(domain)
 
 	if params.QType == "SOA" {
-		TLDRecords.mu.RLock()
-		defer TLDRecords.mu.RUnlock()
-		found := false
-		for key, storedDomain := range TLDRecords.records {
-			if storedDomain == tld {
-				id = key
-				found = true
-				break
-			}
-		}
-		if found {
+		if resolvedID, ok := lookupTLDID(tld); ok {
+			id = resolvedID
 			currentUnix := int(time.Now().UTC().Unix())
 			records = append(records, cfg.DNSRecord{
 				DomainID: id,
@@ -55,12 +47,12 @@ func ProcessACME(param Parameters, id int, domain string) []cfg.DNSRecord {
 
 	if strings.HasPrefix(domain, "_acme-challenge.") {
 		for _, record := range StaticRecords.records {
-			if record.QName == domain && record.QType == "TXT" {
+			if normalizeDomain(record.QName) == domain && record.QType == "TXT" {
 				acmeContent := fetchACMEChallenge(record.Content)
 				if acmeContent != "" {
 					records = append(records, cfg.DNSRecord{
 						DomainID: id,
-						QName:    record.QName,
+						QName:    domain,
 						QType:    "TXT",
 						Content:  acmeContent,
 						TTL:      record.TTL,
@@ -79,8 +71,8 @@ func ProcessNS(params Parameters, id int, domain string) []cfg.DNSRecord {
 		StaticRecords.mu.RLock()
 		defer StaticRecords.mu.RUnlock()
 		for _, record := range StaticRecords.records {
-			if record.QName == domain && record.QType == "NS" {
-				records = append(records, record)
+			if normalizeDomain(record.QName) == domain && record.QType == "NS" {
+				records = append(records, recordForResponse(record, id, domain))
 			}
 		}
 	}
@@ -93,10 +85,10 @@ func ProcessANY(params Parameters, id int, domain string) []cfg.DNSRecord {
 	defer StaticRecords.mu.RUnlock()
 
 	for _, entry := range StaticRecords.records {
-		if entry.QName == domain {
+		if normalizeDomain(entry.QName) == domain {
 			if (entry.QType == params.QType || params.QType == "ANY") &&
 				(!strings.HasPrefix(domain, "_acme-challenge.")) {
-				records = append(records, entry)
+				records = append(records, recordForResponse(entry, id, domain))
 			}
 		}
 	}
@@ -119,11 +111,19 @@ func fetchACMEChallenge(url string) string {
 	return finalBody
 }
 
-func tryFetchACMEOnce(url string) (string, error) {
+func tryFetchACMEOnce(rawURL string) (string, error) {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return "", fmt.Errorf("unsupported ACME URL scheme: %s", parsedURL.Scheme)
+	}
+
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 	}
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", parsedURL.String(), nil)
 	if err != nil {
 		return "", err
 	}
@@ -133,6 +133,10 @@ func tryFetchACMEOnce(url string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected ACME status code: %d", resp.StatusCode)
+	}
 
 	limitReader := io.LimitReader(resp.Body, 2048)
 	body, err := io.ReadAll(limitReader)

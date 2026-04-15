@@ -44,16 +44,35 @@ type MonitorResultGeneric struct {
 var (
 	officialResultsMu       sync.RWMutex
 	officialResultsSnapshot OfficialResults
+	officialResultsLoaded   bool
 )
 
 func SetOfficialSnapshot(newSnap OfficialResults) {
 	officialResultsMu.Lock()
 	defer officialResultsMu.Unlock()
 	officialResultsSnapshot = newSnap
+	officialResultsLoaded = true
 }
 
 func GetOfficialSnapshot() OfficialResults {
 	officialResultsMu.RLock()
 	defer officialResultsMu.RUnlock()
 	return officialResultsSnapshot
+}
+
+func ClearOfficialSnapshot() {
+	officialResultsMu.Lock()
+	defer officialResultsMu.Unlock()
+	officialResultsSnapshot = OfficialResults{}
+	officialResultsLoaded = false
+}
+
+func HasOfficialSnapshot() bool {
+	officialResultsMu.RLock()
+	defer officialResultsMu.RUnlock()
+	return officialResultsLoaded
+}
+
+func HasOfficialMonitorData(snap OfficialResults) bool {
+	return len(snap.SiteResults) > 0 || len(snap.DomainResults) > 0 || len(snap.EndpointResults) > 0
 }

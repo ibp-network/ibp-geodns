@@ -7,44 +7,29 @@ import (
 )
 
 func handle_GetDomainInfo(req Request) Response {
-	params := req.Parameters
-	log.Log(log.Debug, "handle_GetDomainInfo: QName=%s", params.QName)
-
-	var records []DomainInfo
-	currentUnixTimestamp := int(time.Now().UTC().Unix())
-
-	TLDRecords.mu.RLock()
-	defer TLDRecords.mu.RUnlock()
-
-	for key, domain := range TLDRecords.records {
-		if normalizeDomain(params.QName) == domain {
-			var Masters []string
-			dnsPrefixes := []string{"dns-01", "dns-02", "dns-03"}
-
-			StaticRecords.mu.RLock()
-			for _, prefix := range dnsPrefixes {
-				dnsName := prefix + "." + domain
-				for _, dnsRecord := range StaticRecords.records {
-					if dnsRecord.QName == dnsName {
-						Masters = append(Masters, dnsRecord.Content)
-						break
-					}
-				}
-			}
-			StaticRecords.mu.RUnlock()
-
-			records = append(records, DomainInfo{
-				DomainID:       key,
-				Zone:           domain,
-				Masters:        Masters,
-				NotifiedSerial: currentUnixTimestamp,
-				Serial:         currentUnixTimestamp,
-				LastCheck:      currentUnixTimestamp,
-				Kind:           "NATIVE",
-			})
-		}
+	name := req.Parameters.Name
+	if name == "" {
+		name = req.Parameters.QName
 	}
 
-	log.Log(log.Debug, "handle_GetDomainInfo: returning %d records for qname=%s", len(records), params.QName)
-	return Response{Result: records}
+	log.Log(log.Debug, "handle_GetDomainInfo: name=%s", name)
+
+	id, domain, ok := findZone(name)
+	if !ok {
+		return Response{Result: nil}
+	}
+
+	currentUnixTimestamp := int(time.Now().UTC().Unix())
+	record := DomainInfo{
+		DomainID:       id,
+		Zone:           domain,
+		Masters:        gatherMasters(domain),
+		NotifiedSerial: currentUnixTimestamp,
+		Serial:         currentUnixTimestamp,
+		LastCheck:      currentUnixTimestamp,
+		Kind:           "NATIVE",
+	}
+
+	log.Log(log.Debug, "handle_GetDomainInfo: returning zone=%s", domain)
+	return Response{Result: record}
 }

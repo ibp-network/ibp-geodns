@@ -10,6 +10,7 @@ import (
 
 func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 	log.Log(log.Debug, "dnsApiRouter: Received HTTP %s from %s", r.Method, r.RemoteAddr)
+	defer r.Body.Close()
 
 	var req Request
 	const maxBodyBytes = 1 << 20 // 1MB guardrail

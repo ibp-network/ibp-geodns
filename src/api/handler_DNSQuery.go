@@ -14,15 +14,7 @@ func handle_DNSQuery(req Request) Response {
 
 	log.Log(log.Debug, "handle_DNSQuery: qname=%s, qtype=%s, remote=%s", qname, qtype, params.Remote)
 
-	var id int
-	TLDRecords.mu.RLock()
-	for key, tld := range TLDRecords.records {
-		if normalizeDomain(qname) == strings.ToLower(tld) {
-			id = key
-			break
-		}
-	}
-	TLDRecords.mu.RUnlock()
+	id, _ := lookupTLDID(qname)
 
 	var finalRecords []cfg.DNSRecord
 

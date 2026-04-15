@@ -18,10 +18,12 @@ var StaticRecords = &StaticMap{
 type TLDMap struct {
 	mu      sync.RWMutex
 	records map[int]string
+	ids     map[string]int
 }
 
 var TLDRecords = &TLDMap{
 	records: make(map[int]string),
+	ids:     make(map[string]int),
 }
 
 type ServiceMap struct {
@@ -97,7 +99,7 @@ type CountryOverride struct {
 
 // CountryOverrideMap stores country code overrides per domain
 type CountryOverrideMap struct {
-	mu       sync.RWMutex
+	mu        sync.RWMutex
 	overrides map[string]map[string]CountryOverride // domain -> country code -> override
 }
 
