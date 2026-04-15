@@ -11,6 +11,8 @@ IBP GeoDNS is the core DNS component that integrates with PowerDNS to provide:
 - ACME challenge support for SSL certificates
 - Usage accounting with MySQL persistence
 
+This repository builds only the DNS service. The monitor and collator are separate binaries in their own repositories and interact with GeoDNS through shared libraries, NATS, MySQL, and the monitor `/results` API.
+
 ## Features
 
 - **PowerDNS Remote Backend**: Full implementation of PowerDNS JSON protocol
@@ -59,7 +61,7 @@ The DNS API implements these PowerDNS remote backend methods:
       "MembersConfig": "https://raw.githubusercontent.com/.../members_professional.json",
       "ServicesConfig": "https://raw.githubusercontent.com/.../services_rpc.json"
     },
-    "ConfigReloadTime": 3600,
+    "ConfigReloadTime": "1h",
     "MinimumOfflineTime": 900
   },
   "Nats": {
@@ -89,6 +91,8 @@ The DNS API implements these PowerDNS remote backend methods:
   }
 }
 ```
+
+`ConfigReloadTime` uses Go duration strings such as `"30m"` or `"1h"`.
 
 ### PowerDNS Configuration
 

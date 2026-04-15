@@ -28,24 +28,14 @@ jobs:
           
           CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build \
             -trimpath -ldflags="-s -w -buildid=" \
-            -o IBPDns-linux-$arch src/IBPDns/IBPDns.go
-            
-          CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build \
-            -trimpath -ldflags="-s -w -buildid=" \
-            -o IBPMonitor-linux-$arch src/IBPMonitor/IBPMonitor.go
-            
-          CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build \
-            -trimpath -ldflags="-s -w -buildid=" \
-            -o IBPCollator-linux-$arch src/IBPCollator/IBPCollator.go
+            -o IBPDns-linux-$arch src/IBPDns.go
         done
         
-        sha256sum IBPDns-* IBPMonitor-* IBPCollator-* > checksums.txt
+        sha256sum IBPDns-* > checksums.txt
         
         for arch in amd64 arm64; do
           tar czf geodns-linux-$arch.tar.gz \
             IBPDns-linux-$arch \
-            IBPMonitor-linux-$arch \
-            IBPCollator-linux-$arch \
             checksums.txt
         done
     
@@ -55,6 +45,4 @@ jobs:
         files: |
           geodns-linux-*.tar.gz
           IBPDns-linux-*
-          IBPMonitor-linux-*
-          IBPCollator-linux-*
           checksums.txt

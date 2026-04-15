@@ -45,12 +45,10 @@ jobs:
 
         # Build with reproducible flags
         export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -buildid=" -o IBPDns src/IBPDns/IBPDns.go
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -buildid=" -o IBPMonitor src/IBPMonitor/IBPMonitor.go
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -buildid=" -o IBPCollator src/IBPCollator/IBPCollator.go
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -buildid=" -o IBPDns src/IBPDns.go
 
         # Generate checksums
-        sha256sum IBPDns IBPMonitor IBPCollator > checksums.txt
+        sha256sum IBPDns > checksums.txt
 
     - name: Deploy
       env:
@@ -80,7 +78,7 @@ jobs:
         "
 
         # Transfer files
-        rsync --chmod=755 IBPDns IBPMonitor IBPCollator checksums.txt geodns@${{ inputs.server }}:/opt/geodns/.staging/$version/
+        rsync --chmod=755 IBPDns checksums.txt geodns@${{ inputs.server }}:/opt/geodns/.staging/$version/
 
         # Atomic deployment with health checks
         ssh geodns@${{ inputs.server }} "
@@ -102,15 +100,11 @@ jobs:
 
           # Update symlinks atomically
           ln -sfn ../$version/IBPDns bin/IBPDns.new
-          ln -sfn ../$version/IBPMonitor bin/IBPMonitor.new
-          ln -sfn ../$version/IBPCollator bin/IBPCollator.new
 
           # Atomic rename
           mv -Tf bin/IBPDns.new bin/IBPDns
-          mv -Tf bin/IBPMonitor.new bin/IBPMonitor
-          mv -Tf bin/IBPCollator.new bin/IBPCollator
 
-          echo 'Binaries deployed successfully'
+          echo 'DNS binary deployed successfully'
         "
 
         # Restart services if requested
@@ -120,13 +114,13 @@ jobs:
             set -e
             # Restart services properly
             systemctl --user daemon-reload
-            systemctl --user restart ibpdns ibpmonitor ibpcollator
+            systemctl --user restart ibpdns
 
             # Wait for services to start
             sleep 2
 
             # Verify services are running
-            systemctl --user is-active ibpdns ibpmonitor ibpcollator
+            systemctl --user is-active ibpdns
           "
         fi
 
@@ -147,11 +141,9 @@ jobs:
             
             # Restore previous symlinks
             ln -sfn ../\$prev_version/IBPDns bin/IBPDns
-            ln -sfn ../\$prev_version/IBPMonitor bin/IBPMonitor
-            ln -sfn ../\$prev_version/IBPCollator bin/IBPCollator
             
             # Restart services
-            systemctl --user restart ibpdns ibpmonitor ibpcollator
+            systemctl --user restart ibpdns
             
             echo 'Rollback completed'
           else
