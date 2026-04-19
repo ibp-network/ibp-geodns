@@ -3,7 +3,7 @@ module github.com/ibp-network/ibp-geodns
 go 1.24.2
 
 require (
-	github.com/ibp-network/ibp-geodns-libs v0.6.6
+	github.com/ibp-network/ibp-geodns-libs v0.6.9
 	golang.org/x/net v0.49.0
 )
 
