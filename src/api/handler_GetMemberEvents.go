@@ -21,7 +21,7 @@ func handle_GetMemberEvents(req Request) Response {
 		end, err = time.Parse(time.RFC3339, p.EndTime)
 		if err != nil {
 			log.Log(log.Warn, "handle_GetMemberEvents: invalid endTime=%s", p.EndTime)
-			return Response{Result: "invalid endTime"}
+			return responseError(400, "invalid endTime")
 		}
 	}
 
@@ -31,14 +31,14 @@ func handle_GetMemberEvents(req Request) Response {
 		start, err = time.Parse(time.RFC3339, p.StartTime)
 		if err != nil {
 			log.Log(log.Warn, "handle_GetMemberEvents: invalid startTime=%s", p.StartTime)
-			return Response{Result: "invalid startTime"}
+			return responseError(400, "invalid startTime")
 		}
 	}
 
 	events, err := dat.GetMemberEvents(p.MemberName, p.Domain, start, end)
 	if err != nil {
 		log.Log(log.Error, "handle_GetMemberEvents: error retrieving events: %v", err)
-		return Response{Result: err.Error()}
+		return responseError(500, err.Error())
 	}
 
 	log.Log(log.Debug, "handle_GetMemberEvents: returning %d events", len(events))

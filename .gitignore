@@ -1,4 +1,4 @@
-# Ignore common binaries
+# Binaries and test artifacts
 *.exe
 *.exe~
 *.dll
@@ -6,36 +6,25 @@
 *.dylib
 *.test
 *.out
-*.ps1
-*.txt
 
-# Ignore go working files
+# Go workspace files
 go.work
 go.work.sum
-go.sum
 
-# Ignore config directory but keep structure
-/config/*
+# Local config and runtime artifacts
+config/*.json
+tmp/
+tmp/maxmind/
+bin/
+logs/
+*.log
 
-# Ignore tmp directory but keep structure
-/tmp/*
-
-# Ignore bin directory but keep structure
-/bin/*
-
-# Ignore files in maxmind directory but keep structure
-/tmp/maxmind/*
-/.github
-/.github/*
-/.github/workflows
-/.github/workflows/*
-/bin
-/bin/*
-/tmp
-/tmp/*
-/src/IBDash/node_modules
-/src/IBDash/node_modules/*
-/src/IBDash/package-lock.json
-/public
-/public/*
+# Editor and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 

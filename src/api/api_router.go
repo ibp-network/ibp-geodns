@@ -8,6 +8,15 @@ import (
 	log "github.com/ibp-network/ibp-geodns-libs/logging"
 )
 
+type dnsAPIError struct {
+	Code    int
+	Message string
+}
+
+func responseError(code int, message string) Response {
+	return Response{Result: dnsAPIError{Code: code, Message: message}}
+}
+
 func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 	log.Log(log.Debug, "dnsApiRouter: Received HTTP %s from %s", r.Method, r.RemoteAddr)
 	defer r.Body.Close()
@@ -44,7 +53,7 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 		res = handle_GetMemberEvents(req)
 	default:
 		log.Log(log.Warn, "dnsApiRouter: Unrecognized method: %s", req.Method)
-		res = Response{Result: "Invalid Request"}
+		res = responseError(http.StatusBadRequest, "Invalid Request")
 	}
 
 	writeDnsResponse(w, res)
@@ -52,6 +61,10 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 
 func writeDnsResponse(w http.ResponseWriter, res Response) {
 	w.Header().Set("Content-Type", "application/json")
+	if apiErr, ok := res.Result.(dnsAPIError); ok {
+		w.WriteHeader(apiErr.Code)
+		res = Response{Result: apiErr.Message}
+	}
 	err := json.NewEncoder(w).Encode(res)
 	if err != nil {
 		log.Log(log.Error, "dnsApiRouter: Error encoding JSON response: %v", err)

@@ -10,9 +10,13 @@ func DumpDomainStatus() {
 
 	for dom, sc := range ServiceRecords.Services {
 		log.Log(log.Info, "[Status] Domain = %s  (members=%d)", dom, len(sc.Members))
-		for mem := range sc.Members {
-			v4 := IsMemberOnlineForDomainIPv4(dom, mem)
-			v6 := IsMemberOnlineForDomainIPv6(dom, mem)
+		for memberKey, member := range sc.Members {
+			monitorName := member.Details.Name
+			if monitorName == "" {
+				monitorName = memberKey
+			}
+			v4 := IsMemberOnlineForDomainIPv4(dom, monitorName)
+			v6 := IsMemberOnlineForDomainIPv6(dom, monitorName)
 
 			state := "ONLINE"
 			if !v4 && !v6 {
@@ -22,7 +26,7 @@ func DumpDomainStatus() {
 			} else if !v6 {
 				state = "PARTIAL(v6 OFF)"
 			}
-			log.Log(log.Info, "  - %-16s %s", mem, state)
+			log.Log(log.Info, "  - %-16s %s", monitorName, state)
 		}
 	}
 }
