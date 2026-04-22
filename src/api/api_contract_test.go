@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	cfg "github.com/ibp-network/ibp-geodns-libs/config"
@@ -268,16 +267,8 @@ func TestHandleGetDomainKeysUsesNameAndCaseInsensitiveZoneLookup(t *testing.T) {
 	})
 
 	keys := decodeJSONResult[[]map[string]interface{}](t, res.Result)
-	if len(keys) != 1 {
-		t.Fatalf("expected one key, got %d", len(keys))
-	}
-
-	content, ok := keys[0]["content"].(string)
-	if !ok {
-		t.Fatalf("expected string content, got %#v", keys[0]["content"])
-	}
-	if !strings.HasPrefix(content, "example.com IN DNSKEY") {
-		t.Fatalf("expected key content for normalized zone, got %q", content)
+	if len(keys) != 0 {
+		t.Fatalf("expected no DNSSEC keys until real signing is configured, got %#v", keys)
 	}
 }
 
@@ -342,5 +333,121 @@ func TestHandleDNSQueryNSNormalizesResponseRecords(t *testing.T) {
 	}
 	if !records[0].Auth || records[0].QName != "example.com" {
 		t.Fatalf("expected normalized NS response, got %#v", records[0])
+	}
+}
+
+func TestHandleDNSQueryNormalizesLowercaseQType(t *testing.T) {
+	resetTestState()
+	setStaticRecords([]cfg.DNSRecord{
+		{QName: "Example.COM.", QType: "NS", Content: "dns-01.example.com.", TTL: 3600},
+	})
+
+	res := handle_DNSQuery(Request{
+		Parameters: Parameters{
+			QName: "example.com.",
+			QType: "ns",
+		},
+	})
+
+	records, ok := res.Result.([]cfg.DNSRecord)
+	if !ok {
+		t.Fatalf("expected DNS records, got %T", res.Result)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected one NS record for lowercase qtype, got %d", len(records))
+	}
+	if records[0].QType != "NS" {
+		t.Fatalf("expected NS record, got %#v", records[0])
+	}
+}
+
+func TestHandleGetDomainListSynthesizesAuthorityRecordsForDynamicZones(t *testing.T) {
+	resetTestState()
+	setServiceRecords(map[string]ServiceConfigs{
+		"rpc.example.com": {
+			Active: 1,
+		},
+	})
+
+	expectedID := mustLookupTLDID(t, "rpc.example.com")
+	res := handle_GetDomainList(Request{
+		Parameters: Parameters{
+			Zonename: "rpc.example.com",
+		},
+	})
+
+	records, ok := res.Result.([]cfg.DNSRecord)
+	if !ok {
+		t.Fatalf("expected DNS records, got %T", res.Result)
+	}
+	if len(records) < 2 {
+		t.Fatalf("expected synthesized SOA and NS records, got %#v", records)
+	}
+
+	var sawSOA, sawNS bool
+	for _, record := range records {
+		if record.DomainID != expectedID {
+			t.Fatalf("expected normalized domain id %d, got %d", expectedID, record.DomainID)
+		}
+		if record.QName != "rpc.example.com" || !record.Auth {
+			t.Fatalf("expected normalized authority record, got %#v", record)
+		}
+		if record.QType == "SOA" {
+			sawSOA = true
+		}
+		if record.QType == "NS" {
+			sawNS = true
+		}
+	}
+	if !sawSOA || !sawNS {
+		t.Fatalf("expected both SOA and NS records, got %#v", records)
+	}
+}
+
+func TestHandleGetDomainListAddsAuthorityRecordsWhenDynamicZoneHasStaticRecords(t *testing.T) {
+	resetTestState()
+	setStaticRecords([]cfg.DNSRecord{
+		{QName: "rpc.example.com", QType: "TXT", Content: "hello", TTL: 60},
+	})
+	setServiceRecords(map[string]ServiceConfigs{
+		"rpc.example.com": {
+			Active: 1,
+		},
+	})
+
+	expectedID := mustLookupTLDID(t, "rpc.example.com")
+	res := handle_GetDomainList(Request{
+		Parameters: Parameters{
+			Zonename: "rpc.example.com",
+		},
+	})
+
+	records, ok := res.Result.([]cfg.DNSRecord)
+	if !ok {
+		t.Fatalf("expected DNS records, got %T", res.Result)
+	}
+	if len(records) < 3 {
+		t.Fatalf("expected static record plus synthesized authority records, got %#v", records)
+	}
+
+	var sawTXT, sawSOA, sawNS bool
+	for _, record := range records {
+		if record.DomainID != expectedID {
+			t.Fatalf("expected normalized domain id %d, got %d", expectedID, record.DomainID)
+		}
+		if record.QName != "rpc.example.com" || !record.Auth {
+			t.Fatalf("expected normalized authority record, got %#v", record)
+		}
+		switch record.QType {
+		case "TXT":
+			sawTXT = sawTXT || record.Content == "hello"
+		case "SOA":
+			sawSOA = true
+		case "NS":
+			sawNS = true
+		}
+	}
+	if !sawTXT || !sawSOA || !sawNS {
+		t.Fatalf("expected TXT, SOA, and NS records, got %#v", records)
 	}
 }

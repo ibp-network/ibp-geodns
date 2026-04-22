@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	dat "github.com/ibp-network/ibp-geodns-libs/data"
@@ -20,6 +21,8 @@ import (
 )
 
 var version = cfg.GetVersion()
+
+const defaultServiceMonitorRefreshSeconds = 30
 
 func main() {
 	log.Log(log.Info, "IBPDns %s starting...", version)
@@ -60,7 +63,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	api.Init()
+	if err := api.Init(); err != nil {
+		log.Log(log.Fatal, "Failed to start DNS API: %v", err)
+		os.Exit(1)
+	}
 
 	for {
 		time.Sleep(60 * time.Second)
@@ -70,7 +76,13 @@ func main() {
 func startServiceMonitorPoller(intervalSec int) {
 	updateDNSMonitorSnapshot()
 
+	if intervalSec <= 0 {
+		log.Log(log.Warn, "[Monitor Poller] invalid refresh interval %d; defaulting to %d seconds", intervalSec, defaultServiceMonitorRefreshSeconds)
+		intervalSec = defaultServiceMonitorRefreshSeconds
+	}
+
 	ticker := time.NewTicker(time.Duration(intervalSec) * time.Second)
+	defer ticker.Stop()
 	for range ticker.C {
 		updateDNSMonitorSnapshot()
 	}
@@ -88,6 +100,10 @@ func updateDNSMonitorSnapshot() {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		log.Log(log.Error, "[Monitor Poller] GET %s => HTTP %d", url, resp.StatusCode)
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(resp.Header.Get("X-IBP-Results-Source")), "local") {
+		log.Log(log.Warn, "[Monitor Poller] ignoring local-only monitor snapshot from %s; waiting for official consensus data", url)
 		return
 	}
 

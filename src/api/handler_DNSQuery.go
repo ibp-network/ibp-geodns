@@ -10,7 +10,8 @@ import (
 func handle_DNSQuery(req Request) Response {
 	params := req.Parameters
 	qname := strings.ToLower(strings.TrimSuffix(params.QName, "."))
-	qtype := params.QType
+	qtype := strings.ToUpper(strings.TrimSpace(params.QType))
+	params.QType = qtype
 
 	log.Log(log.Debug, "handle_DNSQuery: qname=%s, qtype=%s, remote=%s", qname, qtype, params.Remote)
 

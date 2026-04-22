@@ -2,7 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -11,17 +15,13 @@ import (
 	log "github.com/ibp-network/ibp-geodns-libs/logging"
 )
 
-func Init() {
+func Init() error {
 	log.Log(log.Info, "DNS Package initializing...")
 
 	c := cfg.GetConfig()
 
-	StaticDNSEntries()
-	populateTLDRecords()
-	RebuildServiceRecords()
-	
-	// Load country code overrides from config if available
-	LoadCountryOverridesFromConfigFile()
+	syncRuntimeConfigCaches(true)
+	startRuntimeConfigWatcher()
 
 	// Setup NATS subscription for runtime override updates
 	setupNatsCountryOverrideHandler()
@@ -33,8 +33,7 @@ func Init() {
 	host := strings.TrimSpace(c.Local.DnsApi.ListenAddress)
 	port := strings.TrimSpace(c.Local.DnsApi.ListenPort)
 	if port == "" {
-		log.Log(log.Fatal, "DNS API ListenPort is empty in config; cannot start server")
-		return
+		return fmt.Errorf("DNS API ListenPort is empty in config")
 	}
 	if host == "" {
 		host = "0.0.0.0"
@@ -42,10 +41,23 @@ func Init() {
 	addr := host + ":" + port
 	log.Log(log.Info, "Starting DNS API server on %s", addr)
 
-	// Block here and fail fast if bind/listen fails; systemd will restart the service.
-	if err := http.ListenAndServe(addr, dnsApi); err != nil {
-		log.Log(log.Fatal, "DNS API server failed to start on %s: %v", addr, err)
+	server := &http.Server{
+		Addr:    addr,
+		Handler: dnsApi,
 	}
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("DNS API server failed to listen on %s: %w", addr, err)
+	}
+
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Log(log.Fatal, "DNS API server stopped on %s: %v", addr, err)
+			os.Exit(1)
+		}
+	}()
+
+	return nil
 }
 
 func handleManualUsageProcess(w http.ResponseWriter, r *http.Request) {

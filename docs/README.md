@@ -61,7 +61,7 @@ The DNS API implements these PowerDNS remote backend methods:
       "MembersConfig": "https://raw.githubusercontent.com/.../members_professional.json",
       "ServicesConfig": "https://raw.githubusercontent.com/.../services_rpc.json"
     },
-    "ConfigReloadTime": "1h",
+    "ConfigReloadTime": 3600,
     "MinimumOfflineTime": 900
   },
   "Nats": {
@@ -92,7 +92,7 @@ The DNS API implements these PowerDNS remote backend methods:
 }
 ```
 
-`ConfigReloadTime` uses Go duration strings such as `"30m"` or `"1h"`.
+`ConfigReloadTime` is an integer number of seconds, for example `300` or `3600`.
 
 ### PowerDNS Configuration
 

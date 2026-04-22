@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -60,16 +61,23 @@ func dnsApiRouter(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeDnsResponse(w http.ResponseWriter, res Response) {
-	w.Header().Set("Content-Type", "application/json")
+	statusCode := http.StatusOK
 	if apiErr, ok := res.Result.(dnsAPIError); ok {
-		w.WriteHeader(apiErr.Code)
+		statusCode = apiErr.Code
 		res = Response{Result: apiErr.Message}
 	}
-	err := json.NewEncoder(w).Encode(res)
-	if err != nil {
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(res); err != nil {
 		log.Log(log.Error, "dnsApiRouter: Error encoding JSON response: %v", err)
 		writeDnsErrorJSON(w, http.StatusInternalServerError, "Error encoding response", err)
 		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if _, err := w.Write(body.Bytes()); err != nil {
+		log.Log(log.Error, "dnsApiRouter: Error writing JSON response: %v", err)
 	}
 }
 
