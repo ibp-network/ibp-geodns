@@ -1,0 +1,53 @@
+name: Update node packages
+run-name: ${{ inputs.organization }} updates ${{ inputs.server }}${{ inputs.auto_reboot && ' (with reboot)' || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      organization:
+        description: 'Organization'
+        required: true
+        type: choice
+        options:
+          - ROTKO
+          - STAKEPLUS
+      server:
+        description: 'Target server (IP or hostname)'
+        required: true
+      auto_reboot:
+        description: 'Reboot automatically if reboot-required'
+        required: true
+        type: boolean
+        default: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      ROOT_KEY_NAME: ROOT_KEY_${{ inputs.organization }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Prepare SSH key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets[env.ROOT_KEY_NAME] }}" > ~/.ssh/root_id
+          chmod 600 ~/.ssh/root_id
+          test -s ~/.ssh/root_id || { echo "::error::${ROOT_KEY_NAME} secret is empty"; exit 1; }
+          ssh-keyscan -T 10 -H ${{ inputs.server }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Run updater on the node
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/root_id scripts/update-node.sh \
+            root@${{ inputs.server }}:/tmp/update-node.sh
+          ssh -i ~/.ssh/root_id root@${{ inputs.server }} \
+            "chmod +x /tmp/update-node.sh && /tmp/update-node.sh '${{ inputs.auto_reboot }}'"
+
+      - name: Cleanup local key
+        if: always()
+        run: rm -f ~/.ssh/root_id

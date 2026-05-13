@@ -1,4 +1,5 @@
-name: ${{ github.event.inputs.organization }} deploys geodns ${{ github.event.inputs.version }}
+name: Deploy GeoDNS
+run-name: ${{ inputs.organization }} deploys geodns ${{ inputs.version }}
 
 on:
   workflow_dispatch:
@@ -22,129 +23,171 @@ on:
         required: true
         type: boolean
         default: true
+  workflow_call:
+    inputs:
+      organization:
+        required: true
+        type: string
+      server:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+        default: 'main'
+      restart_services:
+        required: true
+        type: boolean
+        default: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
-        ref: ${{ github.event.inputs.version }}
+        ref: ${{ inputs.version }}
 
-    - uses: actions/setup-go@v5
+    - uses: actions/setup-go@v6
       with:
         go-version: '1.24'
 
     - name: Build
       run: |
         set -o errexit -o nounset -o pipefail
-
-        # Lock dependencies
         go mod download
         go mod verify
-
-        # Build with reproducible flags
         export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -buildid=" -o IBPDns src/IBPDns.go
-
-        # Generate checksums
-        sha256sum IBPDns > checksums.txt
+        # output binary name matches Tom's /opt/ibp-geodns/bin/ibp-dns
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+          -trimpath -ldflags="-s -w -buildid=" \
+          -o ibp-dns src/IBPDns.go
+        sha256sum ibp-dns > checksums.txt
 
     - name: Deploy
       env:
-        DEPLOY_KEY_NAME: DEPLOY_KEY_${{ github.event.inputs.organization }}
+        DEPLOY_KEY_NAME:        DEPLOY_KEY_${{ inputs.organization }}
+        MAXMIND_ACCT_NAME:      MAXMIND_ACCOUNT_ID_${{ inputs.organization }}
+        MAXMIND_KEY_NAME:       MAXMIND_LICENSE_KEY_${{ inputs.organization }}
+        NATS_URL_NAME:          NATS_URL_${{ inputs.organization }}
+        NATS_USER_NAME:         NATS_USER_${{ inputs.organization }}
+        NATS_PASS_NAME:         NATS_PASS_${{ inputs.organization }}
+        MONITOR_URL_NAME:       MONITOR_URL_${{ inputs.organization }}
       run: |
         set -o errexit -o nounset -o pipefail
 
-        # Get version name
         version="${{ inputs.version }}"
         if [[ "$version" == "main" ]] || [[ "$version" == "master" ]]; then
           version="$(git rev-parse --short HEAD)"
         fi
-
         echo "Deploying version: $version"
 
-        # Setup SSH
+        # SSH setup
         mkdir -p ~/.ssh
         echo "${{ secrets[env.DEPLOY_KEY_NAME] }}" > ~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
         ssh-keyscan -H ${{ inputs.server }} >> ~/.ssh/known_hosts
 
-        # Deploy atomically
-        ssh geodns@${{ inputs.server }} "
+        # Stage + promote the binary in Tom's layout
+        ssh ibp@${{ inputs.server }} "
           set -e
-          # Create staging directory
-          mkdir -p /opt/geodns/.staging/$version
+          mkdir -p /opt/ibp-geodns/.staging/$version
         "
+        rsync --chmod=755 ibp-dns checksums.txt \
+          ibp@${{ inputs.server }}:/opt/ibp-geodns/.staging/$version/
 
-        # Transfer files
-        rsync --chmod=755 IBPDns checksums.txt geodns@${{ inputs.server }}:/opt/geodns/.staging/$version/
-
-        # Atomic deployment with health checks
-        ssh geodns@${{ inputs.server }} "
+        ssh ibp@${{ inputs.server }} "
           set -e
-          cd /opt/geodns
-
-          # Verify checksums
+          cd /opt/ibp-geodns
           cd .staging/$version
           sha256sum -c checksums.txt
-          cd /opt/geodns
+          cd /opt/ibp-geodns
 
-          # Save current version for rollback
-          if [[ -L bin/IBPDns ]]; then
-            readlink bin/IBPDns | xargs dirname | xargs basename > .previous-version
+          # remember previous version for rollback
+          if [[ -L bin/ibp-dns ]]; then
+            readlink bin/ibp-dns | xargs dirname | xargs basename > .previous-version
           fi
 
-          # Move staging to final location
+          # promote
           mv .staging/$version $version
-
-          # Update symlinks atomically
-          ln -sfn ../$version/IBPDns bin/IBPDns.new
-
-          # Atomic rename
-          mv -Tf bin/IBPDns.new bin/IBPDns
-
-          echo 'DNS binary deployed successfully'
+          ln -sfn ../$version/ibp-dns bin/ibp-dns.new
+          mv -Tf bin/ibp-dns.new bin/ibp-dns
+          echo 'ibp-dns deployed'
         "
 
-        # Restart services if requested
+        # Patch /etc/ibpdns/dns.json with per-org secrets (skip empty/PENDING)
+        echo "Patching config secrets..."
+        cat > /tmp/patch_config.py <<'PYEOF'
+        import json, os, pathlib, sys, urllib.parse
+        p = pathlib.Path("/etc/ibpdns/dns.json")
+        c = json.loads(p.read_text())
+        kv = dict(arg.split("=", 1) for arg in sys.argv[1:])
+        def setv(section, key, val):
+            if val and val != "PENDING_FROM_TOM":
+                c.setdefault(section, {})[key] = val
+        setv("Maxmind", "AccountID",  kv.get("MM_ACCT", ""))
+        setv("Maxmind", "LicenseKey", kv.get("MM_KEY", ""))
+        setv("Nats",    "Url",  kv.get("NATS_URL", ""))
+        setv("Nats",    "User", kv.get("NATS_USER", ""))
+        setv("Nats",    "Pass", kv.get("NATS_PASS", ""))
+        mu = kv.get("MONITOR_URL", "")
+        if mu and mu != "PENDING_FROM_TOM":
+            u = mu if "://" in mu else "http://" + mu
+            parsed = urllib.parse.urlparse(u)
+            if parsed.hostname:
+                c.setdefault("DnsApi", {})["MonitorAddress"] = parsed.hostname
+            if parsed.port:
+                c.setdefault("DnsApi", {})["MonitorPort"] = str(parsed.port)
+        p.write_text(json.dumps(c, indent=2))
+        print("dns.json patched")
+        PYEOF
+        scp /tmp/patch_config.py ibp@${{ inputs.server }}:/tmp/patch_config.py
+        ssh ibp@${{ inputs.server }} python3 /tmp/patch_config.py \
+          "MM_ACCT=${{ secrets[env.MAXMIND_ACCT_NAME] }}" \
+          "MM_KEY=${{ secrets[env.MAXMIND_KEY_NAME] }}" \
+          "NATS_URL=${{ secrets[env.NATS_URL_NAME] }}" \
+          "NATS_USER=${{ secrets[env.NATS_USER_NAME] }}" \
+          "NATS_PASS=${{ secrets[env.NATS_PASS_NAME] }}" \
+          "MONITOR_URL=${{ secrets[env.MONITOR_URL_NAME] }}"
+
+        # Restart services
         if [[ "${{ inputs.restart_services }}" == "true" ]]; then
-          echo "Restarting services with systemd..."
-          ssh geodns@${{ inputs.server }} "
+          echo "Restarting services..."
+          ssh ibp@${{ inputs.server }} "
             set -e
-            # Restart services properly
-            systemctl --user daemon-reload
-            systemctl --user restart ibpdns
+            sudo systemctl restart ibpdns
+            for i in \$(seq 1 15); do
+              state=\$(sudo systemctl is-active ibpdns || true)
+              [[ \"\$state\" == active ]] && break
+              sleep 2
+            done
+            sudo systemctl is-active ibpdns
 
-            # Wait for services to start
-            sleep 2
-
-            # Verify services are running
-            systemctl --user is-active ibpdns
+            sudo systemctl restart pdns
+            sleep 1
+            sudo systemctl is-active pdns
           "
         fi
 
         echo "Deployment completed successfully!"
 
     - name: Rollback on failure
-      if: failure() && github.event.inputs.restart_services == 'true'
+      if: failure() && inputs.restart_services
       env:
-        DEPLOY_KEY_NAME: DEPLOY_KEY_${{ github.event.inputs.organization }}
+        DEPLOY_KEY_NAME: DEPLOY_KEY_${{ inputs.organization }}
       run: |
         echo "Deployment failed, attempting rollback..."
-        ssh geodns@${{ inputs.server }} "
+        ssh ibp@${{ inputs.server }} "
           set -e
-          cd /opt/geodns
+          cd /opt/ibp-geodns
           if [[ -f .previous-version ]]; then
-            prev_version=\$(cat .previous-version)
-            echo \"Rolling back to version: \$prev_version\"
-            
-            # Restore previous symlinks
-            ln -sfn ../\$prev_version/IBPDns bin/IBPDns
-            
-            # Restart services
-            systemctl --user restart ibpdns
-            
+            prev=\$(cat .previous-version)
+            echo \"Rolling back to: \$prev\"
+            ln -sfn ../\$prev/ibp-dns bin/ibp-dns
+            sudo systemctl restart ibpdns
             echo 'Rollback completed'
           else
             echo 'No previous version found for rollback'

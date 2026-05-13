@@ -1,0 +1,86 @@
+name: Install GeoDNS node
+run-name: ${{ inputs.organization }} installs node ${{ inputs.node_id }} on ${{ inputs.server }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      organization:
+        description: 'Organization'
+        required: true
+        type: choice
+        options:
+          - ROTKO
+          - STAKEPLUS
+      server:
+        description: 'Target server (IP or hostname)'
+        required: true
+      node_id:
+        description: 'NATS NodeID (e.g. ROTKO-BKK08-01)'
+        required: true
+        default: 'NODE-01'
+      run_deploy_after:
+        description: 'Trigger deploy.yaml after install completes'
+        required: true
+        type: boolean
+        default: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    env:
+      ROOT_KEY_NAME: ROOT_KEY_${{ inputs.organization }}
+      DEPLOY_KEY_NAME: DEPLOY_KEY_${{ inputs.organization }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Prepare SSH keys
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+
+          # root key (one-time provisioning access)
+          echo "${{ secrets[env.ROOT_KEY_NAME] }}" > ~/.ssh/root_id
+          chmod 600 ~/.ssh/root_id
+          test -s ~/.ssh/root_id || { echo "::error::${ROOT_KEY_NAME} secret is empty"; exit 1; }
+
+          # deploy key (ongoing ibp@ access) — only public half is pushed to the VM
+          echo "${{ secrets[env.DEPLOY_KEY_NAME] }}" > ~/.ssh/deploy_id
+          chmod 600 ~/.ssh/deploy_id
+          test -s ~/.ssh/deploy_id || { echo "::error::${DEPLOY_KEY_NAME} secret is empty"; exit 1; }
+          ssh-keygen -y -f ~/.ssh/deploy_id > ~/.ssh/deploy_id.pub
+
+          ssh-keyscan -T 10 -H ${{ inputs.server }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Run installer on the node
+        run: |
+          set -euo pipefail
+          DEPLOY_PUB=$(cat ~/.ssh/deploy_id.pub)
+
+          scp -i ~/.ssh/root_id scripts/install-node.sh \
+            root@${{ inputs.server }}:/tmp/install-node.sh
+          ssh -i ~/.ssh/root_id root@${{ inputs.server }} \
+            "chmod +x /tmp/install-node.sh && /tmp/install-node.sh '$DEPLOY_PUB' '${{ inputs.node_id }}'"
+
+      - name: Verify deploy user ssh works
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_id -o StrictHostKeyChecking=no ibp@${{ inputs.server }} \
+            'id; ls /opt/ibp-geodns/; sudo systemctl is-enabled ibpdns'
+
+      - name: Cleanup local keys
+        if: always()
+        run: rm -f ~/.ssh/root_id ~/.ssh/deploy_id ~/.ssh/deploy_id.pub
+
+  deploy:
+    needs: install
+    if: inputs.run_deploy_after
+    uses: ./.github/workflows/deploy.yaml
+    with:
+      organization: ${{ inputs.organization }}
+      server: ${{ inputs.server }}
+      version: main
+      restart_services: true
+    secrets: inherit
